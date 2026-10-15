@@ -4,6 +4,8 @@ import { db } from "@/db";
 import {
   agents,
   clients,
+  conversations,
+  messages,
   testResults,
   testRuns,
   testScenarios,
@@ -110,6 +112,67 @@ export async function generateScenarios(agentId: string) {
   }));
   if (rows.length) await db.insert(testScenarios).values(rows);
   return rows.length;
+}
+
+/**
+ * Автотест из реального разговора, где агент ошибся (👎, недовольный клиент, данные не из базы, исправление
+ * сотрудника): реплики клиента — как в разговоре, критерии — что правильный агент должен сделать.
+ * Сценарий черновой: критерии стоит проверить. Дешёвая модель, один вызов.
+ */
+export async function scenarioFromConversation(conversationId: string): Promise<{ id: string; agentId: string; name: string }> {
+  const [conv] = await db.select().from(conversations).where(eq(conversations.id, conversationId));
+  if (!conv) throw new Error("not_found");
+  const { agent, client, config } = await loadAgent(conv.agentId);
+  const rows = await db
+    .select({ role: messages.role, text: messages.text, status: messages.status, meta: messages.meta })
+    .from(messages)
+    .where(eq(messages.conversationId, conversationId))
+    .orderBy(asc(messages.createdAt));
+  const lines = rows
+    .filter((m) => m.role !== "system" || m.text === "handoff")
+    .slice(-30)
+    .map((m) => {
+      if (m.role === "system") return `[агент передал диалог менеджеру${m.meta?.upset ? ", клиент недоволен" : ""}]`;
+      const who = m.role === "user" ? "Клиент" : m.role === "operator" ? "Сотрудник" : "Агент";
+      const marks = [
+        m.status === "rejected" ? "не отправлен" : "",
+        m.meta?.rating === "down" ? "клиент поставил 👎" : "",
+        m.meta?.unverified?.length ? `данных нет в базе знаний: ${m.meta.unverified.join(", ")}` : "",
+      ].filter(Boolean);
+      return `${who}: ${m.text.replace(/\s+/g, " ").slice(0, 600)}${marks.length ? ` [${marks.join("; ")}]` : ""}`;
+    });
+  if (!lines.some((l) => l.startsWith("Клиент:"))) throw new Error("no_client_messages");
+  const { data, usage, model } = await generateJson<{ name: string; turns: string[]; criteria: string[] }>(anthropicKey(), JUDGE_MODEL, {
+    system:
+      "Ты — QA-инженер студии чат-агентов. Перед тобой реальный разговор клиента с агентом, где что-то пошло не так (пометки 👎, недоволен, данные не из базы, не отправлен, или сотрудник исправил агента). Составь сценарий автотеста, который повторяет эту ситуацию: turns — 1–4 реплики клиента почти дословно, как в разговоре, но без имён, телефонов и других личных данных; criteria — 2–5 проверяемых критериев правильного поведения агента (опирайся на ответ сотрудника, если он был, и на правила агента), обязательно один критерий «не повторил ошибку» с её сутью. name — короткое название по сути ошибки. Пиши на языке разговора. Передача менеджеру видна как «[передал диалог менеджеру]».",
+    prompt: [
+      `Агент: ${agent.name}`,
+      `Компания: ${client.name}`,
+      "",
+      `Правила агента:\n${config.rules || "—"}`,
+      "",
+      `Когда передавать людям:\n${config.handoff || "—"}`,
+      "",
+      `Разговор:\n${lines.join("\n")}`,
+    ].join("\n"),
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["name", "turns", "criteria"],
+      properties: { name: { type: "string" }, turns: { type: "array", items: { type: "string" } }, criteria: { type: "array", items: { type: "string" } } },
+    },
+    effort: "low",
+  });
+  await logUsage({ source: "test", model, usage, agentId: agent.id, clientId: client.id }).catch(() => {});
+  const turns = data.turns.map((t) => t.trim()).filter(Boolean).slice(0, 4);
+  const criteria = data.criteria.map((t) => t.trim()).filter(Boolean).slice(0, 5);
+  if (!turns.length || !criteria.length) throw new Error("empty_scenario");
+  const name = `Из разговора: ${data.name}`.slice(0, 120);
+  const [row] = await db
+    .insert(testScenarios)
+    .values({ agentId: agent.id, name, mode: "script", turns, persona: "", maxTurns: 4, criteria: criteria.map((text) => ({ text })) })
+    .returning({ id: testScenarios.id });
+  return { id: row.id, agentId: agent.id, name };
 }
 
 // ---------- прогон ----------

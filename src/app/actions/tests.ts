@@ -6,7 +6,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { testScenarios } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
-import { generateScenarios, startRun } from "@/lib/tests/engine";
+import { generateScenarios, scenarioFromConversation, startRun } from "@/lib/tests/engine";
 
 export type TestsResult = { error?: string; ok?: boolean; runId?: string; count?: number };
 
@@ -20,6 +20,19 @@ export async function generateTestScenarios(agentId: string): Promise<TestsResul
     return { ok: true, count };
   } catch (e) {
     console.error("generate scenarios failed", e);
+    return { error: errorCode(e) };
+  }
+}
+
+/** «В автотест» из «Диалогов»: сценарий-повтор реальной ошибки агента. */
+export async function scenarioFromConversationAction(conversationId: string): Promise<TestsResult & { agentId?: string; name?: string }> {
+  await requireUser();
+  try {
+    const r = await scenarioFromConversation(conversationId);
+    refresh();
+    return { ok: true, agentId: r.agentId, name: r.name };
+  } catch (e) {
+    console.error("scenario from conversation failed", e);
     return { error: errorCode(e) };
   }
 }

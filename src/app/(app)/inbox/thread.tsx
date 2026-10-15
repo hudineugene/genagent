@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { ArrowLeft, Bot, BookOpen, Check, CheckCircle2, ExternalLink, Hand, Pencil, RotateCcw, SendHorizontal, Trash2, X } from "lucide-react";
+import { ArrowLeft, Bot, BookOpen, Check, CheckCircle2, ExternalLink, FlaskConical, Hand, Pencil, RotateCcw, SendHorizontal, Trash2, X } from "lucide-react";
+import { scenarioFromConversationAction } from "@/app/actions/tests";
 import {
   deleteConversation,
   approveDraft,
@@ -55,6 +56,8 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
   const [pending, start] = useTransition();
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // «В автотест»: создан сценарий-повтор этого разговора (ссылка на вкладку проверки агента)
+  const [scenarioNote, setScenarioNote] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const time = new Intl.DateTimeFormat(locale === "uk" ? "uk-UA" : "ru-RU", { timeStyle: "short" });
 
@@ -118,6 +121,22 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
             </Badge>
           )}
           {pending && <Spinner className="text-muted" />}
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={pending}
+            title={t.inbox.toTestHint}
+            onClick={() =>
+              run(async () => {
+                const r = await scenarioFromConversationAction(data.id);
+                if (r.ok) setScenarioNote(r.name ?? "");
+                return r;
+              })
+            }
+          >
+            <FlaskConical className="size-4" />
+            {t.inbox.toTest}
+          </Button>
           {!data.botReplies ? null : data.mode === "ai" ? (
             <Button size="sm" variant="secondary" disabled={pending} onClick={() => run(() => takeOver(data.id))}>
               <Hand className="size-4" />
@@ -259,6 +278,14 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
         <div ref={endRef} />
       </div>
 
+      {scenarioNote !== null && (
+        <p className="border-t border-border bg-success/5 px-4 py-2 text-xs text-success">
+          {t.inbox.toTestDone}: {scenarioNote} —{" "}
+          <Link href={`/agents/${data.agentId}/tests`} className="underline">
+            {t.inbox.toTestOpen}
+          </Link>
+        </p>
+      )}
       {error && <p className="border-t border-border bg-danger/5 px-4 py-2 text-xs text-danger">{error}</p>}
       {!data.botReplies ? (
         <p className="border-t border-border px-4 py-3 text-xs text-muted">{t.inbox.apiReplyInBot}</p>
