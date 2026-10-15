@@ -1,45 +1,23 @@
 "use server";
 
 import { refresh } from "next/cache";
-import { and, eq, isNull } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { kbSources, knowledgeGaps } from "@/db/schema";
+import { knowledgeGaps } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
 import { analyzeGaps } from "@/lib/agent/gaps";
-import { indexSource } from "@/lib/kb/store";
-import { normalizeText } from "@/lib/kb/text";
+import { addAnswerToKb } from "@/lib/agent/kb-answers";
 
 export type GapResult = { ok?: boolean; error?: string; found?: number };
-
-/** Ответы на вопросы без ответа копятся в одном текстовом источнике базы знаний клиента. */
-const ANSWERS_TITLE = "Ответы на частые вопросы";
 
 /** Добавить ответ: вопрос и ответ попадают в базу знаний клиента, вопрос закрывается. */
 export async function resolveGap(gapId: string, answer: string): Promise<GapResult> {
   const user = await requireUser();
   const text = z.string().trim().min(2).max(4000).safeParse(answer);
   if (!text.success) return { error: "answer_short" };
-  const [gap] = await db.select().from(knowledgeGaps).where(eq(knowledgeGaps.id, gapId));
-  if (!gap) return { error: "not_found" };
-
-  const entry = `Вопрос: ${gap.question}\nОтвет: ${text.data}`;
-  // Источник, созданный здесь, а не присланный ботом (у присланных есть external_key — их бот перезаписывает).
-  const [source] = await db
-    .select()
-    .from(kbSources)
-    .where(and(eq(kbSources.clientId, gap.clientId), eq(kbSources.title, ANSWERS_TITLE), isNull(kbSources.externalKey)));
-  if (source) {
-    const content = normalizeText(`${source.content}\n\n${entry}`);
-    indexSource(source.id, gap.clientId, ANSWERS_TITLE, content);
-  } else {
-    const [row] = await db
-      .insert(kbSources)
-      .values({ clientId: gap.clientId, type: "text", title: ANSWERS_TITLE, createdBy: user.id })
-      .returning({ id: kbSources.id });
-    indexSource(row.id, gap.clientId, ANSWERS_TITLE, normalizeText(`# ${ANSWERS_TITLE}\n\n${entry}`));
-  }
-  await db.update(knowledgeGaps).set({ status: "resolved", answer: text.data }).where(eq(knowledgeGaps.id, gapId));
+  const r = await addAnswerToKb(gapId, text.data, user.id);
+  if (r.error) return { error: r.error };
   refresh();
   return { ok: true };
 }

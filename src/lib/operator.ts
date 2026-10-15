@@ -44,7 +44,11 @@ export async function operatorReplyCore(conversationId: string, text: string, us
     return { error: e instanceof Error ? e.message : String(e) };
   }
   await addMessage(conversationId, "operator", body, { authorId: userId, externalId: externalId ?? undefined });
-  await db.update(conversations).set({ needsAttention: false, unread: 0, status: "open" }).where(eq(conversations.id, conversationId));
+  const ctx = row.conversation.context;
+  await db
+    .update(conversations)
+    .set({ needsAttention: false, unread: 0, status: "open", ...(ctx?.managerDraft ? { context: { ...ctx, managerDraft: undefined } } : {}) })
+    .where(eq(conversations.id, conversationId));
   return {};
 }
 

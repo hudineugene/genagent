@@ -44,6 +44,9 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
           agent: sql<number>`sum(case when ${messages.role} = 'assistant' and ${messages.status} = 'sent' then 1 else 0 end)`,
           operator: sql<number>`sum(case when ${messages.role} = 'operator' then 1 else 0 end)`,
           handoffs: sql<number>`sum(case when ${messages.role} = 'system' and ${messages.text} = 'handoff' then 1 else 0 end)`,
+          // Доля передач — по диалогам: в одном диалоге агент может передать клиента несколько раз
+          handoffConvs: sql<number>`count(distinct case when ${messages.role} = 'system' and ${messages.text} = 'handoff' then ${messages.conversationId} end)`,
+          activeConvs: sql<number>`count(distinct case when ${messages.role} = 'user' then ${messages.conversationId} end)`,
           avgMs: sql<number>`avg(case when ${messages.role} = 'assistant' then json_extract(${messages.meta}, '$.ms') end)`,
         })
         .from(messages)
@@ -116,6 +119,9 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
   const monthByAgent = new Map(monthUsage.map((r) => [r.agentId, Number(r.cost)]));
   const totalConvs = Number(convTotals?.n ?? 0);
   const handoffs = Number(msgTotals?.handoffs ?? 0);
+  const handoffConvs = Number(msgTotals?.handoffConvs ?? 0);
+  // Диалоги, где клиент писал за период (передача без сообщения клиента в периоде тоже считается диалогом)
+  const activeConvs = Math.max(Number(msgTotals?.activeConvs ?? 0), handoffConvs);
   const totalCost = Number(usageTotals?.cost ?? 0);
   const money = (v: number) => (v >= 100 ? `$${v.toFixed(0)}` : v >= 1 ? `$${v.toFixed(2)}` : `$${v.toFixed(3)}`);
 
@@ -156,8 +162,8 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
           { label: t.analytics.conversations, value: totalConvs.toLocaleString() },
           {
             label: t.analytics.handoffRate,
-            value: totalConvs ? `${Math.round((handoffs / totalConvs) * 100)}%` : "—",
-            hint: `${handoffs} ${t.analytics.handoffs}`,
+            value: activeConvs ? `${Math.round((handoffConvs / activeConvs) * 100)}%` : "—",
+            hint: t.analytics.handoffsIn.replace("{n}", String(handoffs)).replace("{c}", String(handoffConvs)),
           },
           { label: t.analytics.avgResponse, value: msgTotals?.avgMs ? `${(Number(msgTotals.avgMs) / 1000).toFixed(1)} ${t.analytics.sec}` : "—" },
           { label: t.analytics.spend, value: money(totalCost), hint: totalConvs ? `${money(totalCost / totalConvs)} ${t.analytics.perConversation}` : undefined },

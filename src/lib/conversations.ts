@@ -307,11 +307,23 @@ export async function respond(conversationId: string): Promise<void> {
         .set(channel.type === "api" ? { needsAttention: true } : { mode: "human", needsAttention: true })
         .where(eq(conversations.id, conversationId));
       // Выжимка для менеджера: что клиент ищет и чего ждёт — чтобы не перечитывать всю переписку.
-      const summary = await handoffSummary(conversationId, { agentId: agent.id, clientId: client.id });
+      const { summary, draft } = await handoffSummary(conversationId, {
+        agentId: agent.id,
+        clientId: client.id,
+        kbSourceIds: config.kbSourceIds,
+        language: conversation.context?.language,
+      });
+      if (draft) {
+        const [cur] = await db.select({ context: conversations.context }).from(conversations).where(eq(conversations.id, conversationId));
+        await db
+          .update(conversations)
+          .set({ context: { ...cur?.context, managerDraft: { text: draft, at: Date.now() } } })
+          .where(eq(conversations.id, conversationId));
+      }
       // Клиент недоволен (агент поставил [[ACTION mood: upset]]) — уведомление с пометкой «срочно».
       const upset = actions.some((a) => a.type === "mood" && /upset|angry/i.test(a.value));
       await addMessage(conversationId, "system", "handoff", summary || upset ? { meta: { ...(summary ? { summary } : {}), ...(upset ? { upset } : {}) } } : {});
-      void notify().then((n) => n.notifyHandoff(conversationId, summary, { upset }));
+      void notify().then((n) => n.notifyHandoff(conversationId, summary, { upset, draft }));
     }
   } catch (e) {
     console.error("respond failed", conversationId, e);

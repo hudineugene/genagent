@@ -337,6 +337,8 @@ export type ConversationContext = {
   memory?: ClientMemory;
   /** Свой бот: открыта ли сейчас команда и как быстро отвечает */
   team?: TeamState;
+  /** Черновик ответа менеджеру, который агент подготовил при передаче (в Telegram — «Отправить черновик») */
+  managerDraft?: { text: string; at: number };
   /** Свой бот (API): язык, на котором отвечать клиенту, и что клиент сейчас смотрит в боте */
   language?: string;
   botContext?: string;

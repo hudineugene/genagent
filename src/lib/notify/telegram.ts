@@ -2,11 +2,12 @@ import "server-only";
 import { randomBytes } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { agents, channels, clients, conversations, messages, settings } from "@/db/schema";
+import { agents, channels, clients, conversations, knowledgeGaps, messages, settings } from "@/db/schema";
 import { getSetting, setSetting } from "@/lib/settings";
 import { callTelegram, TelegramError } from "@/lib/channels/telegram-api";
 import { approveDraftCore, rejectDraftCore } from "@/lib/drafts";
 import { canReply, operatorReplyCore, returnToAgentCore } from "@/lib/operator";
+import { addAnswerToKb } from "@/lib/agent/kb-answers";
 
 /**
  * Уведомления студии в Telegram — отдельный бот (его создают в @BotFather).
@@ -113,8 +114,19 @@ function conversationButtons(s: NotifySettings | undefined, row: NonNullable<Awa
   return rows.length ? { inline_keyboard: rows } : undefined;
 }
 
+/** Отметка под обработанным уведомлением (кнопки убираем). */
+async function markDone(s: NotifySettings, q: { message?: { chat: { id: number | string }; message_id: number; text?: string } }, mark: string) {
+  if (!q.message) return;
+  await callTelegram(s.token, "editMessageText", {
+    chat_id: q.message.chat.id,
+    message_id: q.message.message_id,
+    text: `${(q.message.text ?? "").slice(0, 3500)}\n\n${mark}`,
+    link_preview_options: { is_disabled: true },
+  }).catch(() => {});
+}
+
 /** Агент передал клиента менеджеру. */
-export async function notifyHandoff(conversationId: string, summary: string | null, opts: { upset?: boolean } = {}) {
+export async function notifyHandoff(conversationId: string, summary: string | null, opts: { upset?: boolean; draft?: string | null } = {}) {
   try {
     const row = await conversationInfo(conversationId);
     if (!row) return;
@@ -128,10 +140,10 @@ export async function notifyHandoff(conversationId: string, summary: string | nu
     const title = opts.upset
       ? "🔴 <b>Срочно: клиент недоволен — нужен человек</b>"
       : "🙋 <b>Клиент передан менеджеру</b>";
-    await broadcast(
-      `${title}\n${header(row)}\n\n${summary ? esc(summary) : "<i>Выжимки нет — откройте диалог.</i>"}${note}`,
-      conversationButtons(s, row),
-    );
+    const draft = reply && opts.draft ? `\n\n💡 <b>Черновик ответа:</b>\n<i>${esc(opts.draft)}</i>` : "";
+    const buttons = conversationButtons(s, row);
+    if (draft && buttons) buttons.inline_keyboard.unshift([{ text: "📤 Отправить черновик", callback_data: `sd:${row.conversation.id}` }]);
+    await broadcast(`${title}\n${header(row)}\n\n${summary ? esc(summary) : "<i>Выжимки нет — откройте диалог.</i>"}${draft}${note}`, buttons);
   } catch (e) {
     console.error("notify handoff failed", e);
   }
@@ -272,6 +284,38 @@ export async function notifyGaps(agentId: string, count: number) {
     );
   } catch (e) {
     console.error("notify gaps failed", e);
+  }
+}
+
+/** Менеджер ответил клиенту так, что ответ пригодится и другим: предложить добавить его в базу знаний. */
+export async function notifyLearned(gapId: string) {
+  try {
+    const [row] = await db
+      .select({ gap: knowledgeGaps, agent: agents, client: clients })
+      .from(knowledgeGaps)
+      .innerJoin(agents, eq(agents.id, knowledgeGaps.agentId))
+      .innerJoin(clients, eq(clients.id, knowledgeGaps.clientId))
+      .where(eq(knowledgeGaps.id, gapId));
+    if (!row?.gap.suggestion) return;
+    const s = await getNotifySettings();
+    const rows: { text: string; callback_data?: string; url?: string }[][] = [
+      [
+        { text: "✅ В базу знаний", callback_data: `kb:${gapId}` },
+        { text: "Не нужно", callback_data: `kx:${gapId}` },
+      ],
+    ];
+    if (s?.adminUrl) rows.push([{ text: "✏️ Изменить", url: `${s.adminUrl}/agents/${row.agent.id}/gaps` }]);
+    await broadcast(
+      `📚 <b>Добавить в базу знаний?</b>
+<b>${esc(row.client.name)}</b> · ${esc(row.agent.name)}
+Менеджер ответил клиенту — агент может отвечать так сам.
+
+<b>Вопрос:</b> ${esc(row.gap.question)}
+<b>Ответ:</b> ${esc(row.gap.suggestion)}`,
+      { inline_keyboard: rows },
+    );
+  } catch (e) {
+    console.error("notify learned failed", e);
   }
 }
 
@@ -421,6 +465,32 @@ async function handleUpdate(u: Update) {
     const prompt = await send(s, chatId, `✍️ Напишите ответ ${esc(who)} одним сообщением — он уйдёт клиенту. Отмена — /cancel`, { force_reply: true, input_field_placeholder: "Ответ клиенту" });
     promptToConversation.set(`${chatId}:${prompt.message_id}`, messageId);
     if (promptToConversation.size > 500) promptToConversation.delete(promptToConversation.keys().next().value as string);
+    return;
+  }
+  if (action === "sd") {
+    // Отправить клиенту черновик ответа, который агент подготовил при передаче
+    const [conv] = await db.select({ context: conversations.context }).from(conversations).where(eq(conversations.id, messageId));
+    const draft = conv?.context?.managerDraft?.text;
+    if (!draft) return answer("Черновик уже отправлен или устарел");
+    const r = await operatorReplyCore(messageId, draft);
+    if (r.error) return answer(r.error === "not_found" ? "Разговор не найден" : "Не получилось: " + r.error.slice(0, 150));
+    await answer("Отправлено клиенту");
+    await markDone(s, q, `📤 Черновик отправлен · ${q.from.first_name || "менеджер"}`);
+    return;
+  }
+  if (action === "kb" || action === "kx") {
+    const [gap] = await db.select().from(knowledgeGaps).where(eq(knowledgeGaps.id, messageId));
+    if (!gap || gap.status !== "open") return answer("Уже обработано");
+    if (action === "kx") {
+      await db.update(knowledgeGaps).set({ status: "ignored" }).where(eq(knowledgeGaps.id, messageId));
+      await answer("Хорошо, не добавляем");
+      await markDone(s, q, `✖️ Не нужно · ${q.from.first_name || "менеджер"}`);
+      return;
+    }
+    const r = await addAnswerToKb(messageId, gap.suggestion ?? "");
+    if (r.error) return answer("Не получилось: " + r.error);
+    await answer("Добавлено — агент будет отвечать сам");
+    await markDone(s, q, `✅ В базе знаний · ${q.from.first_name || "менеджер"}`);
     return;
   }
   if (action === "rt") {

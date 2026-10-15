@@ -54,6 +54,8 @@ export async function register() {
   startFollowUps();
   const { startMemory } = await import("./lib/agent/memory");
   startMemory();
+  const { startLearning } = await import("./lib/agent/learn");
+  startLearning();
 
   if (process.env.BACKUP_DIR) {
     const { startBackups } = await import("./lib/backup");
