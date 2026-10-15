@@ -147,14 +147,55 @@ async function detectLanguage({ asr, Tensor }: Loaded, pcm: Float32Array, hint?:
   return best;
 }
 
+/**
+ * WAV (PCM 16 бит) → моно 16 кГц. Такую запись делает мини-приложение бота (запись с микрофона в браузере):
+ * браузеры пишут кто WebM, кто MP4, а WAV из PCM собирается одинаково везде.
+ */
+export function decodeWav(data: Uint8Array): Float32Array {
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  const tag = (at: number) => String.fromCharCode(data[at], data[at + 1], data[at + 2], data[at + 3]);
+  if (data.length < 44 || tag(0) !== "RIFF" || tag(8) !== "WAVE") throw new Error("not wav");
+  let channels = 0;
+  let rate = 0;
+  let bits = 0;
+  let offset = 12;
+  while (offset + 8 <= data.length) {
+    const id = tag(offset);
+    const size = view.getUint32(offset + 4, true);
+    const body = offset + 8;
+    if (id === "fmt ") {
+      if (view.getUint16(body, true) !== 1) throw new Error("not pcm");
+      channels = view.getUint16(body + 2, true);
+      rate = view.getUint32(body + 4, true);
+      bits = view.getUint16(body + 14, true);
+    } else if (id === "data") {
+      if (bits !== 16 || !channels || !rate) throw new Error("unsupported wav");
+      const frames = Math.floor(Math.min(size, data.length - body) / (2 * channels));
+      const out = Array.from({ length: channels }, () => new Float32Array(frames));
+      for (let i = 0; i < frames; i++) {
+        for (let c = 0; c < channels; c++) out[c][i] = view.getInt16(body + (i * channels + c) * 2, true) / 32768;
+      }
+      return toMono16k(out, rate);
+    }
+    offset = body + size + (size % 2);
+  }
+  throw new Error("no audio data");
+}
+
 /** Голосовое (OGG/Opus из Telegram) → текст или null, если слов не разобрать. */
-export async function transcribeOgg(
+export async function transcribeOgg(data: Uint8Array, hint?: string) {
+  return transcribeAudio(data, "ogg", hint);
+}
+
+/** Голосовое: OGG/Opus (Telegram) или WAV (мини-приложение) → текст или null, если слов не разобрать. */
+export async function transcribeAudio(
   data: Uint8Array,
+  format: "ogg" | "wav",
   hint?: string,
 ): Promise<{ text: string | null; seconds: number; language?: string }> {
   let pcm: Float32Array;
   try {
-    pcm = await decodeOgg(data);
+    pcm = format === "wav" ? decodeWav(data) : await decodeOgg(data);
   } catch (e) {
     if (e instanceof Error && /Cannot find module/.test(e.message)) throw new AsrError("unavailable");
     throw new AsrError("bad_audio");
