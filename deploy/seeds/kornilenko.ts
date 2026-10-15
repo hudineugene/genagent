@@ -126,6 +126,7 @@ const config: AgentConfig = {
   useBrandVoice: true,
   factGuard: "flag",
   monthlyBudgetUsd: 30,
+  memory: true,
   calendar: calendarConfigSchema.parse({}),
 };
 

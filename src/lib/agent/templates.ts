@@ -27,6 +27,7 @@ export function emptyConfig(): AgentConfig {
     kbSourceIds: null,
     factGuard: "flag",
     monthlyBudgetUsd: null,
+    memory: true,
     rules: "",
     handoff: "",
     greeting: "",

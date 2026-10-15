@@ -14,6 +14,7 @@ import { type ApiConfig,
   type TelegramConfig,
   type ThreadsConfig,
   type EmailConfig,
+  type ClientMemory,
 } from "@/db/schema";
 import * as ig from "@/lib/channels/meta/instagram";
 import * as th from "@/lib/channels/meta/threads";
@@ -25,6 +26,7 @@ import { streamChat, MissingKeyError, type ChatMessage } from "@/lib/llm";
 import { findModel } from "@/lib/models";
 import { agentMonthSpend, logUsage } from "@/lib/usage";
 import { ordersNote } from "@/lib/agent/orders";
+import { memoryNote } from "@/lib/agent/memory";
 import { sendChatAction, sendText, replyInGroup } from "@/lib/channels/telegram-api";
 import { sendEmailReply } from "@/lib/channels/email-send";
 
@@ -203,13 +205,16 @@ export async function respond(conversationId: string): Promise<void> {
       client,
       chat,
       { mode: "live", agentId: agent.id, conversationId },
-      channel.type === "email"
+      withMemory(
+        config.memory && conversation.kind === "dm" ? conversation.context?.memory : undefined,
+        channel.type === "email"
         ? emailNote(client.name, conversation.contactName)
         : conversation.kind === "comment"
           ? commentNote(channel.type === "api" ? "telegram" : channel.type, conversation.context?.postText)
           : channel.type === "api"
             ? apiNote(conversation.context?.language, conversation.context?.botContext, (channel.config as ApiConfig).botNote, botActivity(history), ordersNote(conversation.context?.orders))
             : undefined,
+      ),
     );
 
     if (channel.type === "telegram" && conversation.kind !== "comment") {
@@ -371,6 +376,12 @@ export function botActivity(history: { role: string; text: string; meta?: Messag
   }
   if (!lines.length) return undefined;
   return lines.slice(-ACTIVITY_LINES).join("\n");
+}
+
+/** Указания канала + что агент помнит о клиенте. */
+function withMemory(memory: ClientMemory | undefined, note: string | undefined) {
+  const parts = [note, memoryNote(memory)].filter(Boolean);
+  return parts.length ? parts.join("\n\n") : undefined;
 }
 
 /** Свой бот: язык ответа задаёт бот (язык, выбранный клиентом в боте) — он важнее настройки агента. */

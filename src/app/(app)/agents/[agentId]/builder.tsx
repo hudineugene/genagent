@@ -173,6 +173,13 @@ export function Builder({
             placeholder="—"
           />
         </Field>
+        <Field label={t.builder.memory} hint={t.builder.memoryHint}>
+          <Segmented
+            value={config.memory === false ? "off" : "on"}
+            options={(["on", "off"] as const).map((v) => ({ value: v, label: t.builder.memoryModes[v] }))}
+            onChange={(v) => set("memory", v === "on")}
+          />
+        </Field>
         <Field label={t.builder.factGuard} hint={t.builder.factGuardHint}>
           <Segmented
             value={config.factGuard ?? "flag"}

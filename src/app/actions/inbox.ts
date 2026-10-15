@@ -8,6 +8,7 @@ import { requireUser } from "@/lib/auth";
 import { addMessage } from "@/lib/conversations";
 import { approveDraftCore, rejectDraftCore } from "@/lib/drafts";
 import { operatorReplyCore, returnToAgentCore } from "@/lib/operator";
+import { forgetClient } from "@/lib/agent/memory";
 
 export type InboxResult = { error?: string };
 
@@ -70,6 +71,14 @@ export async function rejectDraft(messageId: string): Promise<InboxResult> {
 export async function deleteConversation(conversationId: string): Promise<InboxResult> {
   await requireUser();
   await db.delete(conversations).where(eq(conversations.id, conversationId));
+  refresh();
+  return {};
+}
+
+/** Стереть долгую память агента об этом клиенте. */
+export async function forgetClientMemory(conversationId: string): Promise<InboxResult> {
+  await requireUser();
+  await forgetClient(conversationId);
   refresh();
   return {};
 }

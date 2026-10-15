@@ -33,6 +33,7 @@ const FIELDS: Field[] = [
   "handoff",
   "extraInstructions",
   "monthlyBudgetUsd",
+  "memory",
   "factGuard",
   "calendar",
 ];
@@ -88,6 +89,7 @@ export function VersionsPanel({
       handoff: b.handoff,
       extraInstructions: b.extra,
       monthlyBudgetUsd: b.budget,
+      memory: b.memory,
       factGuard: b.factGuard,
       calendar: b.sections.calendar,
     };

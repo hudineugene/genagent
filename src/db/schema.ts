@@ -288,6 +288,15 @@ export const conversations = sqliteTable(
   ],
 );
 
+/** Долгая память о клиенте: короткие факты из прошлых разговоров (src/lib/agent/memory.ts) */
+export type ClientMemory = {
+  facts: string[];
+  /** Когда обновляли */
+  at: number;
+  /** До какого сообщения (время, мс) переписка уже учтена */
+  upto: number;
+};
+
 export type OrderState = {
   id: string;
   title: string;
@@ -314,6 +323,8 @@ export type ConversationContext = {
   followUpAt?: number;
   /** Свой бот: заказы клиента и как менялся их статус (POST /order) — агент видит их в контексте */
   orders?: OrderState[];
+  /** Что агент помнит о клиенте из прошлых разговоров */
+  memory?: ClientMemory;
   /** Свой бот (API): язык, на котором отвечать клиенту, и что клиент сейчас смотрит в боте */
   language?: string;
   botContext?: string;

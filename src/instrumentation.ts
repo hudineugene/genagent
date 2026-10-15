@@ -52,6 +52,8 @@ export async function register() {
   startWaitingReminders();
   const { startFollowUps } = await import("./lib/agent/followups");
   startFollowUps();
+  const { startMemory } = await import("./lib/agent/memory");
+  startMemory();
 
   if (process.env.BACKUP_DIR) {
     const { startBackups } = await import("./lib/backup");

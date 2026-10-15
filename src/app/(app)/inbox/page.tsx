@@ -15,6 +15,7 @@ import { Thread, type ThreadData } from "./thread";
 import { InboxPoller } from "./poller";
 import { InboxToolbar } from "./toolbar";
 import { InfoColumn } from "./info-panel";
+import { ForgetMemory } from "./forget-memory";
 
 type Filter = "all" | "attention" | "human" | "closed";
 const FILTERS = ["all", "attention", "human", "closed"] as const;
@@ -358,6 +359,34 @@ function ConversationInfo({ info, data, t, locale }: { info: Info; data: ThreadD
         {info.cost > 0 && <Row label={t.inbox.infoCost}>${info.cost.toFixed(3)}</Row>}
         {info.linked && <Row label={t.inbox.infoLinked}>✓</Row>}
       </dl>
+      {Boolean(data.context?.orders?.length) && (
+        <div className="space-y-2 border-t border-border pt-4">
+          <div className="text-xs font-medium text-muted">{t.inbox.infoOrders}</div>
+          <ul className="space-y-1.5">
+            {data.context!.orders!.map((o) => (
+              <li key={o.id} className="rounded-lg bg-surface-2 px-2.5 py-1.5 text-[13px]">
+                <div className="truncate font-medium">{o.title || o.id}</div>
+                <div className="text-xs text-muted">
+                  {o.label} · {fmt.format(new Date(o.at))}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {Boolean(data.context?.memory?.facts.length) && (
+        <div className="space-y-2 border-t border-border pt-4">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-medium text-muted">{t.inbox.infoMemory}</span>
+            <ForgetMemory conversationId={data.id} label={t.inbox.infoMemoryForget} confirm={t.inbox.infoMemoryForgetConfirm} />
+          </div>
+          <ul className="list-disc space-y-1 pl-4 text-[13px] leading-snug">
+            {data.context!.memory!.facts.map((f, i) => (
+              <li key={i}>{f}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       <div className="space-y-1.5 border-t border-border pt-4">
         <InfoLink href={`/agents/${data.agentId}`} icon={<Bot className="size-4" />}>
           {t.inbox.infoOpenAgent}

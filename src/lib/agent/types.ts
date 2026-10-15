@@ -68,6 +68,8 @@ export const agentConfigSchema = z.object({
   factGuard: z.enum(["off", "flag", "block"]).default("flag"),
   /** Лимит расходов агента в месяц, USD; null — без лимита. */
   monthlyBudgetUsd: z.number().min(0).max(100000).nullable().default(null),
+  /** Долгая память о клиенте: агент помнит факты из прошлых разговоров (раз в 10 минут дешёвая модель их обновляет) */
+  memory: z.boolean().default(true),
   calendar: calendarConfigSchema.prefault({}),
 });
 
