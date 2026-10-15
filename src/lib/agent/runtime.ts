@@ -36,7 +36,7 @@ export async function prepareChat(
   const system = compileSystemPrompt(
     config,
     client,
-    kb.mode === "full" ? { kind: "full", docs: kb.docs } : kb.mode === "search" ? { kind: "search" } : undefined,
+    kb.mode === "full" ? { kind: "full", docs: kb.docs } : kb.mode === "search" ? { kind: "search", docs: kb.pinned } : undefined,
     config.calendar.enabled ? utcToZoned(new Date(), config.calendar.timezone) : undefined,
   );
   const fullSystem = channelNote ? `${system}\n\n${channelNote}` : system;

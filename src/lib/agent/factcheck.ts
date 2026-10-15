@@ -6,6 +6,8 @@
  */
 
 const CURRENCY = /(грн|₴|uah|€|eur|евро|євро|\$|usd|долл|дол\.|%|руб)/i;
+// \b не работает с кириллицей — конец слова проверяем отрицательным просмотром вперёд.
+const UNITS = /^\s*(м²|м2|кв\.?\s*м|км|м(?![а-яёіїєґa-z])|метр|мин|хв|час|год(?![а-яёіїєґ])|сек|km|m²|m2|m(?![a-z])|min|h(?![a-z])|sq)/i;
 // Разделители тысяч: обычный, неразрывный и узкий пробел, точка, запятая, апостроф
 const GROUPED = /\d{1,3}(?:[   .,'’]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?/g;
 
@@ -58,6 +60,10 @@ export function unverifiedFacts(reply: string, sources: string): string[] {
     const whole = n.split(".")[0];
     const around = rest.slice(Math.max(0, (m.index ?? 0) - 4), (m.index ?? 0) + raw.length + 6);
     const money = CURRENCY.test(around);
+    // Расстояния, площади и время («300 м от моря» при «~0,3 км» в базе) не проверяем: агент их пересчитывает
+    // и округляет, а главная опасность — выдуманные цены, суммы и контакты.
+    const after = rest.slice((m.index ?? 0) + raw.length, (m.index ?? 0) + raw.length + 8);
+    if (!money && UNITS.test(after)) continue;
     if (!money && whole.length < 3) continue;
     if (!money && /^(19|20)\d\d$/.test(whole)) continue;
     if (srcNumbers.has(n) || srcNumbers.has(whole) || srcNumbers.has(n.replace(/\.0+$/, ""))) continue;

@@ -8,6 +8,10 @@ import { crawl, pagesToDocument } from "./crawl";
 
 /** Сколько фрагментов подмешивать к сообщению в режиме поиска. */
 const SEARCH_TOP_K = 8;
+/** Документы своего бота, которые в большой базе всё равно идут целиком (каталог, контакты), — до этого объёма. */
+const PINNED_MAX_CHARS = 30_000;
+/** Справочники, добавленные в студии, больше этого объёма при документах своего бота — ищем фрагментами. */
+const REFERENCE_SEARCH_CHARS = 20_000;
 const MAX_SOURCE_CHARS = 2_000_000;
 
 /** Пересобирает фрагменты и полнотекстовый индекс источника. */
@@ -104,7 +108,7 @@ export type KnowledgeSourceRef = { id: string; title: string; url: string | null
 export type Knowledge =
   | { mode: "none" }
   | { mode: "full"; docs: { title: string; content: string }[]; sources: KnowledgeSourceRef[] }
-  | { mode: "search"; context: string | null; sources: KnowledgeSourceRef[]; used: KnowledgeSourceRef[] };
+  | { mode: "search"; context: string | null; sources: KnowledgeSourceRef[]; used: KnowledgeSourceRef[]; pinned?: { title: string; content: string }[] };
 
 async function readySources(clientId: string, sourceIds: string[] | null | undefined) {
   const where = [eq(kbSources.clientId, clientId), eq(kbSources.status, "ready")];
@@ -113,7 +117,7 @@ async function readySources(clientId: string, sourceIds: string[] | null | undef
     where.push(inArray(kbSources.id, sourceIds));
   }
   return db
-    .select({ id: kbSources.id, title: kbSources.title, url: kbSources.url, chars: kbSources.chars })
+    .select({ id: kbSources.id, title: kbSources.title, url: kbSources.url, chars: kbSources.chars, externalKey: kbSources.externalKey })
     .from(kbSources)
     .where(and(...where));
 }
@@ -122,10 +126,12 @@ async function readySources(clientId: string, sourceIds: string[] | null | undef
 export async function knowledgeSummary(clientId: string, sourceIds: string[] | null | undefined) {
   const sources = await readySources(clientId, sourceIds);
   const chars = sources.reduce((n, s) => n + s.chars, 0);
+  const botChars = sources.filter((s) => s.externalKey).reduce((n, s) => n + s.chars, 0);
+  const hybrid = botChars > 0 && chars - botChars > REFERENCE_SEARCH_CHARS;
   return {
     sources: sources.length,
     tokens: estimateTokens(chars),
-    mode: sources.length === 0 ? "none" : chars <= FULL_CONTEXT_MAX_CHARS ? "full" : "search",
+    mode: sources.length === 0 ? "none" : chars <= FULL_CONTEXT_MAX_CHARS && !hybrid ? "full" : "search",
   } as const;
 }
 
@@ -143,7 +149,11 @@ export async function loadKnowledge(
   const refs = sources.map(({ id, title, url }) => ({ id, title, url }));
   const total = sources.reduce((n, s) => n + s.chars, 0);
 
-  if (total <= FULL_CONTEXT_MAX_CHARS) {
+  // Свой бот прислал свои документы, а в студии добавлены большие справочники — даже если всё вместе помещается,
+  // справочники ищем фрагментами (документы бота — целиком): так обычный ответ не дорожает в разы.
+  const botChars = sources.filter((s) => s.externalKey).reduce((n, s) => n + s.chars, 0);
+  const hybrid = botChars > 0 && total - botChars > REFERENCE_SEARCH_CHARS;
+  if (total <= FULL_CONTEXT_MAX_CHARS && !hybrid) {
     const rows = await db
       .select({ id: kbSources.id, title: kbSources.title, content: kbSources.content })
       .from(kbSources)
@@ -153,19 +163,35 @@ export async function loadKnowledge(
     return { mode: "full", docs: rows.map(({ title, content }) => ({ title, content })), sources: refs };
   }
 
+  // Большая база: документы, присланные своим ботом клиента (каталог, контакты, короткие гиды), — всегда целиком,
+  // если их немного; остальное (большие справочники) — найденными фрагментами.
+  const botDocs = sources.filter((s) => s.externalKey);
+  let pinned: { title: string; content: string }[] | undefined;
+  let searchRefs = refs;
+  if (botDocs.length && botChars <= PINNED_MAX_CHARS && botDocs.length < sources.length) {
+    const rows = await db
+      .select({ id: kbSources.id, title: kbSources.title, content: kbSources.content })
+      .from(kbSources)
+      .where(inArray(kbSources.id, botDocs.map((d) => d.id)));
+    rows.sort((a, b) => a.id.localeCompare(b.id)); // стабильный порядок — для кэширования промпта
+    pinned = rows.map(({ title, content }) => ({ title, content }));
+    const pinnedIds = new Set(rows.map((r) => r.id));
+    searchRefs = refs.filter((r) => !pinnedIds.has(r.id));
+  }
+
   // Ищем по последнему сообщению, а если по нему ничего — по двум последним вместе.
   const last = userMessages.at(-1) ?? "";
   // Короткие уточнения («а для детей?») ищем вместе с предыдущим вопросом — так понятнее, о чём речь.
   const prev = userMessages.at(-2);
   const query = last.length < 40 && prev ? `${prev}\n${last}` : last;
-  let hits = await search(clientId, refs, query);
-  if (!hits.length && userMessages.length > 1) hits = await search(clientId, refs, userMessages.slice(-2).join(" "));
-  if (!hits.length) return { mode: "search", context: null, sources: refs, used: [] };
+  let hits = await search(clientId, searchRefs, query);
+  if (!hits.length && userMessages.length > 1) hits = await search(clientId, searchRefs, userMessages.slice(-2).join(" "));
+  if (!hits.length) return { mode: "search", context: null, sources: refs, used: [], pinned };
 
   const byId = new Map(refs.map((r) => [r.id, r]));
   const used = [...new Set(hits.map((h) => h.sourceId))].map((id) => byId.get(id)!).filter(Boolean);
   const context = hits.map((h, i) => `[${i + 1}] ${h.text}`).join("\n\n");
-  return { mode: "search", context, sources: refs, used };
+  return { mode: "search", context, sources: refs, used, pinned };
 }
 
 type Hit = { id: string; text: string; sourceId: string };

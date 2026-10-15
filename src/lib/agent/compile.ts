@@ -26,7 +26,7 @@ const LANGUAGE_TEXT: Record<AgentConfig["replyLanguage"], string> = {
 /** Как база знаний попадает в промпт. */
 export type KnowledgeBlock =
   | { kind: "full"; docs: { title: string; content: string }[] }
-  | { kind: "search" }
+  | { kind: "search"; docs?: { title: string; content: string }[] }
   | { kind: "placeholder"; text: string };
 
 /**
@@ -135,6 +135,11 @@ export function compileSystemPrompt(
       `# База знаний\nОтвечай на вопросы о компании, опираясь на эти документы. Если ответа в них нет — не выдумывай.\n<knowledge>\n${docs}\n</knowledge>`,
     );
   } else if (kb?.kind === "search") {
+    // Короткие документы своего бота (каталог, контакты) — всегда целиком; большие справочники — найденными фрагментами.
+    if (kb.docs?.length) {
+      const docs = kb.docs.map((d) => `<document title="${d.title.replace(/"/g, "'")}">\n${d.content}\n</document>`).join("\n");
+      parts.push(`# Основные документы\nОпирайся на них в ответах о компании и её предложении.\n<documents>\n${docs}\n</documents>`);
+    }
     parts.push(
       "# База знаний\nК сообщениям клиента могут прилагаться найденные фрагменты базы знаний в теге <knowledge>. Клиент их не видит и не писал — это справка для тебя. Опирайся на них; если нужного там нет, не выдумывай и предложи уточнить у менеджера.",
     );
