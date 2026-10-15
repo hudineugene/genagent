@@ -61,9 +61,9 @@ export async function addTelegramChannel(
 }
 
 /** Свой бот: ответы на комментарии, которые он присылает, — на одобрение или сразу. */
-export async function updateApiChannel(channelId: string, patch: { approval?: boolean; botNote?: string; followUps?: boolean }): Promise<ChannelResult> {
+export async function updateApiChannel(channelId: string, patch: { approval?: boolean; botNote?: string; followUps?: boolean; orderNotes?: boolean }): Promise<ChannelResult> {
   await requireUser();
-  const data = z.object({ approval: z.boolean().optional(), botNote: z.string().trim().max(1000).optional(), followUps: z.boolean().optional() }).parse(patch);
+  const data = z.object({ approval: z.boolean().optional(), botNote: z.string().trim().max(1000).optional(), followUps: z.boolean().optional(), orderNotes: z.boolean().optional() }).parse(patch);
   const [ch] = await db.select().from(channels).where(eq(channels.id, channelId));
   if (!ch || ch.type !== "api") return { error: "not_found" };
   await db.update(channels).set({ config: { ...(ch.config as ApiConfig), ...data } }).where(eq(channels.id, channelId));

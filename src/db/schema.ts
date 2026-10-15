@@ -224,6 +224,8 @@ export type ApiConfig = {
   dmAt?: number;
   /** Напоминания тем, кто поговорил с агентом и ушёл ни с чем (бот забирает их из /outbox, kind: followup) */
   followUps?: boolean;
+  /** Агент сопровождает заказ: при смене статуса бот берёт у агента живой текст вместо шаблона (POST /order) */
+  orderNotes?: boolean;
 };
 export type ChannelConfig = TelegramConfig | WidgetConfig | InstagramConfig | ThreadsConfig | EmailConfig | ApiConfig;
 export const CHANNEL_TYPES = ["telegram", "widget", "instagram", "threads", "email", "api"] as const;
@@ -286,6 +288,17 @@ export const conversations = sqliteTable(
   ],
 );
 
+export type OrderState = {
+  id: string;
+  title: string;
+  status: string;
+  label: string;
+  /** Факты от бота: срок, сумма, аптека… — одной строкой */
+  facts: string;
+  at: number;
+  steps: { label: string; at: number }[];
+};
+
 export type ConversationContext = {
   postId?: string;
   postUrl?: string;
@@ -299,6 +312,8 @@ export type ConversationContext = {
   chatId?: string;
   /** Когда последний раз решали про напоминание этому клиенту (не чаще раза в неделю) */
   followUpAt?: number;
+  /** Свой бот: заказы клиента и как менялся их статус (POST /order) — агент видит их в контексте */
+  orders?: OrderState[];
   /** Свой бот (API): язык, на котором отвечать клиенту, и что клиент сейчас смотрит в боте */
   language?: string;
   botContext?: string;
@@ -329,6 +344,8 @@ export type MessageMeta = {
   actions?: { type: string; value: string }[];
   /** Напоминание агента клиенту, который ушёл ни с чем */
   followUp?: boolean;
+  /** Сообщение агента о смене статуса заказа (бот отправил его вместо шаблона) */
+  orderNote?: boolean;
   /** Проверяемые факты ответа (цены, телефоны, ссылки), которых нет в базе знаний и переписке */
   unverified?: string[];
   /** Сообщение перенесено из разговора на сайте (виджет), когда клиент перешёл в бота */

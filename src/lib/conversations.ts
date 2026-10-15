@@ -24,6 +24,7 @@ import { handoffSummary } from "@/lib/agent/summary";
 import { streamChat, MissingKeyError, type ChatMessage } from "@/lib/llm";
 import { findModel } from "@/lib/models";
 import { agentMonthSpend, logUsage } from "@/lib/usage";
+import { ordersNote } from "@/lib/agent/orders";
 import { sendChatAction, sendText, replyInGroup } from "@/lib/channels/telegram-api";
 import { sendEmailReply } from "@/lib/channels/email-send";
 
@@ -207,7 +208,7 @@ export async function respond(conversationId: string): Promise<void> {
         : conversation.kind === "comment"
           ? commentNote(channel.type === "api" ? "telegram" : channel.type, conversation.context?.postText)
           : channel.type === "api"
-            ? apiNote(conversation.context?.language, conversation.context?.botContext, (channel.config as ApiConfig).botNote, botActivity(history))
+            ? apiNote(conversation.context?.language, conversation.context?.botContext, (channel.config as ApiConfig).botNote, botActivity(history), ordersNote(conversation.context?.orders))
             : undefined,
     );
 
@@ -373,7 +374,7 @@ export function botActivity(history: { role: string; text: string; meta?: Messag
 }
 
 /** Свой бот: язык ответа задаёт бот (язык, выбранный клиентом в боте) — он важнее настройки агента. */
-function apiNote(language?: string, botContext?: string, botNote?: string, activity?: string) {
+function apiNote(language?: string, botContext?: string, botNote?: string, activity?: string, orders?: string) {
   const parts: string[] = [];
   if (language) {
     const name = LANGUAGE_NAMES[language] ?? language;
@@ -395,6 +396,7 @@ function apiNote(language?: string, botContext?: string, botNote?: string, activ
     ].join("\n"),
   );
   if (botContext) parts.push(`# Что клиент сейчас открыл в боте\n${botContext}`);
+  if (orders) parts.push(orders);
   if (activity) {
     parts.push(
       `# Что клиент делал в боте после твоего последнего ответа\nУчитывай это, не переспрашивай то, что уже видно отсюда, и не повторяй то, что бот уже показал:\n${activity}`,

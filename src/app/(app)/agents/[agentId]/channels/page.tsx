@@ -38,7 +38,7 @@ export default async function AgentChannelsPage({ params }: { params: Promise<{ 
             tokenExpiresAt: "tokenExpiresAt" in c.config ? c.config.tokenExpiresAt : 0,
           }
         : null,
-    api: c.type === "api" && "key" in c.config ? { key: c.config.key, label: c.config.label, approval: c.config.approval ?? true, botNote: c.config.botNote ?? "", followUps: Boolean(c.config.followUps) } : null,
+    api: c.type === "api" && "key" in c.config ? { key: c.config.key, label: c.config.label, approval: c.config.approval ?? true, botNote: c.config.botNote ?? "", followUps: Boolean(c.config.followUps), orderNotes: Boolean(c.config.orderNotes) } : null,
     telegram:
       c.type === "telegram" && "botName" in c.config
         ? { comments: Boolean(c.config.comments), approval: c.config.approval ?? true, group: c.config.group ?? null }
