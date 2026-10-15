@@ -407,6 +407,7 @@ export const ru = {
     infoOpenAgent: "Настройки агента",
     infoOpenClient: "Карточка клиента",
     more: "Ещё",
+    vision: "ИИ видит на фото",
     bot: "Бот",
     kinds: {
       photo: "Фото",

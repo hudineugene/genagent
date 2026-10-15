@@ -2,6 +2,7 @@ import "server-only";
 import { and, desc, eq, gte, lte } from "drizzle-orm";
 import { db } from "@/db";
 import { conversations, messages, type MessageMeta } from "@/db/schema";
+import { saveThumb } from "@/lib/media";
 
 /**
  * Журнал переписки своего бота: бот присылает всё, что пришло от клиента и ушло клиенту (меню, ответы менеджеров,
@@ -24,6 +25,9 @@ export type SyncItem = {
   kind?: string;
   /** Время сообщения, мс */
   at: number;
+  /** Превью картинки (фото, стикер, обложка видео) в base64 и её тип — покажем в «Диалогах» */
+  thumb?: string;
+  thumbType?: string;
 };
 
 const MATCH_WINDOW_MS = 15 * 60 * 1000;
@@ -51,6 +55,15 @@ function sameText(a: string, b: string) {
 function roleFor(item: SyncItem): "user" | "assistant" | "operator" | "bot" {
   if (item.dir === "in") return "user";
   return item.by === "agent" ? "assistant" : item.by === "manager" ? "operator" : "bot";
+}
+
+/** Сохранить превью файлом и отметить в сообщении (вид — из журнала, если в сообщении его ещё нет). */
+async function attachThumb(messageId: string, item: SyncItem) {
+  const name = saveThumb(messageId, item.thumb!, item.thumbType ?? "image/jpeg");
+  if (!name) return;
+  const [m] = await db.select({ meta: messages.meta }).from(messages).where(eq(messages.id, messageId));
+  const meta: MessageMeta = { ...(m?.meta ?? {}), thumb: name, ...(item.kind && !m?.meta?.kind ? { kind: item.kind } : {}) };
+  await db.update(messages).set({ meta }).where(eq(messages.id, messageId));
 }
 
 export async function syncBotMessages(conversationId: string, items: SyncItem[], { fresh = false }: { fresh?: boolean } = {}) {
@@ -87,6 +100,7 @@ export async function syncBotMessages(conversationId: string, items: SyncItem[],
     if (role === "operator") answeredAt = Math.max(answeredAt, item.at);
     if (candidate) {
       await db.update(messages).set({ botId: item.id }).where(eq(messages.id, candidate.id));
+      if (item.thumb) await attachThumb(candidate.id, item);
       candidate.botId = item.id;
       known.add(item.id);
       result.matched++;
@@ -113,6 +127,7 @@ export async function syncBotMessages(conversationId: string, items: SyncItem[],
       result.skipped++;
       continue;
     }
+    if (item.thumb) await attachThumb(inserted[0].id, item);
     result.inserted++;
     if (!latest || item.at >= latest.at) latest = { at: item.at, text: item.text || `[${item.kind}]` };
   }

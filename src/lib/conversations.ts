@@ -188,11 +188,7 @@ export async function respond(conversationId: string): Promise<void> {
       if (needsApproval(channel, conversation)) return;
       await db.update(messages).set({ status: "rejected" }).where(and(eq(messages.conversationId, conversationId), eq(messages.status, "draft")));
     }
-    const chat: ChatMessage[] = history
-      .reverse()
-      // Тексты самого бота (меню, шаблоны) — не реплики агента: в память ИИ не берём
-      .filter((m) => m.role !== "system" && m.role !== "bot")
-      .map((m) => ({ role: m.role === "user" ? "user" : "assistant", content: m.text }));
+    const chat = historyForAi(history.reverse());
     if (chat.at(-1)?.role !== "user") return; // уже ответили
 
     const config = agentConfigSchema.parse(agent.config);
@@ -330,6 +326,20 @@ const LANGUAGE_NAMES: Record<string, string> = {
   it: "italiano",
   pl: "polski",
 };
+
+/** Переписка для ИИ (от старых к новым): без служебных строк и текстов самого бота (меню, шаблоны — не реплики агента). */
+export function historyForAi(history: { role: string; text: string; meta?: MessageMeta | null }[]): ChatMessage[] {
+  return history
+    .filter((m) => m.role !== "system" && m.role !== "bot")
+    .map((m) => ({ role: m.role === "user" ? "user" : "assistant", content: withVision(m) }));
+}
+
+/** Сообщение клиента для ИИ: к фото — описание того, что на нём (агент сам фото не видит). */
+function withVision(m: { role: string; text: string; meta?: MessageMeta | null }) {
+  // Вложение без подписи из журнала (фото, видео…) — ИИ не принимает пустые сообщения
+  if (!m.meta?.vision) return m.text.trim() ? m.text : `[${m.role === "user" ? "Клиент прислал" : "Отправлено клиенту"}: ${m.meta?.kind ?? "вложение"}]`;
+  return `${m.text ? `${m.text}\n\n` : ""}[Клиент прислал фото. На фото: ${m.meta.vision}]`;
+}
 
 const ACTIVITY_WINDOW_MS = 2 * 60 * 60 * 1000;
 const ACTIVITY_LINES = 12;

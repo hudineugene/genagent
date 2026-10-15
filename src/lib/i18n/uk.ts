@@ -409,6 +409,7 @@ export const uk: Dict = {
     infoOpenAgent: "Налаштування агента",
     infoOpenClient: "Картка клієнта",
     more: "Ще",
+    vision: "ШІ бачить на фото",
     bot: "Бот",
     kinds: {
       photo: "Фото",

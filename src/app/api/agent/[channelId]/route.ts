@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { conversations, messages } from "@/db/schema";
 import { apiChannel } from "@/lib/channels/api-auth";
 import { addMessage, isTyping, respond, upsertConversation } from "@/lib/conversations";
+import { describePhoto, saveThumb } from "@/lib/media";
 
 /**
  * Свой бот клиента спрашивает агента: POST с ключом канала (Authorization: Bearer …).
@@ -17,7 +18,12 @@ const bodySchema = z.object({
     name: z.string().max(200).optional(),
     username: z.string().max(100).optional(),
   }),
-  text: z.string().trim().min(1).max(4000),
+  /** Текст клиента; у фото — подпись (может быть пустой) */
+  text: z.string().trim().max(4000).default(""),
+  /** Фото от клиента (до ~4 МБ): агент получит его описание и ответит с учётом того, что на фото */
+  image: z
+    .object({ data: z.string().min(100).max(5_600_000), mediaType: z.enum(["image/jpeg", "image/png", "image/webp"]).default("image/jpeg") })
+    .optional(),
   /** Язык, на котором клиент пользуется ботом (ru, uk, en, es…) */
   language: z.string().trim().toLowerCase().regex(/^[a-z]{2}$/).optional(),
   /** Что клиент сейчас открыл в боте — например, карточку объекта */
@@ -40,7 +46,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ channel
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "bad_request", details: parsed.error.issues[0]?.message }, { status: 400 });
-  const { user, text, language, context, messageId } = parsed.data;
+  const { user, text, language, context, messageId, image } = parsed.data;
+  if (!text && !image) return Response.json({ error: "bad_request", details: "text or image required" }, { status: 400 });
 
   const { conversation } = await upsertConversation(channel, user.id, {
     name: user.name?.trim() || undefined,
@@ -55,7 +62,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ channel
     await db.update(conversations).set({ mode: "ai", needsAttention: false }).where(eq(conversations.id, conversation.id));
     await addMessage(conversation.id, "system", "returned", { externalId: "bot" });
   }
-  const userMsg = await addMessage(conversation.id, "user", text, { botId: messageId });
+  // Фото: дешёвая модель описывает, что на нём; описание — в сообщении клиента (агент его увидит), превью — в «Диалогах»
+  const vision = image ? await describePhoto(image.data, image.mediaType, { agentId: channel.agentId, clientId: channel.clientId }, text) : null;
+  const userMsg = await addMessage(conversation.id, "user", text, {
+    botId: messageId,
+    ...(image ? { meta: { kind: "photo", ...(vision ? { vision } : {}) } } : {}),
+  });
+  if (image) {
+    // Сообщение уже могло прийти журналом (тот же номер) — дописываем описание и превью к нему
+    const thumb = userMsg.meta?.thumb ?? (image.data.length <= 560_000 ? saveThumb(userMsg.id, image.data, image.mediaType) : null);
+    await db
+      .update(messages)
+      .set({ meta: { ...(userMsg.meta ?? {}), kind: "photo", ...(vision ? { vision } : {}), ...(thumb ? { thumb } : {}) } })
+      .where(eq(messages.id, userMsg.id));
+  }
   const [{ rowid: userRow }] = await db
     .select({ rowid: sql<number>`rowid` })
     .from(messages)

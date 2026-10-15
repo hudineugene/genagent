@@ -337,6 +337,10 @@ export type MessageMeta = {
   rating?: "up" | "down";
   /** Из журнала своего бота: что это было (photo, sticker, voice, button, reaction…) — для значка в переписке */
   kind?: string;
+  /** Превью картинки (файл в папке media рядом с базой) — показываем в «Диалогах» */
+  thumb?: string;
+  /** Что на фото клиента (описание дешёвой моделью) — агент отвечает с учётом этого */
+  vision?: string;
 };
 
 export const messages = sqliteTable(

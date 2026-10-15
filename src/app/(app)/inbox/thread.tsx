@@ -294,7 +294,18 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
                     {t.inbox.kinds[kind as keyof typeof t.inbox.kinds] ?? t.inbox.kinds.other}
                   </span>
                 )}
+                {m.meta?.thumb && (
+                  <a href={`/api/media/${m.meta.thumb}`} target="_blank" rel="noreferrer" className="-mx-1 mb-1 block">
+                    {/* eslint-disable-next-line @next/next/no-img-element -- превью из своей папки media, без оптимизатора */}
+                    <img src={`/api/media/${m.meta.thumb}`} alt="" loading="lazy" className="max-h-64 max-w-full rounded-xl object-contain" />
+                  </a>
+                )}
                 {stickerOnly ? <span className="text-4xl leading-tight">{m.text}</span> : m.text}
+                {m.meta?.vision && (
+                  <span className="mt-1.5 block border-t border-border/60 pt-1.5 text-xs text-muted italic">
+                    {t.inbox.vision}: {m.meta.vision}
+                  </span>
+                )}
               </div>
               <div className="mt-1 flex items-center gap-1 px-1 text-[11px] text-muted">
                 {m.role === "assistant" && <Bot className="size-3" />}

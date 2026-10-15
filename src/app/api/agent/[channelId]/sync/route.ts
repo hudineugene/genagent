@@ -23,6 +23,9 @@ const bodySchema = z.object({
         text: z.string().max(4000),
         kind: z.string().max(30).optional(),
         at: z.number().int().positive(),
+        // превью картинки до ~300 КБ
+        thumb: z.string().max(420_000).optional(),
+        thumbType: z.enum(["image/jpeg", "image/png", "image/webp"]).optional(),
       }),
     )
     .min(1)
