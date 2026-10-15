@@ -1,0 +1,263 @@
+"use server";
+
+import { randomBytes } from "node:crypto";
+import { refresh } from "next/cache";
+import { eq } from "drizzle-orm";
+import { z } from "zod";
+import { db } from "@/db";
+import { agents, channels, clients, type ApiConfig, type EmailConfig, type InstagramConfig, type TelegramConfig, type ThreadsConfig, type WidgetConfig } from "@/db/schema";
+import { EmailError, GMAIL, pollNow, verifyEmail } from "@/lib/channels/email";
+import { createAuthorizeUrl } from "@/lib/channels/meta/connect";
+import { requireUser } from "@/lib/auth";
+import { TelegramError, getMe } from "@/lib/channels/telegram-api";
+import { startPoller, stopPoller } from "@/lib/channels/telegram-poller";
+
+export type ChannelResult = { error?: string; ok?: boolean };
+
+async function loadAgent(agentId: string) {
+  const [row] = await db
+    .select({ agent: agents, client: clients })
+    .from(agents)
+    .innerJoin(clients, eq(clients.id, agents.clientId))
+    .where(eq(agents.id, agentId));
+  return row;
+}
+
+export async function addTelegramChannel(
+  agentId: string,
+  _prev: ChannelResult | undefined,
+  formData: FormData,
+): Promise<ChannelResult> {
+  await requireUser();
+  const token = String(formData.get("token") ?? "").trim();
+  if (!/^\d+:[\w-]{20,}$/.test(token)) return { error: "token_format" };
+  const row = await loadAgent(agentId);
+  if (!row) return { error: "not_found" };
+
+  // Один бот — один агент: иначе две копии будут спорить за сообщения.
+  const existing = await db.select({ id: channels.id, config: channels.config }).from(channels).where(eq(channels.type, "telegram"));
+  if (existing.some((c) => "token" in c.config && c.config.token === token)) return { error: "token_used" };
+
+  let me;
+  try {
+    me = await getMe(token);
+  } catch (e) {
+    return { error: e instanceof TelegramError && e.code === 401 ? "token_invalid" : "telegram_unreachable" };
+  }
+
+  const [ch] = await db
+    .insert(channels)
+    .values({
+      agentId,
+      clientId: row.client.id,
+      type: "telegram",
+      name: `@${me.username}`,
+      config: { token, username: me.username, botName: me.first_name },
+    })
+    .returning({ id: channels.id });
+  startPoller(ch.id);
+  refresh();
+  return { ok: true };
+}
+
+/** Свой бот: ответы на комментарии, которые он присылает, — на одобрение или сразу. */
+export async function updateApiChannel(channelId: string, patch: { approval?: boolean; botNote?: string; followUps?: boolean }): Promise<ChannelResult> {
+  await requireUser();
+  const data = z.object({ approval: z.boolean().optional(), botNote: z.string().trim().max(1000).optional(), followUps: z.boolean().optional() }).parse(patch);
+  const [ch] = await db.select().from(channels).where(eq(channels.id, channelId));
+  if (!ch || ch.type !== "api") return { error: "not_found" };
+  await db.update(channels).set({ config: { ...(ch.config as ApiConfig), ...data } }).where(eq(channels.id, channelId));
+  refresh();
+  return { ok: true };
+}
+
+/** Telegram: ответы на комментарии под постами канала и одобрение этих ответов. */
+export async function updateTelegramChannel(channelId: string, patch: { comments?: boolean; approval?: boolean }): Promise<ChannelResult> {
+  await requireUser();
+  const data = z.object({ comments: z.boolean().optional(), approval: z.boolean().optional() }).parse(patch);
+  const [ch] = await db.select().from(channels).where(eq(channels.id, channelId));
+  if (!ch || ch.type !== "telegram") return { error: "not_found" };
+  const old = ch.config as TelegramConfig;
+  // Первое включение комментариев — по умолчанию на одобрение: ответ публичный.
+  const config: TelegramConfig = { ...old, ...data, approval: data.approval ?? old.approval ?? true };
+  await db.update(channels).set({ config }).where(eq(channels.id, channelId));
+  refresh();
+  return { ok: true };
+}
+
+export async function addWidgetChannel(agentId: string): Promise<ChannelResult> {
+  await requireUser();
+  const row = await loadAgent(agentId);
+  if (!row) return { error: "not_found" };
+  const config: WidgetConfig = {
+    title: row.client.name,
+    subtitle: "",
+    color: row.client.color,
+    position: "right",
+  };
+  await db.insert(channels).values({ agentId, clientId: row.client.id, type: "widget", name: "Widget", config });
+  refresh();
+  return { ok: true };
+}
+
+const widgetSchema = z.object({
+  title: z.string().trim().min(1).max(80),
+  subtitle: z.string().trim().max(120).default(""),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  position: z.enum(["right", "left"]),
+});
+
+export async function updateWidget(
+  channelId: string,
+  _prev: ChannelResult | undefined,
+  formData: FormData,
+): Promise<ChannelResult> {
+  await requireUser();
+  const parsed = widgetSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: "invalid" };
+  await db.update(channels).set({ config: parsed.data }).where(eq(channels.id, channelId));
+  refresh();
+  return { ok: true };
+}
+
+export async function setChannelEnabled(channelId: string, enabled: boolean): Promise<ChannelResult> {
+  await requireUser();
+  const [ch] = await db
+    .update(channels)
+    .set({ enabled, error: null })
+    .where(eq(channels.id, channelId))
+    .returning({ type: channels.type });
+  if (ch?.type === "telegram") {
+    if (enabled) startPoller(channelId);
+    else stopPoller(channelId);
+  }
+  refresh();
+  return { ok: true };
+}
+
+export async function deleteChannel(channelId: string): Promise<ChannelResult> {
+  await requireUser();
+  stopPoller(channelId);
+  await db.delete(channels).where(eq(channels.id, channelId));
+  refresh();
+  return { ok: true };
+}
+
+/** Ссылка входа в Instagram/Threads для подключения аккаунта к агенту (действует сутки). */
+export async function startSocialConnect(
+  agentId: string,
+  provider: "instagram" | "threads",
+): Promise<{ url?: string; error?: string }> {
+  const user = await requireUser();
+  try {
+    return { url: await createAuthorizeUrl(provider, agentId, user.id) };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+const socialSchema = z.object({
+  dm: z.boolean().optional(),
+  comments: z.boolean().optional(),
+  approval: z.boolean().optional(),
+});
+
+/** Настройки аккаунта соцсети: директ, комментарии, одобрение публичных ответов. */
+export async function updateSocialChannel(
+  channelId: string,
+  patch: z.input<typeof socialSchema>,
+): Promise<ChannelResult> {
+  await requireUser();
+  const data = socialSchema.parse(patch);
+  const [ch] = await db.select().from(channels).where(eq(channels.id, channelId));
+  if (!ch || (ch.type !== "instagram" && ch.type !== "threads")) return { error: "not_found" };
+  const config = { ...(ch.config as InstagramConfig | ThreadsConfig), ...data };
+  // Включили комментарии заново — не отвечаем на всё, что накопилось, пока они были выключены.
+  if (data.comments === true && "comments" in ch.config && !ch.config.comments) {
+    (config as InstagramConfig).since = Math.floor(Date.now() / 1000);
+  }
+  await db.update(channels).set({ config }).where(eq(channels.id, channelId));
+  refresh();
+  return { ok: true };
+}
+
+// ---------- почта ----------
+
+const emailSchema = z.object({
+  address: z.string().trim().toLowerCase().email(),
+  // Gmail показывает пароль приложения группами через пробел — пробелы убираем.
+  password: z.string().transform((s) => s.replace(/\s+/g, "")).pipe(z.string().min(8).max(100)),
+  fromName: z.string().trim().max(80).optional(),
+});
+
+/** Подключить ящик Gmail (IMAP/SMTP, пароль приложения). Ответы по умолчанию — на одобрение. */
+export async function addEmailChannel(
+  agentId: string,
+  _prev: ChannelResult | undefined,
+  formData: FormData,
+): Promise<ChannelResult> {
+  await requireUser();
+  const parsed = emailSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: parsed.error.issues[0]?.path[0] === "address" ? "email_address" : "email_password" };
+  const row = await loadAgent(agentId);
+  if (!row) return { error: "not_found" };
+
+  const existing = await db.select({ config: channels.config }).from(channels).where(eq(channels.type, "email"));
+  if (existing.some((c) => "address" in c.config && c.config.address === parsed.data.address)) return { error: "email_used" };
+
+  const config: EmailConfig = {
+    address: parsed.data.address,
+    password: parsed.data.password,
+    ...GMAIL,
+    fromName: parsed.data.fromName || row.client.name,
+    approval: true,
+  };
+  try {
+    await verifyEmail(config);
+  } catch (e) {
+    return { error: e instanceof EmailError && e.code === "auth_failed" ? "email_auth_failed" : "email_unreachable" };
+  }
+  const [ch] = await db
+    .insert(channels)
+    .values({ agentId, clientId: row.client.id, type: "email", name: parsed.data.address, config })
+    .returning({ id: channels.id });
+  pollNow(ch.id); // запомнить текущее состояние ящика: отвечаем только на новые письма
+  refresh();
+  return { ok: true };
+}
+
+export async function updateEmailChannel(channelId: string, patch: { approval?: boolean; fromName?: string }): Promise<ChannelResult> {
+  await requireUser();
+  const data = z.object({ approval: z.boolean().optional(), fromName: z.string().trim().min(1).max(80).optional() }).parse(patch);
+  const [ch] = await db.select().from(channels).where(eq(channels.id, channelId));
+  if (!ch || ch.type !== "email") return { error: "not_found" };
+  await db.update(channels).set({ config: { ...(ch.config as EmailConfig), ...data } }).where(eq(channels.id, channelId));
+  refresh();
+  return { ok: true };
+}
+
+// ---------- свой бот (API) ----------
+
+const newApiKey = () => `ga_${randomBytes(24).toString("base64url")}`;
+
+/** Подключить свой бот клиента: бот обращается к агенту по адресу канала с ключом. */
+export async function addApiChannel(agentId: string, label: string): Promise<ChannelResult> {
+  await requireUser();
+  const row = await loadAgent(agentId);
+  if (!row) return { error: "not_found" };
+  const name = label.trim().slice(0, 80) || "API";
+  const config: ApiConfig = { key: newApiKey(), label: name };
+  await db.insert(channels).values({ agentId, clientId: row.client.id, type: "api", name, config });
+  refresh();
+  return { ok: true };
+}
+
+/** Новый ключ: старый перестаёт работать сразу — его нужно заменить в настройках бота. */
+export async function regenerateApiKey(channelId: string): Promise<ChannelResult> {
+  await requireUser();
+  const [ch] = await db.select().from(channels).where(eq(channels.id, channelId));
+  if (!ch || ch.type !== "api") return { error: "not_found" };
+  await db.update(channels).set({ config: { ...(ch.config as ApiConfig), key: newApiKey() } }).where(eq(channels.id, channelId));
+  refresh();
+  return { ok: true };
+}

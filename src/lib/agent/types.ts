@@ -1,0 +1,71 @@
+import { z } from "zod";
+
+export const TONES = ["friendly", "formal", "expert", "playful", "custom"] as const;
+export const REPLY_LANGUAGES = ["auto", "ru", "uk", "en"] as const;
+export const EFFORTS = ["low", "medium", "high"] as const;
+
+const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
+
+/** Онлайн-запись в Google Календарь клиента. */
+export const calendarConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  /** ID календаря (обычно email владельца) — к нему открыт доступ для сервисного аккаунта студии */
+  calendarId: z.string().trim().max(300).default(""),
+  timezone: z
+    .string()
+    .max(60)
+    .refine((tz) => {
+      try {
+        new Intl.DateTimeFormat("en", { timeZone: tz });
+        return true;
+      } catch {
+        return false;
+      }
+    }, "invalid_timezone")
+    .default("Europe/Kyiv"),
+  /** Рабочие дни: 0 — воскресенье … 6 — суббота */
+  workDays: z.array(z.number().int().min(0).max(6)).max(7).default([1, 2, 3, 4, 5]),
+  workStart: time.default("09:00"),
+  workEnd: time.default("18:00"),
+  /** Длительность записи по умолчанию, минуты */
+  slotMinutes: z.number().int().min(10).max(480).default(60),
+  services: z
+    .array(z.object({ name: z.string().trim().max(100), minutes: z.number().int().min(10).max(480) }))
+    .max(30)
+    .default([])
+    // Пустые строки, оставленные в конструкторе, не сохраняем.
+    .transform((list) => list.filter((s) => s.name)),
+  /** Не раньше чем через N часов от текущего момента */
+  minNoticeHours: z.number().min(0).max(168).default(2),
+  /** Не дальше чем на N дней вперёд */
+  horizonDays: z.number().int().min(1).max(180).default(30),
+});
+
+export type CalendarConfig = z.infer<typeof calendarConfigSchema>;
+
+export const agentConfigSchema = z.object({
+  icon: z.string().max(8).default("🤖"),
+  role: z.string().max(300).default(""),
+  description: z.string().max(4000).default(""),
+  model: z.string().min(1),
+  effort: z.enum(EFFORTS).default("low"),
+  tone: z.enum(TONES).default("friendly"),
+  toneCustom: z.string().max(1000).default(""),
+  replyLanguage: z.enum(REPLY_LANGUAGES).default("auto"),
+  skills: z.array(z.string()).default([]),
+  knowledge: z.string().max(50000).default(""),
+  /** Источники базы знаний клиента, которыми пользуется агент; null — все. */
+  kbSourceIds: z.array(z.string()).nullable().default(null),
+  rules: z.string().max(5000).default(""),
+  handoff: z.string().max(2000).default(""),
+  greeting: z.string().max(1000).default(""),
+  extraInstructions: z.string().max(10000).default(""),
+  useBrandVoice: z.boolean().default(true),
+  /** Лимит расходов агента в месяц, USD; null — без лимита. */
+  monthlyBudgetUsd: z.number().min(0).max(100000).nullable().default(null),
+  calendar: calendarConfigSchema.prefault({}),
+});
+
+export type AgentConfig = z.infer<typeof agentConfigSchema>;
+
+export type Localized = { ru: string; uk: string };

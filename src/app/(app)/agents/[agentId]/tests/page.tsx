@@ -1,0 +1,87 @@
+import { notFound } from "next/navigation";
+import { asc, count, desc, eq } from "drizzle-orm";
+import { db } from "@/db";
+import { agents, channels, clients, testResults, testRuns, testScenarios } from "@/db/schema";
+import { getT } from "@/lib/i18n/server";
+import { BackLink } from "@/components/back-link";
+import { AgentTabs } from "../tabs";
+import { TestsManager } from "./manager";
+
+export default async function AgentTestsPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ agentId: string }>;
+  searchParams: Promise<{ run?: string }>;
+}) {
+  const [{ agentId }, sp] = await Promise.all([params, searchParams]);
+  const { t } = await getT();
+  const [row] = await db
+    .select({ agent: agents, clientId: clients.id, clientName: clients.name })
+    .from(agents)
+    .innerJoin(clients, eq(clients.id, agents.clientId))
+    .where(eq(agents.id, agentId));
+  if (!row) notFound();
+  const { agent } = row;
+
+  const [[{ n: channelCount }], scenarios, runs] = await Promise.all([
+    db.select({ n: count() }).from(channels).where(eq(channels.agentId, agentId)),
+    db.select().from(testScenarios).where(eq(testScenarios.agentId, agentId)).orderBy(asc(testScenarios.createdAt)),
+    db.select().from(testRuns).where(eq(testRuns.agentId, agentId)).orderBy(desc(testRuns.createdAt)).limit(20),
+  ]);
+  const selected = runs.find((r) => r.id === sp.run) ?? runs[0] ?? null;
+  const results = selected
+    ? await db.select().from(testResults).where(eq(testResults.runId, selected.id)).orderBy(asc(testResults.createdAt))
+    : [];
+
+  return (
+    <div className="mx-auto max-w-5xl">
+      <BackLink href={`/clients/${row.clientId}`} label={row.clientName} />
+      <div className="mb-6 flex items-center gap-3">
+        <span className="grid size-12 place-items-center rounded-2xl bg-surface-2 text-2xl">
+          {(agent.config as { icon?: string }).icon ?? "🤖"}
+        </span>
+        <h1 className="text-xl font-semibold">{agent.name}</h1>
+      </div>
+      <AgentTabs agentId={agent.id} active="tests" channels={channelCount} t={t} />
+      <TestsManager
+        agentId={agent.id}
+        agentVersion={agent.version}
+        scenarios={scenarios.map((s) => ({
+          id: s.id,
+          name: s.name,
+          mode: s.mode,
+          turns: s.turns,
+          persona: s.persona,
+          maxTurns: s.maxTurns,
+          criteria: s.criteria.map((c) => c.text),
+        }))}
+        runs={runs.map((r) => ({
+          id: r.id,
+          agentVersion: r.agentVersion,
+          status: r.status,
+          total: r.total,
+          passed: r.passed,
+          score: r.score,
+          cost: r.cost,
+          error: r.error,
+          createdAt: r.createdAt,
+        }))}
+        selectedRunId={selected?.id ?? null}
+        results={results.map((r) => ({
+          id: r.id,
+          scenarioName: r.scenarioName,
+          transcript: r.transcript,
+          verdicts: r.verdicts,
+          score: r.score,
+          passed: r.passed,
+          summary: r.summary,
+          error: r.error,
+          cost: r.cost,
+        }))}
+      />
+    </div>
+  );
+}
+
+export const instant = false;

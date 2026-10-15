@@ -1,0 +1,63 @@
+# GenAgent на сервере YABOT: ~/bots/genagent/compose.yml
+# Один контейнер genagent-bot: студия (Next.js) + Telegram-боты (long polling) + API виджета.
+#   - Публично через Caddy (сеть web) открыты только пути виджета — см. caddy-add.sh.
+#   - Админка студии — только в Tailscale: https://yabot.taila51a60.ts.net:8459 → 127.0.0.1:3019.
+# Код не запекается в образ: готовая автономная сборка лежит в ./app (только чтение).
+# Данные (SQLite, копии, модель смыслового поиска) — ./data. Секреты — ./secrets.env (права 600).
+# ./vendor — библиотеки смыслового поиска и расшифровки голосовых (transformers.js + ONNX, декодер Opus), ставит install.sh.
+# user: 20009 — свой пользователь места 8459 (как у ботов, созданных панелью: 20000 + номер места).
+
+services:
+  bot:
+    image: node:24-slim
+    container_name: genagent-bot
+    user: "20009:20009"
+    init: true
+    restart: unless-stopped
+    working_dir: /app
+    command: ["node", "server.js"]
+    stop_grace_period: 20s
+    env_file:
+      - path: ./secrets.env
+        required: true
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOSTNAME: "0.0.0.0"
+      DB_PATH: /data/genagent.db
+      BACKUP_DIR: /data/backups
+      TZ: Europe/Kyiv
+      NEXT_TELEMETRY_DISABLED: "1"
+      # Смысловой поиск: библиотека с движком ONNX — в ./vendor (ставит install.sh), модель — в папке данных.
+      VENDOR_DIR: /vendor
+      MODELS_DIR: /data/models
+    volumes:
+      - ./app:/app:ro
+      - ./data:/data
+      - ./vendor:/vendor:ro
+      - /usr/share/zoneinfo:/usr/share/zoneinfo:ro
+    tmpfs:
+      - /tmp
+      - /app/.next-deploy/cache:uid=20009,gid=20009
+    ports:
+      - "127.0.0.1:3019:3000"
+    networks:
+      - web
+    read_only: true
+    # 2 ГБ: ~0,5 ГБ студия и поиск + до ~1,1 ГБ модель расшифровки голосовых (выгружается после 10 минут без голосовых)
+    mem_limit: 2g
+    memswap_limit: 2g
+    pids_limit: 256
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  web:
+    external: true
