@@ -16,19 +16,26 @@ const FIRST_LOOKBACK_MS = 14 * 24 * 60 * 60 * 1000;
 const RUN_EVERY_MS = 24 * 60 * 60 * 1000;
 const CURSOR_KEY = "gapsCursor";
 
-type Exchange = { conversationId: string; at: number; question: string; answer: string; handoff: boolean };
+type Exchange = { conversationId: string; at: number; question: string; answer: string; handoff: boolean; operator?: string };
 
-/** Пары «сообщение клиента → ответ агента» с момента since. */
+// Сотрудник часто отвечает через несколько часов после вопроса — вопрос ищем и до начала разбора.
+const OPERATOR_LOOKBACK_MS = 48 * 60 * 60 * 1000;
+
+/**
+ * Пары «сообщение клиента → ответ агента» с момента since. Если после агента (или вместо него, пока разговор
+ * вёл человек) клиенту ответил сотрудник — его ответ тоже в паре: из него можно взять ответ для базы знаний.
+ */
 async function exchangesSince(agentId: string, since: number): Promise<Exchange[]> {
   const convs = await db.select({ id: conversations.id }).from(conversations).where(eq(conversations.agentId, agentId));
   if (!convs.length) return [];
   const rows = await db
     .select({ conversationId: messages.conversationId, role: messages.role, text: messages.text, status: messages.status, meta: messages.meta, createdAt: messages.createdAt })
     .from(messages)
-    .where(and(inArray(messages.conversationId, convs.map((c) => c.id)), gt(messages.createdAt, new Date(since))))
+    .where(and(inArray(messages.conversationId, convs.map((c) => c.id)), gt(messages.createdAt, new Date(since - OPERATOR_LOOKBACK_MS))))
     .orderBy(asc(messages.createdAt));
   const out: Exchange[] = [];
   const pending = new Map<string, string[]>();
+  const last = new Map<string, Exchange>(); // последняя пара разговора — к ней пристёгиваем ответ сотрудника
   for (const m of rows) {
     if (m.role === "user") {
       pending.set(m.conversationId, [...(pending.get(m.conversationId) ?? []), m.text]);
@@ -36,19 +43,34 @@ async function exchangesSince(agentId: string, since: number): Promise<Exchange[
       const q = pending.get(m.conversationId);
       if (!q?.length) continue;
       pending.delete(m.conversationId);
-      out.push({
+      const e: Exchange = {
         conversationId: m.conversationId,
         at: m.createdAt.getTime(),
         question: q.join("\n").slice(0, 800),
         answer: m.text.slice(0, 1200),
         handoff: Boolean(m.meta?.handoff),
-      });
+      };
+      out.push(e);
+      last.set(m.conversationId, e);
+    } else if (m.role === "operator" && m.status === "sent" && m.text.trim().length >= 15) {
+      const q = pending.get(m.conversationId);
+      const prev = last.get(m.conversationId);
+      if (q?.length) {
+        // Разговор вёл сотрудник — агент на вопрос не отвечал.
+        pending.delete(m.conversationId);
+        const e: Exchange = { conversationId: m.conversationId, at: m.createdAt.getTime(), question: q.join("\n").slice(0, 800), answer: "", handoff: true, operator: m.text.slice(0, 1200) };
+        out.push(e);
+        last.set(m.conversationId, e);
+      } else if (prev && m.createdAt.getTime() - prev.at < OPERATOR_LOOKBACK_MS) {
+        prev.operator = [prev.operator, m.text].filter(Boolean).join("\n").slice(0, 1200);
+        prev.at = Math.max(prev.at, m.createdAt.getTime());
+      }
     }
   }
-  return out.slice(-MAX_EXCHANGES);
+  return out.filter((e) => e.at > since).slice(-MAX_EXCHANGES);
 }
 
-type Found = { question: string; missing: string; exchanges: number[]; matchId: string };
+type Found = { question: string; missing: string; exchanges: number[]; matchId: string; suggestedAnswer: string };
 
 /** Разобрать новые переписки агента. Возвращает, сколько найдено новых вопросов. */
 export async function analyzeGaps(agentId: string): Promise<{ newGaps: number; updated: number; exchanges: number }> {
@@ -75,11 +97,17 @@ export async function analyzeGaps(agentId: string): Promise<{ newGaps: number; u
       "Ты помогаешь улучшать базу знаний чат-агента компании. Перед тобой пары «вопрос клиента → ответ агента».",
       "Найди вопросы, на которые агент НЕ смог ответить по существу, потому что ему не хватило информации: ответил «уточню у менеджера», «информации нет», «в описании не указано», уклонился или передал менеджеру из-за незнания.",
       "НЕ включай: просьбы записаться, позвонить, позвать менеджера, торг о цене, оформление заказа, приветствия, болтовню и вопросы не по теме компании, а также вопросы, на которые агент ответил.",
+      "Сюда же относятся вопросы, на которые вместо агента ответил сотрудник компании (строка «Сотрудник»), если в его ответе есть сведения, которых агент не дал.",
       "Для каждого вопроса: question — короткая обобщённая формулировка по-русски (как частый вопрос, без имён), missing — какой информации не хватает в базе знаний, exchanges — номера пар, где он встретился, matchId — id из списка уже известных вопросов, если это тот же вопрос по смыслу, иначе пустая строка.",
+      "suggestedAnswer — если сотрудник ответил на этот вопрос сведениями, полезными и другим клиентам (условия, сроки, цены, адреса, порядок действий), — готовый короткий ответ для базы знаний на основе его слов, на языке ответа сотрудника, без имён, телефонов клиента и деталей конкретного заказа. Если сотрудник не отвечал, ответил только про конкретного клиента («ваш заказ готов») или «уточню» — пустая строка. Ничего не придумывай сверх сказанного сотрудником.",
       "Похожие вопросы объединяй в один. Если таких вопросов нет — верни пустой список.",
     ].join("\n"),
     prompt: `Уже известные вопросы:\n${open.map((g) => `${g.id}: ${g.question}`).join("\n") || "(нет)"}\n\nПары:\n${list
-      .map((e, i) => `[${i}] Клиент: ${e.question}\nАгент${e.handoff ? " (передал менеджеру)" : ""}: ${e.answer}`)
+      .map(
+        (e, i) =>
+          `[${i}] Клиент: ${e.question}\nАгент${e.handoff ? " (передал менеджеру)" : ""}: ${e.answer || "(не отвечал — разговор вёл сотрудник)"}` +
+          (e.operator ? `\nСотрудник: ${e.operator}` : ""),
+      )
       .join("\n\n")}`,
     schema: {
       type: "object",
@@ -91,12 +119,13 @@ export async function analyzeGaps(agentId: string): Promise<{ newGaps: number; u
           items: {
             type: "object",
             additionalProperties: false,
-            required: ["question", "missing", "exchanges", "matchId"],
+            required: ["question", "missing", "exchanges", "matchId", "suggestedAnswer"],
             properties: {
               question: { type: "string" },
               missing: { type: "string" },
               exchanges: { type: "array", items: { type: "integer" } },
               matchId: { type: "string" },
+              suggestedAnswer: { type: "string" },
             },
           },
         },
@@ -113,12 +142,19 @@ export async function analyzeGaps(agentId: string): Promise<{ newGaps: number; u
     const hits = g.exchanges.map((i) => list[i]).filter(Boolean);
     if (!hits.length || !g.question.trim()) continue;
     const examples = hits.slice(0, 3).map((e) => ({ conversationId: e.conversationId, quote: e.question.slice(0, 300), at: e.at }));
+    // Ответ для базы знаний — только если в этих парах действительно отвечал сотрудник.
+    const suggestion = hits.some((e) => e.operator) ? g.suggestedAnswer.trim().slice(0, 2000) || null : null;
     if (g.matchId && known.has(g.matchId)) {
       const [old] = await db.select().from(knowledgeGaps).where(eq(knowledgeGaps.id, g.matchId));
       if (!old) continue;
       await db
         .update(knowledgeGaps)
-        .set({ count: old.count + hits.length, examples: [...examples, ...old.examples].slice(0, 5), lastSeenAt: new Date() })
+        .set({
+          count: old.count + hits.length,
+          examples: [...examples, ...old.examples].slice(0, 5),
+          lastSeenAt: new Date(),
+          ...(suggestion ? { suggestion } : {}),
+        })
         .where(eq(knowledgeGaps.id, old.id));
       updated++;
     } else {
@@ -129,6 +165,7 @@ export async function analyzeGaps(agentId: string): Promise<{ newGaps: number; u
         missing: g.missing.trim().slice(0, 500),
         count: hits.length,
         examples,
+        suggestion,
       });
       newGaps++;
     }

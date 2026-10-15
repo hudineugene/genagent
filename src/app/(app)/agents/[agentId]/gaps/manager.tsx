@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { Check, EyeOff, MessageSquareText, RefreshCw, RotateCcw } from "lucide-react";
+import { Check, EyeOff, Lightbulb, MessageSquareText, Pencil, RefreshCw, RotateCcw } from "lucide-react";
 import { analyzeGapsNow, resolveGap, setGapStatus } from "@/app/actions/gaps";
 import { useI18n } from "@/lib/i18n/client";
 import { Badge, Button, Card, Spinner, Textarea, cx } from "@/components/ui";
@@ -14,6 +14,8 @@ type Gap = {
   count: number;
   status: "open" | "resolved" | "ignored";
   answer: string | null;
+  /** Готовый ответ из слов сотрудника — предлагается добавить в базу знаний */
+  suggestion: string | null;
   lastSeenAt: number;
   examples: { conversationId: string; quote: string; at: number }[];
 };
@@ -90,7 +92,10 @@ function GapCard({ gap, clientId }: { gap: Gap; clientId: string }) {
           <div className="font-medium">{gap.question}</div>
           {gap.missing && <div className="mt-0.5 text-sm text-muted">{g.missing}: {gap.missing}</div>}
         </div>
-        <Badge tone={gap.count > 2 ? "warning" : "neutral"}>{g.times.replace("{n}", String(gap.count))}</Badge>
+        <div className="flex flex-wrap gap-1.5">
+          {gap.status === "open" && gap.suggestion && <Badge tone="success">{g.suggestedBadge}</Badge>}
+          <Badge tone={gap.count > 2 ? "warning" : "neutral"}>{g.times.replace("{n}", String(gap.count))}</Badge>
+        </div>
       </div>
 
       {gap.examples.length > 0 && (
@@ -116,6 +121,16 @@ function GapCard({ gap, clientId }: { gap: Gap; clientId: string }) {
         </div>
       )}
 
+      {gap.status === "open" && gap.suggestion && !editing && (
+        <div className="rounded-xl border border-accent/30 bg-accent/5 px-3 py-2 text-sm">
+          <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-accent">
+            <Lightbulb className="size-3.5" />
+            {g.suggested}
+          </div>
+          <div className="whitespace-pre-line">{gap.suggestion}</div>
+        </div>
+      )}
+
       {gap.status === "open" && editing && (
         <div className="space-y-2">
           <Textarea rows={3} value={answer} onChange={(e) => setAnswer(e.target.value)} placeholder={g.answerPlaceholder} autoFocus />
@@ -136,9 +151,38 @@ function GapCard({ gap, clientId }: { gap: Gap; clientId: string }) {
               <EyeOff className="size-4" />
               {g.hide}
             </Button>
-            <Button size="sm" onClick={() => setEditing(true)}>
-              {g.addAnswer}
-            </Button>
+            {gap.suggestion ? (
+              <>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    setAnswer(gap.suggestion ?? "");
+                    setEditing(true);
+                  }}
+                >
+                  <Pencil className="size-4" />
+                  {g.editSuggested}
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={pending}
+                  onClick={() =>
+                    start(async () => {
+                      const r = await resolveGap(gap.id, gap.suggestion ?? "");
+                      if (r.error) setError(g.errors[r.error as keyof typeof g.errors] ?? r.error);
+                    })
+                  }
+                >
+                  {pending ? <Spinner /> : <Check className="size-4" />}
+                  {g.addSuggested}
+                </Button>
+              </>
+            ) : (
+              <Button size="sm" onClick={() => setEditing(true)}>
+                {g.addAnswer}
+              </Button>
+            )}
           </>
         )}
         {gap.status === "open" && editing && (

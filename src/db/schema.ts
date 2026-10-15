@@ -492,6 +492,8 @@ export const knowledgeGaps = sqliteTable(
     examples: text("examples", { mode: "json" }).$type<{ conversationId: string; quote: string; at: number }[]>().notNull(),
     status: text("status", { enum: ["open", "resolved", "ignored"] }).notNull().default("open"),
     answer: text("answer"),
+    /** Готовый ответ для базы знаний из того, что ответил клиенту сотрудник (предлагается, пока вопрос открыт) */
+    suggestion: text("suggestion"),
     createdAt: createdAt(),
     lastSeenAt: integer("last_seen_at", { mode: "timestamp_ms" })
       .notNull()

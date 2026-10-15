@@ -42,6 +42,7 @@ export default async function AgentGapsPage({ params }: { params: Promise<{ agen
           count: g.count,
           status: g.status,
           answer: g.answer,
+          suggestion: g.suggestion,
           lastSeenAt: g.lastSeenAt.getTime(),
           examples: g.examples,
         }))}
