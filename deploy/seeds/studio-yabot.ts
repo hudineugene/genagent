@@ -138,6 +138,7 @@ const config: AgentConfig = {
   greeting: "Привіт! Я консультант студії YABOT 🎨 Підкажу щодо стікерів, персонажів і Telegram-ботів. Що плануєте?",
   extraInstructions: "",
   useBrandVoice: true,
+  factGuard: "flag",
   monthlyBudgetUsd: 30,
   calendar: {
     enabled: false,

@@ -83,8 +83,10 @@ async function transcripts(agentId: string, since: number) {
     const text = m.text.replace(/\s+/g, " ").slice(0, 400);
     if (m.role === "user") c.lines.push(`К: ${text}`);
     else if (m.role === "assistant" && m.status === "sent") {
-      c.lines.push(`А: ${text}${m.meta?.rating === "down" ? " [👎]" : ""}`);
+      const unverified = m.meta?.unverified?.length ? ` [⚠️ нет в базе знаний: ${m.meta.unverified.join(", ")}]` : "";
+      c.lines.push(`А: ${text}${m.meta?.rating === "down" ? " [👎]" : ""}${unverified}`);
       if (m.meta?.rating === "down") c.flags.add("👎");
+      if (unverified) c.flags.add("данные не из базы");
     } else if (m.role === "operator") {
       c.lines.push(`С: ${text}`);
       c.flags.add("ответил сотрудник");
@@ -134,7 +136,7 @@ export async function reviewAgent(agentId: string, sinceMs = Date.now() - WEEK_M
   const { data, usage, model } = await generateJson<ModelOut>(apiKey, MODEL, {
     system: [
       `Ты аналитик компании «${row.client}». Перед тобой переписки клиентов с её чат-агентом «${row.agent.name}» за неделю.`,
-      "К — клиент, А — агент, С — сотрудник компании. В скобках у разговора пометки: 👎 (клиент оценил ответ плохо), передан людям, недоволен, ответил сотрудник.",
+      "К — клиент, А — агент, С — сотрудник компании. В скобках у разговора пометки: 👎 (клиент оценил ответ плохо), передан людям, недоволен, ответил сотрудник, данные не из базы (агент назвал цифры или контакты, которых нет в базе знаний, — вероятно, выдумал; это повод для правки правил: «не называй цен и контактов, которых нет в базе знаний»).",
       "Сделай две вещи.",
       "1) Отчёт для владельца бизнеса «Чего хотят клиенты» (по-русски, конкретно, без воды):",
       "• summary — 2–3 предложения: главное за неделю;",

@@ -124,6 +124,7 @@ const config: AgentConfig = {
   greeting: "",
   extraInstructions: "",
   useBrandVoice: true,
+  factGuard: "flag",
   monthlyBudgetUsd: 30,
   calendar: calendarConfigSchema.parse({}),
 };

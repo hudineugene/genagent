@@ -240,7 +240,13 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
                 {m.meta?.followUp && ` · ${t.inbox.followUp}`}
                 {m.meta?.rating === "up" && " · 👍"}
                 {m.meta?.rating === "down" && <span className="text-danger"> · 👎</span>}
+                {m.meta?.fromSite && ` · ${t.inbox.fromSite}`}
               </div>
+              {m.meta?.unverified?.length ? (
+                <div className="mt-0.5 px-1 text-[11px] text-warning" title={t.inbox.unverifiedHint}>
+                  ⚠️ {t.inbox.unverified}: {m.meta.unverified.join(", ")}
+                </div>
+              ) : null}
             </div>
           );
         })}

@@ -18,6 +18,7 @@ import { type ApiConfig,
 import * as ig from "@/lib/channels/meta/instagram";
 import * as th from "@/lib/channels/meta/threads";
 import { agentConfigSchema } from "@/lib/agent/types";
+import { unverifiedFacts } from "@/lib/agent/factcheck";
 import { extractHandoff, prepareChat } from "@/lib/agent/runtime";
 import { handoffSummary } from "@/lib/agent/summary";
 import { streamChat, MissingKeyError, type ChatMessage } from "@/lib/llm";
@@ -81,7 +82,7 @@ export async function addMessage(
   conversationId: string,
   role: "user" | "assistant" | "operator" | "system",
   text: string,
-  extra: { authorId?: string; meta?: MessageMeta; status?: "sent" | "draft"; externalId?: string } = {},
+  extra: { authorId?: string; meta?: MessageMeta; status?: "sent" | "draft" | "rejected"; externalId?: string } = {},
 ) {
   const [m] = await db
     .insert(messages)
@@ -146,7 +147,18 @@ export async function respond(conversationId: string): Promise<void> {
     if (!row) return;
     const { conversation, agent, client, channel } = row;
 
-    if (conversation.mode === "human" || !channel.enabled) return;
+    if (conversation.mode === "human") {
+      // Разговор ведёт сотрудник — сообщаем ему в Telegram, что клиент написал (с кнопкой «Ответить»).
+      const [last] = await db
+        .select({ id: messages.id, role: messages.role, text: messages.text })
+        .from(messages)
+        .where(eq(messages.conversationId, conversationId))
+        .orderBy(desc(messages.createdAt), desc(sql`rowid`))
+        .limit(1);
+      if (last?.role === "user") void notify().then((n) => n.notifyClientMessage(conversationId, last.text, last.id));
+      return;
+    }
+    if (!channel.enabled) return;
     if (agent.status !== "active") {
       await flag(conversationId, "agent_not_active");
       return;
@@ -203,11 +215,13 @@ export async function respond(conversationId: string): Promise<void> {
     let text = "";
     let meta: MessageMeta = {};
     const used: { name: string; error?: boolean }[] = [];
+    const toolResults: string[] = [];
     let booked = false;
     for await (const ev of streamChat({ model: config.model, effort: config.effort, system, messages: prepared, tools })) {
       if (ev.type === "text") text += ev.text;
       else if (ev.type === "tool") {
         used.push({ name: ev.name, ...(ev.error ? { error: true } : {}) });
+        toolResults.push(ev.result);
         if (ev.name === "book_appointment" && !ev.error && ev.result.startsWith("Booked:")) booked = true;
       } else {
         const ms = Date.now() - started;
@@ -244,9 +258,29 @@ export async function respond(conversationId: string): Promise<void> {
       return;
     }
     const reply = toPlainText(clean);
+    // Проверка на выдуманные факты: цены, суммы, телефоны, ссылки, которых нет ни в указаниях с базой знаний,
+    // ни в переписке, ни в результатах инструментов. Помечаем; в строгом режиме агента — не отправляем.
+    const unverified = reply
+      ? unverifiedFacts(reply, [typeof system === "string" ? system : JSON.stringify(system), JSON.stringify(prepared), ...toolResults].join("\n"))
+      : [];
+    if (unverified.length) meta = { ...meta, unverified };
+    const blocked = unverified.length > 0 && config.factGuard === "block";
+    if (blocked && channel.type === "api" && conversation.kind !== "comment") {
+      // Свой бот ждёт ответ сразу: ответа нет — бот поступает как без агента (передаёт клиента менеджеру).
+      await addMessage(conversationId, "assistant", reply, { meta: { ...meta, handoff }, status: "rejected" });
+      await addMessage(conversationId, "system", "fact_blocked", { meta: { unverified } });
+      await db.update(conversations).set({ needsAttention: true }).where(eq(conversations.id, conversationId));
+      void notify().then((n) =>
+        n.notifyHandoff(
+          conversationId,
+          `Агент хотел ответить с данными, которых нет в базе знаний (${unverified.join(", ")}), — ответ не отправлен, бот передал клиента менеджеру.\n\nОтвет агента: ${reply.slice(0, 600)}`,
+        ),
+      );
+      return;
+    }
     // Публичные ответы (комментарии, Threads) по настройке канала сначала идут на одобрение.
     // Публичные ответы и письма по настройке канала сначала идут на одобрение.
-    const approval = needsApproval(channel, conversation);
+    const approval = needsApproval(channel, conversation) || blocked;
     if (reply && approval) {
       const draft = await addMessage(conversationId, "assistant", reply, { meta: { ...meta, handoff }, status: "draft" });
       void notify().then((n) => n.notifyDraft(draft.id));

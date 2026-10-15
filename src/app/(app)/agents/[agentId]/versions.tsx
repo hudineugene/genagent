@@ -33,6 +33,7 @@ const FIELDS: Field[] = [
   "handoff",
   "extraInstructions",
   "monthlyBudgetUsd",
+  "factGuard",
   "calendar",
 ];
 
@@ -87,6 +88,7 @@ export function VersionsPanel({
       handoff: b.handoff,
       extraInstructions: b.extra,
       monthlyBudgetUsd: b.budget,
+      factGuard: b.factGuard,
       calendar: b.sections.calendar,
     };
     return map[f];
@@ -105,6 +107,8 @@ export function VersionsPanel({
         return t.builder.tones[c.tone];
       case "replyLanguage":
         return t.builder.languages[c.replyLanguage];
+      case "factGuard":
+        return t.builder.factGuardModes[c.factGuard ?? "flag"];
       case "useBrandVoice":
         return c.useBrandVoice ? t.versions.on : t.versions.off;
       case "skills":

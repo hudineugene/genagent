@@ -173,6 +173,13 @@ export function Builder({
             placeholder="—"
           />
         </Field>
+        <Field label={t.builder.factGuard} hint={t.builder.factGuardHint}>
+          <Segmented
+            value={config.factGuard ?? "flag"}
+            options={(["off", "flag", "block"] as const).map((v) => ({ value: v, label: t.builder.factGuardModes[v] }))}
+            onChange={(v) => set("factGuard", v)}
+          />
+        </Field>
       </Section>
 
       <Section icon={<Sparkles />} title={t.builder.sections.skills} badge={config.skills.length || undefined}>

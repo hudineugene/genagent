@@ -6,6 +6,7 @@ import { agents, channels, clients, conversations, messages, settings } from "@/
 import { getSetting, setSetting } from "@/lib/settings";
 import { callTelegram, TelegramError } from "@/lib/channels/telegram-api";
 import { approveDraftCore, rejectDraftCore } from "@/lib/drafts";
+import { canReply, operatorReplyCore, returnToAgentCore } from "@/lib/operator";
 
 /**
  * Уведомления студии в Telegram — отдельный бот (его создают в @BotFather).
@@ -95,23 +96,73 @@ function openLink(s: NotifySettings | undefined, conversationId: string) {
   return { inline_keyboard: [[{ text: "Открыть диалог", url: `${s.adminUrl}/inbox?c=${conversationId}` }]] };
 }
 
+/**
+ * Кнопки под уведомлением о клиенте: «Ответить» (ответ пишется прямо сюда и уходит клиенту), «Вернуть агенту»
+ * и «Открыть диалог». Свой бот без очереди ответов — отвечает его менеджер в самом боте, только ссылка.
+ */
+function conversationButtons(s: NotifySettings | undefined, row: NonNullable<Awaited<ReturnType<typeof conversationInfo>>>) {
+  const id = row.conversation.id;
+  const rows: { text: string; callback_data?: string; url?: string }[][] = [];
+  if (canReply(row.channel, row.conversation.kind)) {
+    rows.push([
+      { text: "✍️ Ответить", callback_data: `rp:${id}` },
+      { text: "🤖 Вернуть агенту", callback_data: `rt:${id}` },
+    ]);
+  }
+  if (s?.adminUrl) rows.push([{ text: "Открыть диалог", url: `${s.adminUrl}/inbox?c=${id}` }]);
+  return rows.length ? { inline_keyboard: rows } : undefined;
+}
+
 /** Агент передал клиента менеджеру. */
 export async function notifyHandoff(conversationId: string, summary: string | null, opts: { upset?: boolean } = {}) {
   try {
     const row = await conversationInfo(conversationId);
     if (!row) return;
     const s = await getNotifySettings();
-    const note =
-      row.channel.type === "api" ? "\n<i>Заявка создана в боте клиента — отвечает его менеджер.</i>" : "";
+    const reply = canReply(row.channel, row.conversation.kind);
+    const note = reply
+      ? "\n<i>Ответить клиенту можно прямо отсюда — кнопка «Ответить».</i>"
+      : row.channel.type === "api"
+        ? "\n<i>Заявка создана в боте клиента — отвечает его менеджер.</i>"
+        : "";
     const title = opts.upset
       ? "🔴 <b>Срочно: клиент недоволен — нужен человек</b>"
       : "🙋 <b>Клиент передан менеджеру</b>";
     await broadcast(
       `${title}\n${header(row)}\n\n${summary ? esc(summary) : "<i>Выжимки нет — откройте диалог.</i>"}${note}`,
-      openLink(s, conversationId),
+      conversationButtons(s, row),
     );
   } catch (e) {
     console.error("notify handoff failed", e);
+  }
+}
+
+// Сообщения клиента, о которых уже сообщили (разговор у сотрудника) — по одному уведомлению на сообщение.
+const told = new Map<string, string>();
+
+/** Клиент написал, пока разговор ведёт сотрудник: текст и кнопка «Ответить». */
+export async function notifyClientMessage(conversationId: string, text: string, messageKey = text) {
+  try {
+    if (told.get(conversationId) === messageKey) return;
+    told.set(conversationId, messageKey);
+    if (told.size > 500) told.delete(told.keys().next().value as string);
+    const row = await conversationInfo(conversationId);
+    if (!row) return;
+    // Свой бот: сообщаем, только если разговор ведут отсюда (последний ответ сотрудника — из GenAgent или Telegram).
+    // Если менеджер отвечает в самом боте клиента, он и так видит переписку там — не дублируем.
+    if (row.channel.type === "api") {
+      const [lastOp] = await db
+        .select({ externalId: messages.externalId })
+        .from(messages)
+        .where(and(eq(messages.conversationId, conversationId), eq(messages.role, "operator")))
+        .orderBy(desc(messages.createdAt))
+        .limit(1);
+      if (!lastOp || lastOp.externalId === "bot") return;
+    }
+    const s = await getNotifySettings();
+    await broadcast(`💬 <b>Клиент пишет</b>\n${header(row)}\n\n${esc(text.slice(0, 1500))}`, conversationButtons(s, row));
+  } catch (e) {
+    console.error("notify client message failed", e);
   }
 }
 
@@ -138,7 +189,7 @@ export async function notifyDraft(messageId: string) {
       ...(s?.adminUrl ? [[{ text: "Изменить в студии", url: `${s.adminUrl}/inbox?c=${m.conversationId}` }]] : []),
     ];
     await broadcast(
-      `📝 <b>Черновик ответа ждёт одобрения</b>\n${header(row)}\n\n${question ? `💬 ${esc(question.text.slice(0, 600))}\n\n` : ""}🤖 ${esc(m.text.slice(0, 2500))}`,
+      `📝 <b>Черновик ответа ждёт одобрения</b>\n${header(row)}${m.meta?.unverified?.length ? `\n⚠️ Нет в базе знаний: ${esc(m.meta.unverified.join(", "))} — проверьте перед публикацией` : ""}\n\n${question ? `💬 ${esc(question.text.slice(0, 600))}\n\n` : ""}🤖 ${esc(m.text.slice(0, 2500))}`,
       { inline_keyboard: buttons },
     );
   } catch (e) {
@@ -227,7 +278,13 @@ export async function notifyTest() {
 
 type Update = {
   update_id: number;
-  message?: { chat: { id: number; type: string }; from?: { first_name?: string; last_name?: string; username?: string }; text?: string };
+  message?: {
+    message_id: number;
+    chat: { id: number; type: string };
+    from?: { first_name?: string; last_name?: string; username?: string };
+    text?: string;
+    reply_to_message?: { message_id: number };
+  };
   callback_query?: { id: string; from: { first_name?: string }; data?: string; message?: { chat: { id: number }; message_id: number; text?: string } };
 };
 
@@ -271,6 +328,21 @@ export function startNotifyPolling() {
   })();
 }
 
+// Сотрудник нажал «Ответить»: следующее его сообщение уйдёт этому клиенту (15 минут или пока не ответит).
+const REPLY_TTL_MS = 15 * 60 * 1000;
+const pendingReply = new Map<string, { conversationId: string; at: number }>();
+// Подсказка «Напишите ответ…» → разговор: ответ можно дать и через «Ответить» на эту подсказку в Telegram.
+const promptToConversation = new Map<string, string>();
+
+const REPLY_ERRORS: Record<string, string> = {
+  api_reply_in_bot: "Этот бот принимает ответы менеджера только в самом боте — откройте диалог там.",
+  not_found: "Разговор не найден — возможно, он удалён.",
+  empty: "Пустой ответ не отправлен.",
+};
+
+/** Для проверок на копии базы (scripts/test-notify-reply.ts). */
+export const handleNotifyUpdate = (u: Update) => handleUpdate(u);
+
 async function handleUpdate(u: Update) {
   const s = await getNotifySettings();
   if (!s?.token) return;
@@ -292,6 +364,27 @@ async function handleUpdate(u: Update) {
     } else if (command === "/stop") {
       await setSetting(KEY, { ...s, subscribers: s.subscribers.filter((x) => x.chatId !== chatId) });
       await send(s, chatId, "Вы отписались от уведомлений.");
+    } else if (command === "/cancel") {
+      pendingReply.delete(chatId);
+      await send(s, chatId, "Ответ отменён.");
+    } else if (s.subscribers.some((x) => x.chatId === chatId) && !command.startsWith("/")) {
+      // Ответ клиенту: «Ответить» на подсказку или первое сообщение после кнопки «Ответить»
+      const viaReply = u.message.reply_to_message && promptToConversation.get(`${chatId}:${u.message.reply_to_message.message_id}`);
+      const pending = pendingReply.get(chatId);
+      const conversationId = viaReply || (pending && Date.now() - pending.at < REPLY_TTL_MS ? pending.conversationId : null);
+      if (!conversationId) {
+        await send(s, chatId, "Чтобы ответить клиенту, нажмите «✍️ Ответить» под уведомлением о нём.");
+        return;
+      }
+      const row = await conversationInfo(conversationId);
+      const r = await operatorReplyCore(conversationId, u.message.text);
+      if (r.error) {
+        await send(s, chatId, `❌ Не отправлено: ${esc(REPLY_ERRORS[r.error] ?? r.error.slice(0, 200))}`);
+        return;
+      }
+      pendingReply.delete(chatId);
+      const who = row ? esc(row.conversation.contactName || row.conversation.contactHandle || "клиенту") : "клиенту";
+      await send(s, chatId, `✅ Отправлено: ${who}. Агент молчит, пока вы ведёте разговор.`, row ? { inline_keyboard: [[{ text: "✍️ Ответить ещё", callback_data: `rp:${conversationId}` }, { text: "🤖 Вернуть агенту", callback_data: `rt:${conversationId}` }]] } : undefined);
     }
     return;
   }
@@ -304,6 +397,24 @@ async function handleUpdate(u: Update) {
   if (!s.subscribers.some((x) => x.chatId === chatId)) return answer("Нет доступа");
   const [action, messageId] = q.data.split(":");
   if (!/^[0-9a-f-]{36}$/.test(messageId ?? "")) return answer("Неизвестная кнопка");
+  if (action === "rp") {
+    const row = await conversationInfo(messageId);
+    if (!row) return answer("Разговор не найден");
+    pendingReply.set(chatId, { conversationId: messageId, at: Date.now() });
+    await answer("Напишите ответ");
+    const who = row.conversation.contactName || row.conversation.contactHandle || "клиенту";
+    const prompt = await send(s, chatId, `✍️ Напишите ответ ${esc(who)} одним сообщением — он уйдёт клиенту. Отмена — /cancel`, { force_reply: true, input_field_placeholder: "Ответ клиенту" });
+    promptToConversation.set(`${chatId}:${prompt.message_id}`, messageId);
+    if (promptToConversation.size > 500) promptToConversation.delete(promptToConversation.keys().next().value as string);
+    return;
+  }
+  if (action === "rt") {
+    const r = await returnToAgentCore(messageId);
+    pendingReply.delete(chatId);
+    await answer(r.error ? "Разговор не найден" : "Агент снова отвечает");
+    if (!r.error) await send(s, chatId, "🤖 Разговор возвращён агенту — он снова отвечает клиенту.");
+    return;
+  }
   const result = action === "ap" ? await approveDraftCore(messageId) : action === "rj" ? await rejectDraftCore(messageId) : { error: "unknown" };
   const who = q.from.first_name || "менеджер";
   if (result.error === "not_found") {

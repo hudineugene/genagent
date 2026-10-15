@@ -61,6 +61,11 @@ export const agentConfigSchema = z.object({
   greeting: z.string().max(1000).default(""),
   extraInstructions: z.string().max(10000).default(""),
   useBrandVoice: z.boolean().default(true),
+  /**
+   * Проверка ответов на выдуманные факты (цены, телефоны, ссылки, которых нет в базе знаний):
+   * flag — помечать (в «Диалогах» и разборе недели), block — не отправлять, а на одобрение / сотруднику, off — не проверять.
+   */
+  factGuard: z.enum(["off", "flag", "block"]).default("flag"),
   /** Лимит расходов агента в месяц, USD; null — без лимита. */
   monthlyBudgetUsd: z.number().min(0).max(100000).nullable().default(null),
   calendar: calendarConfigSchema.prefault({}),

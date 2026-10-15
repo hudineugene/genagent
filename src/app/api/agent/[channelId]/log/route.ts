@@ -37,8 +37,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ channel
     handle: user.username ? `@${user.username.replace(/^@/, "")}` : undefined,
   });
   if (role === "user") {
-    await addMessage(conversation.id, "user", text, { externalId: "bot" });
+    const m = await addMessage(conversation.id, "user", text, { externalId: "bot" });
     await db.update(conversations).set({ mode: "human", needsAttention: true }).where(eq(conversations.id, conversation.id));
+    // Сотруднику в Telegram — с кнопкой «Ответить» (если бот забирает ответы менеджера)
+    void import("@/lib/notify/telegram").then((n) => n.notifyClientMessage(conversation.id, text, m.id));
   } else if (role === "operator") {
     await addMessage(conversation.id, "operator", text, { externalId: "bot" });
     await db.update(conversations).set({ mode: "human", needsAttention: false }).where(eq(conversations.id, conversation.id));

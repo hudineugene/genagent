@@ -25,6 +25,7 @@ export function emptyConfig(): AgentConfig {
     skills: [],
     knowledge: "",
     kbSourceIds: null,
+    factGuard: "flag",
     monthlyBudgetUsd: null,
     rules: "",
     handoff: "",

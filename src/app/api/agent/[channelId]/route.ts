@@ -67,11 +67,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ channel
   }
 
   const after = await db
-    .select({ id: messages.id, role: messages.role, text: messages.text, meta: messages.meta })
+    .select({ id: messages.id, role: messages.role, text: messages.text, meta: messages.meta, status: messages.status })
     .from(messages)
     .where(and(eq(messages.conversationId, conversation.id), gt(sql`rowid`, userRow)))
     .orderBy(asc(sql`rowid`));
-  const reply = after.find((m) => m.role === "assistant" && !claimed.has(m.id));
+  // Только отправленный ответ: отклонённый проверкой фактов клиенту не уходит
+  const reply = after.find((m) => m.role === "assistant" && m.status === "sent" && !claimed.has(m.id));
   const handoffMsg = after.find((m) => m.role === "system" && m.text === "handoff");
   const handoff = Boolean(handoffMsg) || Boolean(reply?.meta?.handoff);
   const summary = handoffMsg?.meta?.summary ?? null;
