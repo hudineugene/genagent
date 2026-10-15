@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FlaskConical, MessageCircleQuestion, Radio, SlidersHorizontal } from "lucide-react";
+import { FlaskConical, MessageCircleQuestion, Radio, SlidersHorizontal, Sparkles } from "lucide-react";
 import type { Dict } from "@/lib/i18n";
 import { cx } from "@/components/ui";
 
@@ -11,7 +11,7 @@ export function AgentTabs({
   t,
 }: {
   agentId: string;
-  active: "setup" | "channels" | "tests" | "gaps";
+  active: "setup" | "channels" | "tests" | "gaps" | "review";
   channels: number;
   /** Открытых вопросов без ответа (null — не показывать счётчик) */
   gaps?: number | null;
@@ -22,6 +22,7 @@ export function AgentTabs({
     { key: "channels", href: `/agents/${agentId}/channels`, label: t.channels.tab, icon: Radio, n: channels },
     { key: "tests", href: `/agents/${agentId}/tests`, label: t.tests.tab, icon: FlaskConical, n: null },
     { key: "gaps", href: `/agents/${agentId}/gaps`, label: t.gaps.tab, icon: MessageCircleQuestion, n: gaps || null },
+    { key: "review", href: `/agents/${agentId}/review`, label: t.review.tab, icon: Sparkles, n: null },
   ] as const;
   return (
     <div className="mb-6 flex gap-1 overflow-x-auto border-b border-border [scrollbar-width:none]">

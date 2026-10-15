@@ -41,6 +41,8 @@ export async function register() {
   startWeeklyTests();
   const { startDailyDigest } = await import("./lib/agent/daily");
   startDailyDigest();
+  const { startWeeklyReview } = await import("./lib/agent/review");
+  startWeeklyReview();
   const { startFollowUps } = await import("./lib/agent/followups");
   startFollowUps();
 
