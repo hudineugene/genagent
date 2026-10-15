@@ -66,6 +66,16 @@ export function CalendarFields({
         </span>
       </label>
 
+      <Field label={c.timezone} hint={c.timezoneHint} className="max-w-xs">
+        <Select value={value.timezone} onChange={(e) => set("timezone", e.target.value)}>
+          {(TIMEZONES.includes(value.timezone) ? TIMEZONES : [value.timezone, ...TIMEZONES]).map((tz) => (
+            <option key={tz} value={tz}>
+              {tz}
+            </option>
+          ))}
+        </Select>
+      </Field>
+
       {value.enabled && (
         <>
           {!googleEmail && (
@@ -117,15 +127,6 @@ export function CalendarFields({
           )}
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label={c.timezone}>
-              <Select value={value.timezone} onChange={(e) => set("timezone", e.target.value)}>
-                {(TIMEZONES.includes(value.timezone) ? TIMEZONES : [value.timezone, ...TIMEZONES]).map((tz) => (
-                  <option key={tz} value={tz}>
-                    {tz}
-                  </option>
-                ))}
-              </Select>
-            </Field>
             <Field label={c.workHours}>
               <div className="flex items-center gap-2">
                 <Input type="time" step={1800} value={value.workStart} onChange={(e) => e.target.value && set("workStart", e.target.value)} />

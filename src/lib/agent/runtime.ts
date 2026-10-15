@@ -46,6 +46,8 @@ export async function prepareChat(
   if (kb.mode === "search" && kb.context && last?.role === "user") {
     last.content = `<knowledge>\n${kb.context}\n</knowledge>\n\n${last.content}`;
   }
+  // Агент знает, какой сейчас день и час у компании: «вы сейчас открыты?», «успею сегодня?»
+  if (last?.role === "user") last.content = `${nowLine(config.calendar.timezone)}\n\n${last.content}`;
 
   const kbInfo: KbInfo =
     kb.mode === "none"
@@ -55,6 +57,18 @@ export async function prepareChat(
           sources: (kb.mode === "full" ? kb.sources : kb.used).map(({ title, url }) => ({ title, url })),
         };
   return { system: fullSystem, messages, kb: kbInfo, tools: agentTools };
+}
+
+/** «[Сейчас у компании: четверг, 15 октября 2026, 21:40 (Europe/Kyiv)]» — служебная строка для агента. */
+export function nowLine(timezone: string | undefined, at = new Date()) {
+  const tz = timezone || "Europe/Kyiv";
+  let when: string;
+  try {
+    when = new Intl.DateTimeFormat("ru-RU", { timeZone: tz, weekday: "long", day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(at);
+  } catch {
+    when = at.toISOString();
+  }
+  return `[Сейчас у компании: ${when} (${tz}). Клиент этой строки не писал.]`;
 }
 
 export type AgentAction = { type: string; value: string };
