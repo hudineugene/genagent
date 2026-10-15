@@ -30,6 +30,14 @@ const bodySchema = z.object({
   context: z.string().max(2000).optional(),
   /** Номер этого сообщения в журнале переписки бота (см. /sync) — чтобы не записать его дважды */
   messageId: z.string().min(1).max(120).optional(),
+  /**
+   * Клиент написал несколько сообщений подряд: бот подождал, пока он допишет, и прислал предыдущие здесь
+   * (по порядку), а последнее — в text. Сохраняем каждое отдельно, агент отвечает один раз на все.
+   */
+  earlier: z
+    .array(z.object({ text: z.string().trim().min(1).max(4000), messageId: z.string().min(1).max(120).optional() }))
+    .max(10)
+    .optional(),
   /** Расписание команды сейчас: открыто ли, когда откроются («завтра з 10:00»), за сколько минут обычно отвечают */
   team: z
     .object({ open: z.boolean(), next: z.string().trim().max(80).optional(), minutes: z.number().int().min(1).max(10080).optional() })
@@ -50,7 +58,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ channel
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "bad_request", details: parsed.error.issues[0]?.message }, { status: 400 });
-  const { user, text, language, context, messageId, image, team } = parsed.data;
+  const { user, text, language, context, messageId, image, team, earlier } = parsed.data;
   if (!text && !image) return Response.json({ error: "bad_request", details: "text or image required" }, { status: 400 });
 
   const { conversation } = await upsertConversation(channel, user.id, {
@@ -73,6 +81,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ channel
     await db.update(conversations).set({ mode: "ai", needsAttention: false }).where(eq(conversations.id, conversation.id));
     await addMessage(conversation.id, "system", "returned", { externalId: "bot" });
   }
+  // Предыдущие сообщения пачки — до последнего; агент ответит один раз на все
+  for (const e of earlier ?? []) await addMessage(conversation.id, "user", e.text, { botId: e.messageId });
   // Фото: дешёвая модель описывает, что на нём; описание — в сообщении клиента (агент его увидит), превью — в «Диалогах»
   const vision = image ? await describePhoto(image.data, image.mediaType, { agentId: channel.agentId, clientId: channel.clientId }, text) : null;
   const userMsg = await addMessage(conversation.id, "user", text, {
