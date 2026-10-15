@@ -82,7 +82,7 @@ export async function addMessage(
   conversationId: string,
   role: "user" | "assistant" | "operator" | "system",
   text: string,
-  extra: { authorId?: string; meta?: MessageMeta; status?: "sent" | "draft" | "rejected"; externalId?: string } = {},
+  extra: { authorId?: string; meta?: MessageMeta; status?: "sent" | "draft" | "rejected"; externalId?: string; botId?: string } = {},
 ) {
   const [m] = await db
     .insert(messages)
@@ -94,8 +94,15 @@ export async function addMessage(
       meta: extra.meta,
       status: extra.status ?? "sent",
       externalId: extra.externalId,
+      botId: extra.botId,
     })
+    .onConflictDoNothing()
     .returning();
+  // Это сообщение бот уже прислал журналом переписки (тот же номер) — оно есть, второй раз не пишем
+  if (!m && extra.botId) {
+    const [same] = await db.select().from(messages).where(and(eq(messages.conversationId, conversationId), eq(messages.botId, extra.botId)));
+    return same;
+  }
   if (role !== "system" && extra.status !== "draft") {
     await db
       .update(conversations)
@@ -183,7 +190,8 @@ export async function respond(conversationId: string): Promise<void> {
     }
     const chat: ChatMessage[] = history
       .reverse()
-      .filter((m) => m.role !== "system")
+      // Тексты самого бота (меню, шаблоны) — не реплики агента: в память ИИ не берём
+      .filter((m) => m.role !== "system" && m.role !== "bot")
       .map((m) => ({ role: m.role === "user" ? "user" : "assistant", content: m.text }));
     if (chat.at(-1)?.role !== "user") return; // уже ответили
 

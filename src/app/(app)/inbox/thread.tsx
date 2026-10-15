@@ -3,7 +3,33 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
-import { ArrowLeft, Bot, BookOpen, Check, CheckCircle2, ExternalLink, FlaskConical, Hand, Pencil, RotateCcw, SendHorizontal, Trash2, X } from "lucide-react";
+import {
+  ArrowLeft,
+  AudioLines,
+  Bot,
+  BookOpen,
+  Check,
+  CheckCircle2,
+  Contact,
+  ExternalLink,
+  FileText,
+  Film,
+  FlaskConical,
+  Hand,
+  Image as ImageIcon,
+  MapPin,
+  MessageSquare,
+  Mic,
+  MousePointerClick,
+  Pencil,
+  RotateCcw,
+  SendHorizontal,
+  Smile,
+  Trash2,
+  Video,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import { scenarioFromConversationAction } from "@/app/actions/tests";
 import {
   deleteConversation,
@@ -21,6 +47,23 @@ import { Button, Spinner, cx } from "@/components/ui";
 import type { ChannelType } from "@/db/schema";
 import { CHANNEL_ICONS, ContactAvatar, contactLabel } from "./list";
 import { InfoToggle } from "./info-panel";
+
+// Значки для сообщений из журнала бота: что именно прислал клиент или бот
+const KIND_ICONS: Record<string, LucideIcon> = {
+  photo: ImageIcon,
+  sticker: Smile,
+  voice: Mic,
+  video: Video,
+  video_note: Video,
+  animation: Film,
+  audio: AudioLines,
+  document: FileText,
+  location: MapPin,
+  contact: Contact,
+  button: MousePointerClick,
+  edit: Pencil,
+  other: MessageSquare,
+};
 
 export type ThreadData = {
   id: string;
@@ -42,7 +85,7 @@ export type ThreadData = {
   typing: boolean;
   messages: {
     id: string;
-    role: "user" | "assistant" | "operator" | "system";
+    role: "user" | "assistant" | "operator" | "system" | "bot";
     text: string;
     meta: MessageMeta | null;
     status: "sent" | "draft" | "rejected";
@@ -220,6 +263,19 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
             );
           }
           const ours = m.role !== "user";
+          const kind = m.meta?.kind;
+          // Реакция клиента на сообщение — строкой, не пузырём
+          if (kind === "reaction") {
+            return (
+              <div key={m.id} className="flex justify-start px-1 text-xs text-muted">
+                <span className="rounded-full bg-surface px-2.5 py-1 ring-1 ring-border">
+                  {t.inbox.kinds.reaction}: <span className="text-base leading-none">{m.text}</span> · {time.format(new Date(m.createdAt))}
+                </span>
+              </div>
+            );
+          }
+          const KindIcon = kind ? KIND_ICONS[kind] ?? KIND_ICONS.other : null;
+          const stickerOnly = kind === "sticker" && /^\p{Extended_Pictographic}/u.test(m.text.trim()) && m.text.trim().length <= 8;
           return (
             <div key={m.id} className={cx("flex flex-col", ours ? "items-end" : "items-start")}>
               <div
@@ -229,15 +285,23 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
                   m.role === "user" && "rounded-bl-md border border-border bg-surface",
                   m.role === "assistant" && "rounded-br-md bg-accent-soft text-text",
                   m.role === "operator" && "rounded-br-md bg-amber-500/15 text-text",
+                  m.role === "bot" && "rounded-br-md border border-dashed border-border bg-surface-2/70 text-text",
                 )}
               >
-                {m.text}
+                {KindIcon && (
+                  <span className="mb-0.5 flex items-center gap-1.5 text-xs font-medium text-muted">
+                    <KindIcon className="size-3.5" />
+                    {t.inbox.kinds[kind as keyof typeof t.inbox.kinds] ?? t.inbox.kinds.other}
+                  </span>
+                )}
+                {stickerOnly ? <span className="text-4xl leading-tight">{m.text}</span> : m.text}
               </div>
               <div className="mt-1 flex items-center gap-1 px-1 text-[11px] text-muted">
                 {m.role === "assistant" && <Bot className="size-3" />}
                 {m.role === "operator" && <Hand className="size-3" />}
+                {m.role === "bot" && <MessageSquare className="size-3" />}
                 {m.status === "rejected" && `${t.inbox.rejected} · `}
-                {m.role === "assistant" ? t.inbox.agent : m.role === "operator" ? (m.author ?? t.inbox.you) : ""}
+                {m.role === "assistant" ? t.inbox.agent : m.role === "operator" ? (m.author ?? t.inbox.you) : m.role === "bot" ? t.inbox.bot : ""}
                 {ours && " · "}
                 {time.format(new Date(m.createdAt))}
                 {m.meta?.kb && (

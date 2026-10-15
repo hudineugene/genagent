@@ -133,7 +133,7 @@ export async function scenarioFromConversation(conversationId: string): Promise<
     .slice(-30)
     .map((m) => {
       if (m.role === "system") return `[агент передал диалог менеджеру${m.meta?.upset ? ", клиент недоволен" : ""}]`;
-      const who = m.role === "user" ? "Клиент" : m.role === "operator" ? "Сотрудник" : "Агент";
+      const who = m.role === "user" ? "Клиент" : m.role === "operator" ? "Сотрудник" : m.role === "bot" ? "Бот" : "Агент";
       const marks = [
         m.status === "rejected" ? "не отправлен" : "",
         m.meta?.rating === "down" ? "клиент поставил 👎" : "",

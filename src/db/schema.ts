@@ -335,6 +335,8 @@ export type MessageMeta = {
   fromSite?: boolean;
   /** Оценка ответа клиентом в боте (👍/👎) */
   rating?: "up" | "down";
+  /** Из журнала своего бота: что это было (photo, sticker, voice, button, reaction…) — для значка в переписке */
+  kind?: string;
 };
 
 export const messages = sqliteTable(
@@ -344,8 +346,11 @@ export const messages = sqliteTable(
     conversationId: text("conversation_id")
       .notNull()
       .references(() => conversations.id, { onDelete: "cascade" }),
-    /** user — клиент, assistant — агент, operator — менеджер студии, system — служебное */
-    role: text("role", { enum: ["user", "assistant", "operator", "system"] }).notNull(),
+    /**
+     * user — клиент, assistant — агент, operator — менеджер студии, system — служебное,
+     * bot — сам бот клиента (меню, шаблоны, уведомления): видно в переписке, но не ответ агента и не память ИИ
+     */
+    role: text("role", { enum: ["user", "assistant", "operator", "system", "bot"] }).notNull(),
     text: text("text").notNull(),
     authorId: text("author_id").references(() => users.id, { onDelete: "set null" }),
     meta: text("meta", { mode: "json" }).$type<MessageMeta>(),
@@ -353,11 +358,14 @@ export const messages = sqliteTable(
     status: text("status", { enum: ["sent", "draft", "rejected"] }).notNull().default("sent"),
     /** id сообщения/комментария в соцсети — чтобы не принять одно событие дважды */
     externalId: text("external_id"),
+    /** Номер сообщения в своём боте клиента (журнал переписки): повторная досылка не задваивает */
+    botId: text("bot_id"),
     createdAt: createdAt(),
   },
   (t) => [
     index("messages_conversation_idx").on(t.conversationId, t.createdAt),
     index("messages_external_idx").on(t.externalId),
+    uniqueIndex("messages_bot_idx").on(t.conversationId, t.botId),
   ],
 );
 

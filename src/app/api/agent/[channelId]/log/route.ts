@@ -22,6 +22,8 @@ const bodySchema = z.object({
   }),
   role: z.enum(["user", "operator", "returned", "media"]),
   text: z.string().trim().max(4000).default(""),
+  /** Номер сообщения в журнале переписки бота (см. /sync) — чтобы журнал не записал его второй раз */
+  messageId: z.string().min(1).max(120).optional(),
 });
 
 export async function POST(req: Request, { params }: { params: Promise<{ channelId: string }> }) {
@@ -31,7 +33,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ channel
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "bad_request", details: parsed.error.issues[0]?.message }, { status: 400 });
-  const { user, role, text } = parsed.data;
+  const { user, role, text, messageId } = parsed.data;
   if (role !== "returned" && !text) return Response.json({ error: "bad_request", details: "text required" }, { status: 400 });
 
   const { conversation } = await upsertConversation(channel, user.id, {
@@ -40,18 +42,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ channel
   });
   if (role === "media") {
     const label = `[${text}]`;
-    const m = await addMessage(conversation.id, "user", label, { externalId: "bot" });
+    const m = await addMessage(conversation.id, "user", label, { externalId: "bot", botId: messageId });
     if (conversation.mode !== "ai") {
       await db.update(conversations).set({ needsAttention: true }).where(eq(conversations.id, conversation.id));
       void import("@/lib/notify/telegram").then((n) => n.notifyClientMessage(conversation.id, label, m.id));
     }
   } else if (role === "user") {
-    const m = await addMessage(conversation.id, "user", text, { externalId: "bot" });
+    const m = await addMessage(conversation.id, "user", text, { externalId: "bot", botId: messageId });
     await db.update(conversations).set({ mode: "human", needsAttention: true }).where(eq(conversations.id, conversation.id));
     // Сотруднику в Telegram — с кнопкой «Ответить» (если бот забирает ответы менеджера)
     void import("@/lib/notify/telegram").then((n) => n.notifyClientMessage(conversation.id, text, m.id));
   } else if (role === "operator") {
-    await addMessage(conversation.id, "operator", text, { externalId: "bot" });
+    await addMessage(conversation.id, "operator", text, { externalId: "bot", botId: messageId });
     await db.update(conversations).set({ mode: "human", needsAttention: false }).where(eq(conversations.id, conversation.id));
   } else if (conversation.mode !== "ai") {
     await db.update(conversations).set({ mode: "ai", needsAttention: false }).where(eq(conversations.id, conversation.id));

@@ -26,7 +26,7 @@ export async function handoffSummary(conversationId: string, ctx: { agentId: str
     const dialog = rows
       .reverse()
       .filter((m) => m.role !== "system")
-      .map((m) => `${m.role === "user" ? "Клиент" : m.role === "operator" ? "Менеджер" : "Агент"}: ${m.text.slice(0, 1500)}`)
+      .map((m) => `${m.role === "user" ? "Клиент" : m.role === "operator" ? "Менеджер" : m.role === "bot" ? "Бот" : "Агент"}: ${m.text.slice(0, 1500)}`)
       .join("\n");
     if (!dialog) return null;
 

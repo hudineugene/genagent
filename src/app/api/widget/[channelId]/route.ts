@@ -44,7 +44,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ channelI
   if (!conv) return Response.json({ config, messages: [], typing: false }, { headers: CORS });
 
   const msgs = (await listMessages(conv.id, { afterId: url.searchParams.get("after") ?? undefined }))
-    .filter((m) => m.role !== "system")
+    .filter((m) => m.role !== "system" && m.role !== "bot")
     .map((m) => ({ id: m.id, role: m.role === "user" ? "user" : "agent", text: m.text, at: m.createdAt }));
   return Response.json(
     { config, messages: msgs, typing: isTyping(conv.id), operator: conv.mode === "human" },

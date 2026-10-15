@@ -22,6 +22,8 @@ const bodySchema = z.object({
   language: z.string().trim().toLowerCase().regex(/^[a-z]{2}$/).optional(),
   /** Что клиент сейчас открыл в боте — например, карточку объекта */
   context: z.string().max(2000).optional(),
+  /** Номер этого сообщения в журнале переписки бота (см. /sync) — чтобы не записать его дважды */
+  messageId: z.string().min(1).max(120).optional(),
 });
 
 const WAIT_LIMIT_MS = 90_000;
@@ -38,7 +40,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ channel
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "bad_request", details: parsed.error.issues[0]?.message }, { status: 400 });
-  const { user, text, language, context } = parsed.data;
+  const { user, text, language, context, messageId } = parsed.data;
 
   const { conversation } = await upsertConversation(channel, user.id, {
     name: user.name?.trim() || undefined,
@@ -53,7 +55,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ channel
     await db.update(conversations).set({ mode: "ai", needsAttention: false }).where(eq(conversations.id, conversation.id));
     await addMessage(conversation.id, "system", "returned", { externalId: "bot" });
   }
-  const userMsg = await addMessage(conversation.id, "user", text);
+  const userMsg = await addMessage(conversation.id, "user", text, { botId: messageId });
   const [{ rowid: userRow }] = await db
     .select({ rowid: sql<number>`rowid` })
     .from(messages)
