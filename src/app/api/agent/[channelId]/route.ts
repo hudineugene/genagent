@@ -1,10 +1,11 @@
 import { and, asc, eq, gt, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { conversations, messages } from "@/db/schema";
+import { agents, conversations, messages } from "@/db/schema";
 import { apiChannel } from "@/lib/channels/api-auth";
 import { addMessage, isTyping, respond, upsertConversation } from "@/lib/conversations";
 import { describePhoto, saveThumb } from "@/lib/media";
+import { speechAvailable, synthesize } from "@/lib/speech";
 
 /**
  * Свой бот клиента спрашивает агента: POST с ключом канала (Authorization: Bearer …).
@@ -38,6 +39,8 @@ const bodySchema = z.object({
     .array(z.object({ text: z.string().trim().min(1).max(4000), messageId: z.string().min(1).max(120).optional() }))
     .max(10)
     .optional(),
+  /** Клиент спросил голосовым — ответить и голосом (если у агента включено и на сервере есть ключ OpenAI) */
+  voiceReply: z.boolean().optional(),
   /** Расписание команды сейчас: открыто ли, когда откроются («завтра з 10:00»), за сколько минут обычно отвечают */
   team: z
     .object({ open: z.boolean(), next: z.string().trim().max(80).optional(), minutes: z.number().int().min(1).max(10080).optional() })
@@ -58,7 +61,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ channel
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "bad_request", details: parsed.error.issues[0]?.message }, { status: 400 });
-  const { user, text, language, context, messageId, image, team, earlier } = parsed.data;
+  const { user, text, language, context, messageId, image, team, earlier, voiceReply } = parsed.data;
   if (!text && !image) return Response.json({ error: "bad_request", details: "text or image required" }, { status: 400 });
 
   const { conversation } = await upsertConversation(channel, user.id, {
@@ -127,5 +130,24 @@ export async function POST(req: Request, { params }: { params: Promise<{ channel
   }
   claimed.add(reply.id);
   if (claimed.size > 10_000) claimed.clear();
-  return Response.json({ reply: reply.text, handoff, summary, upset, actions: reply.meta?.actions ?? [], conversationId: conversation.id });
+  // Голосовой ответ: OGG/Opus (формат голосовых Telegram) — бот шлёт его голосовым, текст — подписью
+  let voice: { data: string; mimeType: string } | undefined;
+  if (voiceReply && speechAvailable()) {
+    const [agent] = await db.select({ config: agents.config }).from(agents).where(eq(agents.id, channel.agentId));
+    const cfg = (agent?.config ?? {}) as { voiceReplies?: boolean; voice?: string };
+    if (cfg.voiceReplies !== false) {
+      const data = await synthesize(reply.text, {
+        voice: cfg.voice,
+        language: language ?? conversation.context?.language,
+        agentId: channel.agentId,
+        clientId: channel.clientId,
+        conversationId: conversation.id,
+      });
+      if (data) {
+        voice = { data, mimeType: "audio/ogg" };
+        await db.update(messages).set({ meta: { ...(reply.meta ?? {}), spoken: true } }).where(eq(messages.id, reply.id));
+      }
+    }
+  }
+  return Response.json({ reply: reply.text, handoff, summary, upset, actions: reply.meta?.actions ?? [], conversationId: conversation.id, ...(voice ? { voice } : {}) });
 }

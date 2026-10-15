@@ -28,6 +28,8 @@ export function emptyConfig(): AgentConfig {
     factGuard: "flag",
     monthlyBudgetUsd: null,
     memory: true,
+    voiceReplies: true,
+    voice: "marin",
     rules: "",
     handoff: "",
     greeting: "",

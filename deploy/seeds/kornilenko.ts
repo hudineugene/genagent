@@ -127,6 +127,8 @@ const config: AgentConfig = {
   factGuard: "flag",
   monthlyBudgetUsd: 30,
   memory: true,
+  voiceReplies: true,
+  voice: "marin",
   calendar: calendarConfigSchema.parse({}),
 };
 

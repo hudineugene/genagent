@@ -15,6 +15,9 @@ import { CalendarFields } from "./calendar-fields";
 const ICONS = ["🤖", "🛍️", "🎯", "📅", "📚", "🎓", "📣", "⭐", "💬", "🦷", "💇", "🏠", "🚗", "🍕", "💼", "🧘"];
 const CUSTOM = "__custom";
 
+/** Голоса OpenAI TTS — как в src/lib/speech.ts */
+const VOICE_OPTIONS = ["marin", "cedar", "coral", "nova", "shimmer", "sage", "ash", "ballad", "verse", "echo", "onyx", "alloy"];
+
 export type BuilderSource = {
   id: string;
   title: string;
@@ -179,6 +182,24 @@ export function Builder({
             options={(["on", "off"] as const).map((v) => ({ value: v, label: t.builder.memoryModes[v] }))}
             onChange={(v) => set("memory", v === "on")}
           />
+        </Field>
+        <Field label={t.builder.voiceReplies} hint={t.builder.voiceRepliesHint}>
+          <div className="flex flex-wrap items-center gap-2">
+            <Segmented
+              value={config.voiceReplies === false ? "off" : "on"}
+              options={(["on", "off"] as const).map((v) => ({ value: v, label: t.builder.memoryModes[v] }))}
+              onChange={(v) => set("voiceReplies", v === "on")}
+            />
+            {config.voiceReplies !== false && (
+              <Select value={config.voice || "marin"} onChange={(e) => set("voice", e.target.value)} className="w-40" aria-label={t.builder.voice}>
+                {VOICE_OPTIONS.map((v) => (
+                  <option key={v} value={v}>
+                    {v}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </div>
         </Field>
         <Field label={t.builder.factGuard} hint={t.builder.factGuardHint}>
           <Segmented

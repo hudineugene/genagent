@@ -70,6 +70,10 @@ export const agentConfigSchema = z.object({
   monthlyBudgetUsd: z.number().min(0).max(100000).nullable().default(null),
   /** Долгая память о клиенте: агент помнит факты из прошлых разговоров (раз в 10 минут дешёвая модель их обновляет) */
   memory: z.boolean().default(true),
+  /** Голосовые ответы: клиент прислал голосовое — агент отвечает голосовым (OpenAI TTS, нужен OPENAI_API_KEY) */
+  voiceReplies: z.boolean().default(true),
+  /** Голос озвучки (marin, cedar, coral, nova…) */
+  voice: z.string().max(20).default("marin"),
   calendar: calendarConfigSchema.prefault({}),
 });
 
