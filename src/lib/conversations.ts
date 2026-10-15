@@ -172,7 +172,7 @@ export async function respond(conversationId: string): Promise<void> {
     }
 
     const history = await db
-      .select({ role: messages.role, text: messages.text })
+      .select({ role: messages.role, text: messages.text, meta: messages.meta, createdAt: messages.createdAt })
       .from(messages)
       .where(and(eq(messages.conversationId, conversationId), eq(messages.status, "sent")))
       // rowid — порядок вставки, на случай одинакового времени
@@ -211,7 +211,7 @@ export async function respond(conversationId: string): Promise<void> {
         : conversation.kind === "comment"
           ? commentNote(channel.type === "api" ? "telegram" : channel.type, conversation.context?.postText)
           : channel.type === "api"
-            ? apiNote(conversation.context?.language, conversation.context?.botContext, (channel.config as ApiConfig).botNote)
+            ? apiNote(conversation.context?.language, conversation.context?.botContext, (channel.config as ApiConfig).botNote, botActivity(history))
             : undefined,
     );
 
@@ -331,8 +331,39 @@ const LANGUAGE_NAMES: Record<string, string> = {
   pl: "polski",
 };
 
+const ACTIVITY_WINDOW_MS = 2 * 60 * 60 * 1000;
+const ACTIVITY_LINES = 12;
+
+/**
+ * Что клиент делал в боте после последнего ответа агента (из журнала переписки своего бота): что бот показал
+ * (меню, карточки, уведомления о заявке), какие кнопки клиент нажимал, реакции, ответы людей в самом боте.
+ * Без ИИ: последние строки за 2 часа, коротко. history — от новых к старым (как из базы) или от старых к новым.
+ */
+export function botActivity(history: { role: string; text: string; meta?: MessageMeta | null; createdAt?: Date }[]) {
+  const ordered = [...history].sort((a, b) => (a.createdAt?.getTime() ?? 0) - (b.createdAt?.getTime() ?? 0));
+  // С последнего ответа агента; последнее сообщение клиента (на которое отвечаем) — не «действие», оно в переписке
+  let from = 0;
+  ordered.forEach((m, i) => {
+    if (m.role === "assistant") from = i + 1;
+  });
+  const now = Date.now();
+  const lines: string[] = [];
+  for (const m of ordered.slice(from)) {
+    if (m.createdAt && now - m.createdAt.getTime() > ACTIVITY_WINDOW_MS) continue;
+    const text = m.text.replace(/\s+/g, " ").trim().slice(0, 160);
+    const kind = m.meta?.kind;
+    if (m.role === "bot") lines.push(`Бот показал: ${text || `[${kind ?? "вложение"}]`}`);
+    else if (m.role === "operator") lines.push(`Сотрудник ответил клиенту в боте: ${text}`);
+    else if (m.role === "user" && kind === "button") lines.push(`Клиент нажал кнопку «${text}»`);
+    else if (m.role === "user" && kind === "reaction") lines.push(`Клиент поставил реакцию ${text}`);
+    else if (m.role === "user" && kind && kind !== "text" && kind !== "edit") lines.push(`Клиент прислал: ${kind}${text ? ` (${text})` : ""}`);
+  }
+  if (!lines.length) return undefined;
+  return lines.slice(-ACTIVITY_LINES).join("\n");
+}
+
 /** Свой бот: язык ответа задаёт бот (язык, выбранный клиентом в боте) — он важнее настройки агента. */
-function apiNote(language?: string, botContext?: string, botNote?: string) {
+function apiNote(language?: string, botContext?: string, botNote?: string, activity?: string) {
   const parts: string[] = [];
   if (language) {
     const name = LANGUAGE_NAMES[language] ?? language;
@@ -354,6 +385,11 @@ function apiNote(language?: string, botContext?: string, botNote?: string) {
     ].join("\n"),
   );
   if (botContext) parts.push(`# Что клиент сейчас открыл в боте\n${botContext}`);
+  if (activity) {
+    parts.push(
+      `# Что клиент делал в боте после твоего последнего ответа\nУчитывай это, не переспрашивай то, что уже видно отсюда, и не повторяй то, что бот уже показал:\n${activity}`,
+    );
+  }
   return parts.join("\n\n");
 }
 

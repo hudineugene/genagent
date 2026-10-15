@@ -11,6 +11,8 @@ import { NotifyCard } from "./notify-card";
 import { BackupSection } from "./backup-section";
 import { DailyDigestSection } from "./daily-section";
 import { WeeklyTestsSection } from "./weekly-section";
+import { WaitingSection } from "./waiting-section";
+import { getWaitingSettings } from "@/lib/agent/waiting";
 import { getNotifySettings } from "@/lib/notify/telegram";
 import { getOffsiteSettings } from "@/lib/offsite-backup";
 import { getWeeklyTests, weeklyCoverage } from "@/lib/tests/weekly";
@@ -25,7 +27,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
   await requireAdmin();
   const tab: Tab = TABS.find((x) => x === sp.tab) ?? "notify";
   const s = t.integrations;
-  const [meta, google, notify, offsite, weekly, coverage, daily] = await Promise.all([
+  const [meta, google, notify, offsite, weekly, coverage, daily, waiting] = await Promise.all([
     getMetaSettings(),
     getGoogleSettings(),
     getNotifySettings(),
@@ -33,6 +35,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
     getWeeklyTests(),
     weeklyCoverage(),
     getDailyDigest(),
+    getWaitingSettings(),
   ]);
   const base = publicUrl();
   const subscribers = notify?.token ? notify.subscribers : [];
@@ -102,6 +105,9 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
           {tab === "reports" &&
             (notifyReady ? (
               <>
+                <Section>
+                  <WaitingSection waiting={waiting} />
+                </Section>
                 <Section>
                   <DailyDigestSection daily={{ enabled: daily.enabled, hour: daily.hour }} />
                 </Section>

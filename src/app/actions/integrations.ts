@@ -217,6 +217,23 @@ export async function saveDailyDigestAction(patch: { enabled: boolean; hour: num
   return { ok: true };
 }
 
+/** Напоминания, если клиент ждёт человека (lib/agent/waiting). */
+export async function saveWaitingAction(patch: { enabled: boolean; firstMin: number; secondMin: number; fromHour: number; toHour: number }): Promise<IntegrationsResult> {
+  await requireAdmin();
+  const data = z
+    .object({
+      enabled: z.boolean(),
+      firstMin: z.number().int().min(5).max(600),
+      secondMin: z.number().int().min(10).max(1440),
+      fromHour: z.number().int().min(0).max(23),
+      toHour: z.number().int().min(0).max(24),
+    })
+    .parse(patch);
+  const { saveWaitingSettings } = await import("@/lib/agent/waiting");
+  await saveWaitingSettings({ ...data, secondMin: Math.max(data.secondMin, data.firstMin + 5) });
+  return { ok: true };
+}
+
 /** «Прислать сейчас»: сводка за последние сутки. error: empty — за сутки ничего не было. */
 export async function sendDailyDigestNow(): Promise<IntegrationsResult> {
   await requireAdmin();

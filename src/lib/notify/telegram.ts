@@ -166,6 +166,21 @@ export async function notifyClientMessage(conversationId: string, text: string, 
   }
 }
 
+/** Клиент ждёт ответа человека дольше порога (lib/agent/waiting): повторное уведомление, urgent — 🔴. */
+export async function notifyWaiting(conversationId: string, minutes: number, urgent: boolean, lastText: string) {
+  try {
+    const row = await conversationInfo(conversationId);
+    if (!row) return;
+    const s = await getNotifySettings();
+    const wait = minutes >= 60 ? `${Math.floor(minutes / 60)} ч ${minutes % 60 ? `${minutes % 60} мин` : ""}`.trim() : `${minutes} мин`;
+    const title = urgent ? `🔴 <b>Клиент ждёт ответа уже ${wait}</b>` : `⏳ <b>Клиент ждёт ответа ${wait}</b>`;
+    const quote = lastText ? `\n\n<i>${esc(lastText.slice(0, 600))}</i>` : "";
+    await broadcast(`${title}\n${header(row)}${quote}`, conversationButtons(s, row));
+  } catch (e) {
+    console.error("notify waiting failed", e);
+  }
+}
+
 /** Черновик ответа ждёт одобрения: текст и кнопки «Опубликовать / Отклонить». */
 export async function notifyDraft(messageId: string) {
   try {

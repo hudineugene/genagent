@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, gte, lte } from "drizzle-orm";
+import { and, desc, eq, gte, lte } from "drizzle-orm";
 import { db } from "@/db";
 import { conversations, messages, type MessageMeta } from "@/db/schema";
 
@@ -71,6 +71,8 @@ export async function syncBotMessages(conversationId: string, items: SyncItem[],
   );
 
   let latest: { at: number; text: string } | null = null;
+  // Ответ человека клиенту в самом боте (менеджер, аптека, дизайнер) — время последнего
+  let answeredAt = 0;
   for (const item of sorted) {
     if (known.has(item.id)) {
       result.skipped++;
@@ -82,6 +84,7 @@ export async function syncBotMessages(conversationId: string, items: SyncItem[],
     const candidate = existing
       .filter((m) => !m.botId && roles.includes(m.role) && Math.abs(m.createdAt.getTime() - item.at) <= MATCH_WINDOW_MS && sameText(m.text, item.text))
       .sort((a, b) => Math.abs(a.createdAt.getTime() - item.at) - Math.abs(b.createdAt.getTime() - item.at))[0];
+    if (role === "operator") answeredAt = Math.max(answeredAt, item.at);
     if (candidate) {
       await db.update(messages).set({ botId: item.id }).where(eq(messages.id, candidate.id));
       candidate.botId = item.id;
@@ -112,6 +115,19 @@ export async function syncBotMessages(conversationId: string, items: SyncItem[],
     }
     result.inserted++;
     if (!latest || item.at >= latest.at) latest = { at: item.at, text: item.text || `[${item.kind}]` };
+  }
+
+  // Человек ответил клиенту в боте после его последнего сообщения — диалог больше не ждёт ответа (иначе ложные напоминания)
+  if (answeredAt) {
+    const [lastUser] = await db
+      .select({ at: messages.createdAt })
+      .from(messages)
+      .where(and(eq(messages.conversationId, conversationId), eq(messages.role, "user")))
+      .orderBy(desc(messages.createdAt))
+      .limit(1);
+    if (!lastUser || answeredAt >= lastUser.at.getTime()) {
+      await db.update(conversations).set({ needsAttention: false }).where(eq(conversations.id, conversationId));
+    }
   }
 
   // Последнее сообщение в списке диалогов — только если досланное новее того, что там уже есть

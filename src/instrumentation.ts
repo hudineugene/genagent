@@ -47,6 +47,9 @@ export async function register() {
   startMonthlyReports();
   const { startWatch } = await import("./lib/agent/watch");
   startWatch();
+  // Клиент ждёт ответа человека — напоминания в Telegram
+  const { startWaitingReminders } = await import("./lib/agent/waiting");
+  startWaitingReminders();
   const { startFollowUps } = await import("./lib/agent/followups");
   startFollowUps();
 
