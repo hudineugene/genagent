@@ -9,6 +9,7 @@ import { Card, PageHeader, cx } from "@/components/ui";
 import { AnalyticsCharts } from "./charts";
 import { ClientSelect } from "@/components/client-select";
 import { agentFunnels } from "@/lib/agent/funnel";
+import { InfoHint } from "@/components/hint";
 
 const PERIODS = [7, 30, 90] as const;
 
@@ -153,17 +154,20 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
       <AnalyticsCharts
         tiles={[
           { label: t.analytics.conversations, value: totalConvs.toLocaleString() },
-          { label: t.analytics.agentReplies, value: Number(msgTotals?.agent ?? 0).toLocaleString(), hint: `${t.analytics.operatorReplies}: ${Number(msgTotals?.operator ?? 0)}` },
           {
             label: t.analytics.handoffRate,
             value: totalConvs ? `${Math.round((handoffs / totalConvs) * 100)}%` : "—",
             hint: `${handoffs} ${t.analytics.handoffs}`,
           },
           { label: t.analytics.avgResponse, value: msgTotals?.avgMs ? `${(Number(msgTotals.avgMs) / 1000).toFixed(1)} ${t.analytics.sec}` : "—" },
-          { label: t.analytics.spend, value: money(totalCost), hint: `${Number(usageTotals?.calls ?? 0)} ${t.analytics.calls}` },
-          { label: t.analytics.costPerConversation, value: totalConvs ? money(totalCost / totalConvs) : "—" },
-          // Плитка записей — только когда агенты уже записывают клиентов в календарь.
-          ...(bookingCount ? [{ label: t.analytics.bookings, value: bookingCount.toLocaleString(), hint: t.analytics.bookingsHint }] : []),
+          { label: t.analytics.spend, value: money(totalCost), hint: totalConvs ? `${money(totalCost / totalConvs)} ${t.analytics.perConversation}` : undefined },
+        ]}
+        extra={[
+          `${t.analytics.agentReplies}: ${Number(msgTotals?.agent ?? 0).toLocaleString()}`,
+          `${t.analytics.operatorReplies}: ${Number(msgTotals?.operator ?? 0)}`,
+          `${Number(usageTotals?.calls ?? 0)} ${t.analytics.calls}`,
+          // Записи — только когда агенты уже записывают клиентов в календарь.
+          ...(bookingCount ? [`${t.analytics.bookings}: ${bookingCount.toLocaleString()}`] : []),
         ]}
         conversations={keys.map((k) => ({ key: k.key, label: k.label, value: convMap.get(k.key) ?? 0 }))}
         costs={keys.map((k) => ({ key: k.key, label: k.label, value: Math.round((costMap.get(k.key) ?? 0) * 1000) / 1000 }))}
@@ -171,10 +175,10 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
 
       {funnels.length > 0 && (
         <Card className="space-y-4 p-5">
-          <div>
-            <h3 className="text-sm font-semibold">{t.analytics.funnelTitle}</h3>
-            <p className="text-xs text-muted">{t.analytics.funnelHint}</p>
-          </div>
+          <h3 className="flex items-center gap-1 text-sm font-semibold">
+            {t.analytics.funnelTitle}
+            <InfoHint>{t.analytics.funnelHint}</InfoHint>
+          </h3>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             {funnels.map((f) => (
               <div key={f.agentId} className="space-y-2 rounded-xl border border-border p-4 text-sm">
@@ -183,7 +187,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
                   <span className="text-muted">{t.analytics.funnelTalked}</span>
                   <b>{f.talked}</b>
                 </div>
-                {f.steps.length ? (
+                {f.steps.length > 0 &&
                   f.steps.map((s) => (
                     <div key={s.type} className="flex items-baseline justify-between gap-2">
                       <span className="text-muted">{s.label}</span>
@@ -193,10 +197,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
                         {s.value > 0 && <span className="text-xs text-muted"> · {Math.round(s.value).toLocaleString()}</span>}
                       </span>
                     </div>
-                  ))
-                ) : (
-                  <p className="text-xs text-muted">{t.analytics.funnelNoEvents}</p>
-                )}
+                  ))}
                 {f.talked > 0 && f.steps.length > 0 && (
                   <div className="flex items-baseline justify-between gap-2 border-t border-border pt-2">
                     <span className="text-muted">{t.analytics.funnelConversion}</span>

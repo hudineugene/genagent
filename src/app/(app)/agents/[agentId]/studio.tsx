@@ -116,14 +116,10 @@ export function AgentStudio({
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(380px,440px)]">
         <div className="min-w-0">
           {/* Название и статус — то, что раньше было в шапке страницы */}
-          <div className="mb-4 flex flex-wrap items-end gap-3">
-            <label className="min-w-48 flex-1">
-              <span className="mb-1.5 block text-xs font-medium text-muted">{t.agentHeader.name}</span>
-              <Input value={name} onChange={(e) => setName(e.target.value)} />
-            </label>
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <Input value={name} onChange={(e) => setName(e.target.value)} aria-label={t.agentHeader.name} title={t.agentHeader.name} className="min-w-48 flex-1" />
             <label>
-              <span className="mb-1.5 block text-xs font-medium text-muted">{t.builder.status}</span>
-              <Select value={status} onChange={(e) => setStatus(e.target.value as Status)} className="w-40">
+              <Select value={status} onChange={(e) => setStatus(e.target.value as Status)} className="w-36" aria-label={t.builder.status} title={t.builder.status}>
                 {(["draft", "active", "paused"] as const).map((s) => (
                   <option key={s} value={s}>
                     {t.status[s]}
@@ -131,9 +127,8 @@ export function AgentStudio({
                 ))}
               </Select>
             </label>
-            <Button variant="secondary" onClick={() => setHistoryOpen(true)} title={t.versions.title}>
+            <Button variant="ghost" onClick={() => setHistoryOpen(true)} title={t.versions.title}>
               <History className="size-4" />
-              <span className="hidden sm:inline">{t.versions.open}</span>
               <span className="text-xs text-muted">v{version}</span>
             </Button>
             <Button
@@ -214,8 +209,8 @@ function SectionNav() {
     };
   }, []);
   return (
-    <nav aria-label={t.agentHeader.sectionsNav} className="sticky top-0 z-10 -mx-1 mb-4 overflow-x-auto bg-bg/90 px-1 py-2 backdrop-blur [scrollbar-width:none] sm:overflow-visible">
-      <div className="flex gap-1 sm:flex-wrap">
+    <nav aria-label={t.agentHeader.sectionsNav} className="sticky top-0 z-10 -mx-1 mb-4 overflow-x-auto bg-bg/90 px-1 py-2 backdrop-blur [scrollbar-width:none]">
+      <div className="flex gap-0.5">
         {BUILDER_SECTIONS.map((id) => (
           <button
             key={id}
@@ -226,7 +221,7 @@ function SectionNav() {
               document.getElementById(`section-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
             }}
             className={cx(
-              "shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium transition",
+              "shrink-0 rounded-lg px-2.5 py-1.5 text-[13px] font-medium whitespace-nowrap transition",
               active === id ? "bg-surface text-accent shadow-sm ring-1 ring-border" : "text-muted hover:bg-surface-2 hover:text-text",
             )}
           >

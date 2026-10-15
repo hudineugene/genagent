@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
 import { and, count, eq, gt, ne, sql } from "drizzle-orm";
-import { ChevronRight, MessagesSquare } from "lucide-react";
+import { MessagesSquare } from "lucide-react";
 import { db } from "@/db";
 import { agents, channels, clients, conversations, knowledgeGaps, usageLog } from "@/db/schema";
 import { getT } from "@/lib/i18n/server";
@@ -49,10 +49,6 @@ export default async function AgentLayout({ children, params }: { children: Reac
     <div className="mx-auto max-w-[1400px]">
       <header className="mb-6 border-b border-border">
         <nav className="mb-3 flex items-center gap-1 text-sm text-muted">
-          <Link href="/clients" className="hover:text-text">
-            {t.nav.clients}
-          </Link>
-          <ChevronRight className="size-3.5 opacity-50" />
           <Link href={`/clients/${row.clientId}`} className="flex min-w-0 items-center gap-1.5 hover:text-text">
             <span className="size-2 shrink-0 rounded-full" style={{ background: row.clientColor }} />
             <span className="truncate">{row.clientName}</span>
@@ -79,14 +75,21 @@ export default async function AgentLayout({ children, params }: { children: Reac
               </div>
             </div>
           </div>
-          <div className="ml-auto flex flex-wrap items-center gap-2 text-sm">
-            <Stat value={stats?.week ?? 0} label={t.agentHeader.conversations} />
-            <Stat value={stats?.waiting ?? 0} label={t.agentHeader.waiting} danger={(stats?.waiting ?? 0) > 0} />
-            <Stat value={`$${spend.toFixed(2)}`} label={t.agentHeader.spend} />
-            <Link
-              href={`/inbox?agent=${agentId}`}
-              className="inline-flex h-9 items-center gap-2 rounded-xl border border-border bg-surface px-3 font-medium transition hover:bg-surface-2"
-            >
+          <div className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted">
+            <span className="tabular-nums">
+              <b className="font-semibold text-text">{stats?.week ?? 0}</b> {t.agentHeader.conversations}
+              {(stats?.waiting ?? 0) > 0 && (
+                <>
+                  {" · "}
+                  <Link href={`/inbox?agent=${agentId}&f=attention`} className="font-medium text-danger hover:underline">
+                    {stats?.waiting} {t.agentHeader.waiting}
+                  </Link>
+                </>
+              )}
+              {" · "}
+              <b className="font-semibold text-text">${spend.toFixed(2)}</b> {t.agentHeader.spend}
+            </span>
+            <Link href={`/inbox?agent=${agentId}`} className="inline-flex items-center gap-1.5 font-medium text-accent hover:underline">
               <MessagesSquare className="size-4" />
               {t.agentHeader.openInbox}
             </Link>
@@ -103,13 +106,4 @@ export default async function AgentLayout({ children, params }: { children: Reac
 function periods() {
   const now = new Date();
   return { week: new Date(now.getTime() - 7 * 86_400_000), monthStart: new Date(now.getFullYear(), now.getMonth(), 1) };
-}
-
-function Stat({ value, label, danger }: { value: ReactNode; label: string; danger?: boolean }) {
-  return (
-    <div className={cx("rounded-xl px-3 py-1.5 leading-tight", danger ? "bg-danger/8 text-danger" : "bg-surface-2/70")}>
-      <div className="font-semibold tabular-nums">{value}</div>
-      <div className={cx("text-[11px]", danger ? "text-danger/80" : "text-muted")}>{label}</div>
-    </div>
-  );
 }

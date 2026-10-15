@@ -21,6 +21,7 @@ import {
 import type { ChannelType, WidgetConfig } from "@/db/schema";
 import { useI18n } from "@/lib/i18n/client";
 import { Badge, Button, Card, Field, Input, Spinner, Textarea, cx } from "@/components/ui";
+import { InfoHint } from "@/components/hint";
 
 export type ChannelItem = {
   id: string;
@@ -64,8 +65,6 @@ export function ChannelsManager({
 
   return (
     <div className="space-y-6">
-      <p className="text-sm text-muted">{t.channels.subtitle}</p>
-
       {agentStatus !== "active" && (
         <div className="flex gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
           <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
@@ -525,19 +524,23 @@ function Toggle({
   disabled?: boolean;
 }) {
   return (
-    <label className={cx("flex cursor-pointer items-start gap-3 rounded-xl border border-border p-3", disabled && "opacity-60")}>
-      <input
-        type="checkbox"
-        checked={checked}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.checked)}
-        className="mt-0.5 size-4 accent-[var(--accent)]"
-      />
-      <span>
-        <span className="block text-sm font-medium">{label}</span>
-        {hint && <span className="block text-xs text-muted">{hint}</span>}
+    <div className={cx("flex items-center gap-3 py-1.5", disabled && "opacity-60")}>
+      <span className="flex min-w-0 flex-1 items-center gap-1 text-sm">
+        {label}
+        {hint && <InfoHint>{hint}</InfoHint>}
       </span>
-    </label>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        disabled={disabled}
+        onClick={() => onChange(!checked)}
+        className={cx("relative h-5 w-9 shrink-0 rounded-full transition", checked ? "bg-accent" : "bg-border")}
+      >
+        <span className={cx("absolute top-0.5 size-4 rounded-full bg-white shadow transition-all", checked ? "left-[18px]" : "left-0.5")} />
+      </button>
+    </div>
   );
 }
 
@@ -796,7 +799,10 @@ function ApiCard({ c, publicUrl }: { c: ChannelItem; publicUrl: string | null })
         disabled={pending}
         onChange={(v) => start(async () => void (await updateApiChannel(c.id, { approval: v })))}
       />
-      <p className="text-xs text-muted">{ch.apiNote}</p>
+      <details className="group text-xs text-muted">
+        <summary className="cursor-pointer select-none hover:text-text">{ch.apiDev}</summary>
+        <p className="mt-1.5 leading-relaxed">{ch.apiNote}</p>
+      </details>
     </Card>
   );
 }
