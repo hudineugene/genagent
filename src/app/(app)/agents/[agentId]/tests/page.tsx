@@ -1,10 +1,7 @@
 import { notFound } from "next/navigation";
-import { asc, count, desc, eq } from "drizzle-orm";
+import { asc, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { agents, channels, clients, testResults, testRuns, testScenarios } from "@/db/schema";
-import { getT } from "@/lib/i18n/server";
-import { BackLink } from "@/components/back-link";
-import { AgentTabs } from "../tabs";
+import { agents, clients, testResults, testRuns, testScenarios } from "@/db/schema";
 import { TestsManager } from "./manager";
 
 export default async function AgentTestsPage({
@@ -15,7 +12,6 @@ export default async function AgentTestsPage({
   searchParams: Promise<{ run?: string }>;
 }) {
   const [{ agentId }, sp] = await Promise.all([params, searchParams]);
-  const { t } = await getT();
   const [row] = await db
     .select({ agent: agents, clientId: clients.id, clientName: clients.name })
     .from(agents)
@@ -24,8 +20,7 @@ export default async function AgentTestsPage({
   if (!row) notFound();
   const { agent } = row;
 
-  const [[{ n: channelCount }], scenarios, runs] = await Promise.all([
-    db.select({ n: count() }).from(channels).where(eq(channels.agentId, agentId)),
+  const [scenarios, runs] = await Promise.all([
     db.select().from(testScenarios).where(eq(testScenarios.agentId, agentId)).orderBy(asc(testScenarios.createdAt)),
     db.select().from(testRuns).where(eq(testRuns.agentId, agentId)).orderBy(desc(testRuns.createdAt)).limit(20),
   ]);
@@ -35,15 +30,7 @@ export default async function AgentTestsPage({
     : [];
 
   return (
-    <div className="mx-auto max-w-5xl">
-      <BackLink href={`/clients/${row.clientId}`} label={row.clientName} />
-      <div className="mb-6 flex items-center gap-3">
-        <span className="grid size-12 place-items-center rounded-2xl bg-surface-2 text-2xl">
-          {(agent.config as { icon?: string }).icon ?? "🤖"}
-        </span>
-        <h1 className="text-xl font-semibold">{agent.name}</h1>
-      </div>
-      <AgentTabs agentId={agent.id} active="tests" channels={channelCount} t={t} />
+    <div className="max-w-5xl">
       <TestsManager
         agentId={agent.id}
         agentVersion={agent.version}

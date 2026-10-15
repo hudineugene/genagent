@@ -3,12 +3,12 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
-import { Check, ChevronDown, Pencil, Play, Plus, Trash2, Wand2, X } from "lucide-react";
+import { Check, ChevronDown, FlaskConical, Pencil, Play, Plus, Trash2, Wand2, X } from "lucide-react";
 import { deleteScenario, generateTestScenarios, runTests, saveScenario } from "@/app/actions/tests";
 import type { TestVerdict } from "@/db/schema";
 import { useI18n } from "@/lib/i18n/client";
 import { ColumnChart, StatTile } from "@/components/charts";
-import { Badge, Button, Card, Field, Input, Spinner, Textarea, cx } from "@/components/ui";
+import { Badge, Button, Card, EmptyState, Field, Input, Spinner, Textarea, cx } from "@/components/ui";
 
 type Scenario = {
   id: string;
@@ -182,7 +182,7 @@ export function TestsManager({
         </div>
         {editing === "new" && <ScenarioForm agentId={agentId} onClose={() => setEditing(null)} />}
         {scenarios.length === 0 && editing !== "new" ? (
-          <Card className="border-dashed px-6 py-10 text-center text-sm text-muted">{tt.empty}</Card>
+          <EmptyState icon={<FlaskConical />} text={tt.empty} />
         ) : (
           <div className="space-y-2">
             {scenarios.map((s) =>
@@ -329,7 +329,7 @@ function ScenarioForm({ agentId, scenario, onClose }: { agentId: string; scenari
           });
         }}
       >
-        <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto]">
           <Field label={tt.name}>
             <Input name="name" defaultValue={scenario?.name} required maxLength={120} />
           </Field>
@@ -356,7 +356,7 @@ function ScenarioForm({ agentId, scenario, onClose }: { agentId: string; scenari
             <Textarea name="turns" rows={3} defaultValue={scenario?.turns.join("\n")} />
           </Field>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-[1fr_120px]">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_120px]">
             <Field label={tt.persona} hint={tt.personaHint}>
               <Textarea name="persona" rows={3} defaultValue={scenario?.persona} />
             </Field>

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { and, asc, desc, eq, inArray, like, ne, or, sql, type SQL } from "drizzle-orm";
-import { ArrowRight, Bot, Building2, CheckCircle2, MessagesSquare, SearchX } from "lucide-react";
+import { ArrowRight, Bot, Building2, CheckCircle2, MessagesSquare, SearchX, X } from "lucide-react";
 import { db } from "@/db";
 import { agents, channels, clients, conversations, messages, users } from "@/db/schema";
 import { getT } from "@/lib/i18n/server";
@@ -22,7 +22,7 @@ const FILTERS = ["all", "attention", "human", "closed"] as const;
 export default async function InboxPage({
   searchParams,
 }: {
-  searchParams: Promise<{ c?: string; f?: string; client?: string; q?: string }>;
+  searchParams: Promise<{ c?: string; f?: string; client?: string; agent?: string; q?: string }>;
 }) {
   const sp = await searchParams;
   const { t, locale } = await getT();
@@ -32,6 +32,7 @@ export default async function InboxPage({
   // Клиент и поиск — общие для всех вкладок (и для счётчиков на вкладках)
   const base: SQL[] = [];
   if (sp.client) base.push(eq(conversations.clientId, sp.client));
+  if (sp.agent) base.push(eq(conversations.agentId, sp.agent));
   if (q) {
     const pattern = `%${q.replace(/[%_]/g, "")}%`;
     base.push(
@@ -116,10 +117,11 @@ export default async function InboxPage({
   }
 
   const thread = sp.c ? await loadThread(sp.c) : null;
+  const agentFilter = sp.agent ? (await db.select({ name: agents.name }).from(agents).where(eq(agents.id, sp.agent)))[0]?.name : undefined;
 
   const qs = (patch: Record<string, string | undefined>) => {
     const p = new URLSearchParams();
-    const next = { f: filter === "all" ? undefined : filter, client: sp.client, q: q || undefined, c: sp.c, ...patch };
+    const next = { f: filter === "all" ? undefined : filter, client: sp.client, agent: sp.agent, q: q || undefined, c: sp.c, ...patch };
     for (const [k, v] of Object.entries(next)) if (v) p.set(k, v);
     const s = p.toString();
     return `/inbox${s ? `?${s}` : ""}`;
@@ -157,6 +159,17 @@ export default async function InboxPage({
             </span>
           </Link>
         ))}
+        {agentFilter && (
+          <Link
+            href={qs({ agent: undefined, c: undefined })}
+            replace
+            className="ml-2 flex shrink-0 items-center gap-1.5 rounded-lg bg-accent-soft px-3 py-1.5 text-sm font-medium text-accent"
+            title="×"
+          >
+            {t.inbox.infoAgent}: {agentFilter}
+            <X className="size-3.5" />
+          </Link>
+        )}
       </div>
 
       <Card className={cx("flex min-h-[480px]", thread ? "h-[calc(100dvh-7rem)]" : "h-[calc(100dvh-13rem)]", "overflow-hidden md:h-auto md:flex-1")}>

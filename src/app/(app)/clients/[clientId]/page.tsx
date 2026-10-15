@@ -8,7 +8,7 @@ import { getT } from "@/lib/i18n/server";
 import { findModel } from "@/lib/models";
 import type { Dict, Locale } from "@/lib/i18n";
 import { BackLink } from "@/components/back-link";
-import { Badge, Card, ClientAvatar, PageHeader, buttonClass, cx } from "@/components/ui";
+import { Badge, Card, ClientAvatar, EmptyState, PageHeader, buttonClass, cx } from "@/components/ui";
 import { KnowledgeBase } from "./knowledge-base";
 import { embeddingProgress, embeddingStatus } from "@/lib/kb/embeddings";
 import { previousMonth } from "@/lib/agent/report";
@@ -119,18 +119,21 @@ async function AgentsTab({ clientId, t, locale }: { clientId: string; t: Dict; l
 
   if (list.length === 0) {
     return (
-      <Card className="grid place-items-center gap-4 border-dashed px-6 py-16 text-center">
-        <p className="text-sm text-muted">{t.client.noAgents}</p>
-        <Link href={`/clients/${clientId}/agents/new`} className={buttonClass()}>
-          <Plus className="size-4" />
-          {t.client.newAgent}
-        </Link>
-      </Card>
+      <EmptyState
+        icon={<Bot />}
+        text={t.client.noAgents}
+        action={
+          <Link href={`/clients/${clientId}/agents/new`} className={buttonClass()}>
+            <Plus className="size-4" />
+            {t.client.newAgent}
+          </Link>
+        }
+      />
     );
   }
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {list.map((a) => (
         <Link key={a.id} href={`/agents/${a.id}`} className="group">
           <Card className="flex h-full flex-col gap-3 p-5 transition group-hover:border-accent/50 group-hover:shadow-lg group-hover:shadow-black/5">

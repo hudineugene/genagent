@@ -89,7 +89,7 @@ export function ChannelsManager({
 
       <div>
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">{t.channels.add}</h2>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <AddCard
             icon={<Send className="size-5" />}
             title={t.channels.telegram}
@@ -268,7 +268,7 @@ function TelegramCard({ c, errText }: { c: ChannelItem; errText: (c: string | nu
       />
       {c.error && <p className="text-sm text-danger">{errText(c.error)}</p>}
       {tg && (
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <Toggle label={ch.tgComments} hint={ch.tgCommentsHint} checked={tg.comments} disabled={pending} onChange={(v) => set({ comments: v })} />
           {tg.comments && (
             <Toggle label={ch.approval} hint={ch.approvalHint} checked={tg.approval} disabled={pending} onChange={(v) => set({ approval: v })} />
@@ -323,7 +323,7 @@ function WidgetCard({ c, publicUrl }: { c: ChannelItem; publicUrl: string | null
       <ChannelHeader c={c} icon={<Globe className="size-5" />} title={t.channels.widget} />
 
       <form action={action} className="space-y-4" key={JSON.stringify(w)}>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label={t.channels.title}>
             <Input name="title" defaultValue={w.title} required maxLength={80} />
           </Field>
@@ -447,7 +447,7 @@ function SocialConnect({
         <span>
           {!ready.publicUrl ? c.socialNoPublicUrl : c.socialNotConfigured}{" "}
           {isAdmin && ready.publicUrl && (
-            <Link href="/integrations" className="text-accent hover:underline">
+            <Link href="/integrations?tab=social" className="text-accent hover:underline">
               {t.nav.integrations} →
             </Link>
           )}
@@ -575,7 +575,7 @@ function SocialCard({
         }
       />
       {c.error && <p className="text-sm text-danger">{errText(c.error)}</p>}
-      <div className="grid gap-2 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {isIg && (
           <Toggle label={ch.igDm} hint={ch.igDmHint} checked={Boolean(s.dm)} disabled={pending} onChange={(v) => set({ dm: v })} />
         )}
@@ -627,7 +627,7 @@ function EmailForm({
     <Card className="mt-3 p-5">
       <form action={action} className="space-y-4">
         <p className="text-sm text-muted">{ch.emailHow}</p>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label={ch.emailAddress}>
             <Input name="address" type="email" required autoComplete="off" placeholder="name@gmail.com" />
           </Field>
@@ -668,7 +668,7 @@ function EmailCard({ c, errText }: { c: ChannelItem; errText: (c: string | null 
         }
       />
       {c.error && <p className="text-sm text-danger">{errText(c.error)}</p>}
-      <div className="grid gap-2 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <Toggle
           label={ch.emailApproval}
           hint={ch.emailApprovalHint}

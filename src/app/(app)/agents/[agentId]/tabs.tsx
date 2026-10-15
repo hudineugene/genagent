@@ -1,45 +1,51 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { FlaskConical, MessageCircleQuestion, Radio, SlidersHorizontal, Sparkles } from "lucide-react";
-import type { Dict } from "@/lib/i18n";
+import { useI18n } from "@/lib/i18n/client";
 import { cx } from "@/components/ui";
 
-export function AgentTabs({
-  agentId,
-  active,
-  channels,
-  gaps = null,
-  t,
-}: {
-  agentId: string;
-  active: "setup" | "channels" | "tests" | "gaps" | "review";
-  channels: number;
-  /** Открытых вопросов без ответа (null — не показывать счётчик) */
-  gaps?: number | null;
-  t: Dict;
-}) {
+/** Вкладки агента (в общей шапке): активная — по адресу страницы. Счётчики: каналы, открытые вопросы, новые правки. */
+export function AgentTabs({ agentId, channels, gaps, proposals }: { agentId: string; channels: number; gaps: number; proposals: number }) {
+  const { t } = useI18n();
+  const pathname = usePathname();
+  const base = `/agents/${agentId}`;
   const tabs = [
-    { key: "setup", href: `/agents/${agentId}`, label: t.channels.setupTab, icon: SlidersHorizontal, n: null },
-    { key: "channels", href: `/agents/${agentId}/channels`, label: t.channels.tab, icon: Radio, n: channels },
-    { key: "tests", href: `/agents/${agentId}/tests`, label: t.tests.tab, icon: FlaskConical, n: null },
-    { key: "gaps", href: `/agents/${agentId}/gaps`, label: t.gaps.tab, icon: MessageCircleQuestion, n: gaps || null },
-    { key: "review", href: `/agents/${agentId}/review`, label: t.review.tab, icon: Sparkles, n: null },
+    { href: base, label: t.channels.setupTab, icon: SlidersHorizontal, n: null, tone: "neutral" },
+    { href: `${base}/channels`, label: t.channels.tab, icon: Radio, n: channels, tone: "neutral" },
+    { href: `${base}/tests`, label: t.tests.tab, icon: FlaskConical, n: null, tone: "neutral" },
+    { href: `${base}/gaps`, label: t.gaps.tab, icon: MessageCircleQuestion, n: gaps || null, tone: "warning" },
+    { href: `${base}/review`, label: t.review.tab, icon: Sparkles, n: proposals || null, tone: "accent" },
   ] as const;
   return (
-    <div className="mb-6 flex gap-1 overflow-x-auto border-b border-border [scrollbar-width:none]">
-      {tabs.map(({ key, href, label, icon: Icon, n }) => (
-        <Link
-          key={key}
-          href={href}
-          className={cx(
-            "-mb-px flex shrink-0 items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium transition",
-            active === key ? "border-accent text-accent" : "border-transparent text-muted hover:text-text",
-          )}
-        >
-          <Icon className="size-4" />
-          {label}
-          {n !== null && <span className="rounded-full bg-surface-2 px-1.5 text-xs text-muted">{n}</span>}
-        </Link>
-      ))}
-    </div>
+    <nav className="-mb-px flex gap-1 overflow-x-auto [scrollbar-width:none]">
+      {tabs.map(({ href, label, icon: Icon, n, tone }) => {
+        const active = href === base ? pathname === base : pathname.startsWith(href);
+        return (
+          <Link
+            key={href}
+            href={href}
+            className={cx(
+              "flex shrink-0 items-center gap-2 border-b-2 px-3.5 py-2.5 text-sm font-medium transition",
+              active ? "border-accent text-accent" : "border-transparent text-muted hover:text-text",
+            )}
+          >
+            <Icon className="size-4" />
+            {label}
+            {n !== null && (
+              <span
+                className={cx(
+                  "min-w-5 rounded-full px-1.5 text-center text-xs leading-5 font-semibold",
+                  tone === "warning" ? "bg-amber-500/15 text-amber-600 dark:text-amber-400" : tone === "accent" ? "bg-accent-soft text-accent" : "bg-surface-2 text-muted",
+                )}
+              >
+                {n}
+              </span>
+            )}
+          </Link>
+        );
+      })}
+    </nav>
   );
 }

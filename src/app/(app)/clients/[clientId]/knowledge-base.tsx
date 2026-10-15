@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
-import { FileText, Globe, RefreshCw, Sparkles, StickyNote, Trash2, UploadCloud } from "lucide-react";
+import { BookOpen, FileText, Globe, RefreshCw, Sparkles, StickyNote, Trash2, UploadCloud } from "lucide-react";
 import { addTextSource, addUrlSource, deleteSource, refreshSource } from "@/app/actions/kb";
 import { FULL_CONTEXT_MAX_CHARS, estimateTokens } from "@/lib/kb/text";
 import { useI18n } from "@/lib/i18n/client";
-import { Badge, Button, Card, Field, Input, Spinner, Textarea, cx } from "@/components/ui";
+import { Badge, Button, Card, EmptyState, Field, Input, Spinner, Textarea, cx } from "@/components/ui";
 
 export type SourceRow = {
   id: string;
@@ -118,7 +118,7 @@ export function KnowledgeBase({
       )}
 
       {sources.length === 0 ? (
-        <Card className="border-dashed px-6 py-12 text-center text-sm text-muted">{t.kb.empty}</Card>
+        <EmptyState icon={<BookOpen />} text={t.kb.empty} />
       ) : (
         <Card className="divide-y divide-border">
           {sources.map((s) => (

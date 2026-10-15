@@ -73,7 +73,7 @@ export function CalendarFields({
               <TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
               <span>
                 {c.noGoogle}{" "}
-                <Link href="/integrations" className="text-accent hover:underline">
+                <Link href="/integrations?tab=google" className="text-accent hover:underline">
                   →
                 </Link>
               </span>
@@ -116,7 +116,7 @@ export function CalendarFields({
             </p>
           )}
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label={c.timezone}>
               <Select value={value.timezone} onChange={(e) => set("timezone", e.target.value)}>
                 {(TIMEZONES.includes(value.timezone) ? TIMEZONES : [value.timezone, ...TIMEZONES]).map((tz) => (
@@ -158,7 +158,7 @@ export function CalendarFields({
             </div>
           </Field>
 
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <Field label={c.slotMinutes}>
               <NumberInput min={10} max={480} step={5} value={value.slotMinutes} onChange={(v) => set("slotMinutes", v)} />
             </Field>

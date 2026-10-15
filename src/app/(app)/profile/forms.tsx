@@ -26,7 +26,7 @@ export function ProfileForms({ name, email }: { name: string; email: string }) {
           {t.profile.name}
         </h2>
         <form action={nameAction} className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label={t.profile.name}>
               <Input name="name" defaultValue={name} required maxLength={200} />
             </Field>
@@ -54,7 +54,7 @@ export function ProfileForms({ name, email }: { name: string; email: string }) {
           <Field label={t.profile.current}>
             <Input name="current" type="password" autoComplete="current-password" required />
           </Field>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label={t.profile.next} hint={t.profile.minLength}>
               <Input name="next" type="password" autoComplete="new-password" required minLength={8} />
             </Field>

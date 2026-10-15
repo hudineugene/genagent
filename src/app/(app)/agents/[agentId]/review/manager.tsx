@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { Check, Lightbulb, MessageSquareText, RefreshCw, Target, X } from "lucide-react";
+import { Check, Lightbulb, MessageSquareText, RefreshCw, Sparkles, Target, X } from "lucide-react";
 import { applyReviewProposal, rejectReviewProposal, reviewAgentNow } from "@/app/actions/review";
 import type { AgentReview, ReviewProposal } from "@/lib/agent/review";
 import { useI18n } from "@/lib/i18n/client";
-import { Badge, Button, Card, Spinner } from "@/components/ui";
+import { Badge, Button, Card, EmptyState, Spinner } from "@/components/ui";
 
 /** Разбор недели: «Чего хотят клиенты» и предложенные правки правил агента. */
 export function ReviewManager({ agentId, review }: { agentId: string; review: AgentReview | null }) {
@@ -40,7 +40,7 @@ export function ReviewManager({ agentId, review }: { agentId: string; review: Ag
       </div>
 
       {!review ? (
-        <Card className="p-8 text-center text-sm text-muted">{r.empty}</Card>
+        <EmptyState icon={<Sparkles />} text={r.empty} />
       ) : (
         <>
           <Card className="space-y-4 p-5">

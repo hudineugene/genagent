@@ -18,7 +18,7 @@ export function ClientForm({
   return (
     <form action={action}>
       <Card className="space-y-5 p-6">
-        <div className="grid gap-5 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           <Field label={t.clients.name}>
             <Input name="name" required defaultValue={client?.name} autoFocus={!client} />
           </Field>

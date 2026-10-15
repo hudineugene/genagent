@@ -77,8 +77,8 @@ export function Builder({
 
   return (
     <div className="space-y-4">
-      <Section icon={<UserRound />} title={t.builder.sections.basics}>
-        <div className="grid gap-4 sm:grid-cols-[auto_1fr]">
+      <Section icon={<UserRound />} id="basics" title={t.builder.sections.basics}>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-[auto_1fr]">
           <Field label={t.builder.icon}>
             <IconPicker value={config.icon} onChange={(v) => set("icon", v)} />
           </Field>
@@ -107,8 +107,8 @@ export function Builder({
         </Field>
       </Section>
 
-      <Section icon={<Cpu />} title={t.builder.sections.model}>
-        <div className="grid gap-4 sm:grid-cols-2">
+      <Section icon={<Cpu />} id="model" title={t.builder.sections.model}>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field
             label={t.builder.model}
             hint={
@@ -182,8 +182,8 @@ export function Builder({
         </Field>
       </Section>
 
-      <Section icon={<Sparkles />} title={t.builder.sections.skills} badge={config.skills.length || undefined}>
-        <div className="grid gap-2 sm:grid-cols-2">
+      <Section icon={<Sparkles />} id="skills" title={t.builder.sections.skills} badge={config.skills.length || undefined}>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {SKILLS.map((s) => {
             const on = config.skills.includes(s.key);
             return (
@@ -215,7 +215,7 @@ export function Builder({
         </div>
       </Section>
 
-      <Section icon={<MessageSquareText />} title={t.builder.sections.style}>
+      <Section icon={<MessageSquareText />} id="style" title={t.builder.sections.style}>
         <Field label={t.builder.tone}>
           <Segmented
             value={config.tone}
@@ -250,7 +250,7 @@ export function Builder({
         </label>
       </Section>
 
-      <Section icon={<BookOpen />} title={t.builder.sections.knowledge} badge={usedSources.length || undefined}>
+      <Section icon={<BookOpen />} id="knowledge" title={t.builder.sections.knowledge} badge={usedSources.length || undefined}>
         <div>
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <span className="text-sm font-medium">{t.builder.kbSources}</span>
@@ -312,7 +312,7 @@ export function Builder({
         </Field>
       </Section>
 
-      <Section icon={<ScrollText />} title={t.builder.sections.rules}>
+      <Section icon={<ScrollText />} id="rules" title={t.builder.sections.rules}>
         <Field label={t.builder.rules}>
           <Textarea
             rows={4}
@@ -339,11 +339,11 @@ export function Builder({
         </Field>
       </Section>
 
-      <Section icon={<CalendarDays />} title={t.builder.sections.calendar} badge={config.calendar.enabled ? config.calendar.services.length || undefined : undefined}>
+      <Section icon={<CalendarDays />} id="calendar" title={t.builder.sections.calendar} badge={config.calendar.enabled ? config.calendar.services.length || undefined : undefined}>
         <CalendarFields value={config.calendar} onChange={(v) => set("calendar", v)} googleEmail={googleEmail} />
       </Section>
 
-      <Section icon={<Brain />} title={t.builder.sections.prompt} collapsible defaultOpen={false}>
+      <Section icon={<Brain />} id="prompt" title={t.builder.sections.prompt} collapsible defaultOpen={false}>
         <p className="text-xs text-muted">{t.builder.promptHint}</p>
         <pre className="max-h-[480px] overflow-auto whitespace-pre-wrap rounded-xl bg-surface-2 p-4 font-mono text-xs leading-relaxed">
           {prompt}
@@ -353,7 +353,11 @@ export function Builder({
   );
 }
 
+/** Разделы настройки по порядку — для меню разделов над формой. */
+export const BUILDER_SECTIONS = ["basics", "model", "skills", "style", "knowledge", "rules", "calendar", "prompt"] as const;
+
 function Section({
+  id,
   icon,
   title,
   badge,
@@ -361,6 +365,7 @@ function Section({
   defaultOpen = true,
   children,
 }: {
+  id: string;
   icon: ReactNode;
   title: string;
   badge?: number;
@@ -379,7 +384,7 @@ function Section({
     </span>
   );
   return (
-    <Card className="p-5">
+    <Card className="scroll-mt-20 p-5" id={`section-${id}`}>
       {collapsible ? (
         <button type="button" onClick={() => setOpen(!open)} className="flex w-full items-center justify-between">
           {header}

@@ -11,9 +11,6 @@ import {
 } from "@/app/actions/integrations";
 import { useI18n } from "@/lib/i18n/client";
 import { Button, Card, Field, Input, Spinner } from "@/components/ui";
-import { BackupSection, type OffsiteView } from "./backup-section";
-import { DailyDigestSection, type DailyView } from "./daily-section";
-import { WeeklyTestsSection, type WeeklyView } from "./weekly-section";
 
 export type NotifyView = {
   botUsername: string;
@@ -21,8 +18,8 @@ export type NotifyView = {
   subscribers: { chatId: string; name: string; since: number }[];
 } | null;
 
-/** Уведомления студии в Telegram: бот, ссылка подписки для сотрудников, подписчики. */
-export function NotifyCard({ notify, offsite, weekly, daily }: { notify: NotifyView; offsite: OffsiteView; weekly: WeeklyView; daily: DailyView }) {
+/** Уведомления студии в Telegram: бот, ссылка подписки для сотрудников, подписчики. Сводки, проверки и копия базы — на своих вкладках. */
+export function NotifyCard({ notify }: { notify: NotifyView }) {
   const { t, locale } = useI18n();
   const s = t.integrations;
   const [state, action, pending] = useActionState(saveNotifyBot, undefined);
@@ -157,9 +154,6 @@ export function NotifyCard({ notify, offsite, weekly, daily }: { notify: NotifyV
               {s.notifyTest}
             </Button>
           </div>
-          {notify.subscribers.length > 0 && <BackupSection offsite={offsite} subscribers={notify.subscribers} />}
-          {notify.subscribers.length > 0 && <DailyDigestSection daily={daily} />}
-          {notify.subscribers.length > 0 && <WeeklyTestsSection weekly={weekly} />}
         </>
       )}
     </Card>

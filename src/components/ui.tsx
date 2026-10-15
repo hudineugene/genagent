@@ -74,8 +74,12 @@ export function Field({
   );
 }
 
-export function Card({ className, children }: { className?: string; children: ReactNode }) {
-  return <div className={cx("rounded-2xl border border-border bg-surface", className)}>{children}</div>;
+export function Card({ className, children, id }: { className?: string; children: ReactNode; id?: string }) {
+  return (
+    <div id={id} className={cx("rounded-2xl border border-border bg-surface", className)}>
+      {children}
+    </div>
+  );
 }
 
 export function Badge({
@@ -144,5 +148,40 @@ export function ClientAvatar({ name, color, size = 40 }: { name: string; color: 
     >
       {name.trim().charAt(0).toUpperCase() || "?"}
     </span>
+  );
+}
+
+/** Пустое состояние: значок в круге, заголовок, пояснение и действие — одинаково во всех разделах. */
+export function EmptyState({
+  icon,
+  title,
+  text,
+  action,
+  tone = "neutral",
+  className,
+}: {
+  icon?: ReactNode;
+  title?: ReactNode;
+  text: ReactNode;
+  action?: ReactNode;
+  tone?: "neutral" | "success";
+  className?: string;
+}) {
+  return (
+    <div className={cx("flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border bg-surface px-6 py-12 text-center", className)}>
+      {icon && (
+        <span
+          className={cx(
+            "grid size-12 place-items-center rounded-full [&>svg]:size-5",
+            tone === "success" ? "bg-success/10 text-success" : "bg-surface-2 text-muted",
+          )}
+        >
+          {icon}
+        </span>
+      )}
+      {title && <p className="font-medium">{title}</p>}
+      <p className="max-w-md text-sm text-muted">{text}</p>
+      {action && <div className="mt-1">{action}</div>}
+    </div>
   );
 }

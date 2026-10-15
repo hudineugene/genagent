@@ -56,7 +56,7 @@ export function TeamManager({ members, meId }: { members: Member[]; meId: string
         </h2>
         <form
           action={addAction}
-          className="grid gap-4 sm:grid-cols-[1fr_1fr_180px_auto] sm:items-end"
+          className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_1fr_180px_auto] sm:items-end"
           key={addState?.password ?? "form"}
         >
           <Field label={t.team.name}>

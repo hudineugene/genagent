@@ -1,71 +1,168 @@
+import Link from "next/link";
+import type { ReactNode } from "react";
+import { Bell, BellOff, CalendarDays, DatabaseBackup, FileBarChart2, Share2 } from "lucide-react";
 import { requireAdmin } from "@/lib/auth";
 import { getT } from "@/lib/i18n/server";
 import { getMetaSettings, metaUrls, publicUrl } from "@/lib/settings";
-import { PageHeader } from "@/components/ui";
+import { Card, EmptyState, PageHeader, buttonClass, cx } from "@/components/ui";
 import { getGoogleSettings } from "@/lib/google/calendar";
 import { GoogleCard, IntegrationsForm } from "./form";
 import { NotifyCard } from "./notify-card";
+import { BackupSection } from "./backup-section";
+import { DailyDigestSection } from "./daily-section";
+import { WeeklyTestsSection } from "./weekly-section";
 import { getNotifySettings } from "@/lib/notify/telegram";
 import { getOffsiteSettings } from "@/lib/offsite-backup";
 import { getWeeklyTests, weeklyCoverage } from "@/lib/tests/weekly";
 import { getDailyDigest } from "@/lib/agent/daily";
 
-export default async function IntegrationsPage() {
-  const { t } = await getT();
+const TABS = ["notify", "reports", "backup", "social", "google"] as const;
+type Tab = (typeof TABS)[number];
+
+/** Интеграции по вкладкам: у каждой отметка «подключено»; отчёты и копия базы — после бота уведомлений. */
+export default async function IntegrationsPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
+  const [{ t }, sp] = await Promise.all([getT(), searchParams]);
   await requireAdmin();
-  const meta = await getMetaSettings();
+  const tab: Tab = TABS.find((x) => x === sp.tab) ?? "notify";
+  const s = t.integrations;
+  const [meta, google, notify, offsite, weekly, coverage, daily] = await Promise.all([
+    getMetaSettings(),
+    getGoogleSettings(),
+    getNotifySettings(),
+    getOffsiteSettings(),
+    getWeeklyTests(),
+    weeklyCoverage(),
+    getDailyDigest(),
+  ]);
   const base = publicUrl();
-  const google = await getGoogleSettings();
-  const notify = await getNotifySettings();
-  const offsite = await getOffsiteSettings();
-  const [weekly, coverage, daily] = await Promise.all([getWeeklyTests(), weeklyCoverage(), getDailyDigest()]);
+  const subscribers = notify?.token ? notify.subscribers : [];
+  const notifyReady = subscribers.length > 0;
+
+  const on: Record<Tab, boolean> = {
+    notify: notifyReady,
+    reports: notifyReady && (daily.enabled || weekly.enabled),
+    backup: notifyReady && Boolean(offsite?.enabled),
+    social: Boolean(meta.instagram || meta.threads),
+    google: Boolean(google?.clientEmail),
+  };
+  const icons: Record<Tab, ReactNode> = {
+    notify: <Bell className="size-4" />,
+    reports: <FileBarChart2 className="size-4" />,
+    backup: <DatabaseBackup className="size-4" />,
+    social: <Share2 className="size-4" />,
+    google: <CalendarDays className="size-4" />,
+  };
+
+  const needNotify = (
+    <EmptyState
+      icon={<BellOff />}
+      title={s.needNotifyTitle}
+      text={s.needNotifyText}
+      action={
+        <Link href="/integrations" className={buttonClass("secondary", "sm")}>
+          {s.needNotifyButton}
+        </Link>
+      }
+    />
+  );
+
   return (
-    <div className="mx-auto max-w-3xl">
-      <PageHeader title={t.integrations.title} subtitle={t.integrations.subtitle} />
-      <IntegrationsForm
-        instagram={meta.instagram ? { appId: meta.instagram.appId, hasSecret: true } : null}
-        threads={meta.threads ? { appId: meta.threads.appId, hasSecret: true } : null}
-        verifyToken={meta.verifyToken}
-        urls={base ? metaUrls(base) : null}
-      />
-      <div className="mt-6">
-        <NotifyCard
-          notify={
-            notify?.token
-              ? {
-                  botUsername: notify.botUsername,
-                  link: `https://t.me/${notify.botUsername}?start=${notify.linkCode}`,
-                  subscribers: notify.subscribers,
-                }
-              : null
-          }
-          offsite={
-            offsite
-              ? {
-                  enabled: offsite.enabled,
-                  chatId: offsite.chatId,
-                  hasPassword: Boolean(offsite.key),
-                  lastSentAt: offsite.lastSentAt ?? null,
-                  lastError: offsite.lastError ?? null,
-                }
-              : null
-          }
-          weekly={{
-            enabled: weekly.enabled,
-            weekday: weekly.weekday,
-            hour: weekly.hour,
-            lastRunAt: weekly.lastRunAt ?? null,
-            lastSummary: weekly.lastSummary ?? null,
-            ...coverage,
-          }}
-          daily={{ enabled: daily.enabled, hour: daily.hour }}
-        />
-      </div>
-      <div className="mt-6">
-        <GoogleCard email={google?.clientEmail ?? null} />
+    <div className="mx-auto max-w-5xl">
+      <PageHeader title={s.title} subtitle={s.subtitle} />
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-[220px_minmax(0,1fr)]">
+        <nav className="flex gap-1 overflow-x-auto [scrollbar-width:none] md:flex-col md:overflow-visible">
+          {TABS.map((key) => (
+            <Link
+              key={key}
+              href={key === "notify" ? "/integrations" : `/integrations?tab=${key}`}
+              replace
+              className={cx(
+                "flex shrink-0 items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium transition",
+                tab === key ? "bg-surface text-text shadow-sm ring-1 ring-border" : "text-muted hover:bg-surface-2 hover:text-text",
+              )}
+            >
+              <span className={cx(tab === key && "text-accent")}>{icons[key]}</span>
+              <span className="flex-1">{s.tabs[key]}</span>
+              <span className={cx("size-2 shrink-0 rounded-full", on[key] ? "bg-success" : "bg-muted/30")} title={on[key] ? s.tabOn : s.tabOff} />
+            </Link>
+          ))}
+        </nav>
+
+        <div className="min-w-0 space-y-6">
+          {tab === "notify" && (
+            <NotifyCard
+              notify={
+                notify?.token
+                  ? { botUsername: notify.botUsername, link: `https://t.me/${notify.botUsername}?start=${notify.linkCode}`, subscribers: notify.subscribers }
+                  : null
+              }
+            />
+          )}
+
+          {tab === "reports" &&
+            (notifyReady ? (
+              <>
+                <Section>
+                  <DailyDigestSection daily={{ enabled: daily.enabled, hour: daily.hour }} />
+                </Section>
+                <Section>
+                  <WeeklyTestsSection
+                    weekly={{
+                      enabled: weekly.enabled,
+                      weekday: weekly.weekday,
+                      hour: weekly.hour,
+                      lastRunAt: weekly.lastRunAt ?? null,
+                      lastSummary: weekly.lastSummary ?? null,
+                      ...coverage,
+                    }}
+                  />
+                </Section>
+              </>
+            ) : (
+              needNotify
+            ))}
+
+          {tab === "backup" &&
+            (notifyReady ? (
+              <Section>
+                <BackupSection
+                  subscribers={subscribers}
+                  offsite={
+                    offsite
+                      ? {
+                          enabled: offsite.enabled,
+                          chatId: offsite.chatId,
+                          hasPassword: Boolean(offsite.key),
+                          lastSentAt: offsite.lastSentAt ?? null,
+                          lastError: offsite.lastError ?? null,
+                        }
+                      : null
+                  }
+                />
+              </Section>
+            ) : (
+              needNotify
+            ))}
+
+          {tab === "social" && (
+            <IntegrationsForm
+              instagram={meta.instagram ? { appId: meta.instagram.appId, hasSecret: true } : null}
+              threads={meta.threads ? { appId: meta.threads.appId, hasSecret: true } : null}
+              verifyToken={meta.verifyToken}
+              urls={base ? metaUrls(base) : null}
+            />
+          )}
+
+          {tab === "google" && <GoogleCard email={google?.clientEmail ?? null} />}
+        </div>
       </div>
     </div>
   );
+}
+
+/** Карточка для раздела, который раньше жил внутри карточки уведомлений (у него своя верхняя линия — убираем). */
+function Section({ children }: { children: ReactNode }) {
+  return <Card className="p-5 [&>div]:border-t-0 [&>div]:pt-0">{children}</Card>;
 }
 
 export const instant = false;

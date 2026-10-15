@@ -2,17 +2,13 @@ import { notFound } from "next/navigation";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { agents, channels, clients } from "@/db/schema";
-import { getT } from "@/lib/i18n/server";
 import { isPolling } from "@/lib/channels/telegram-poller";
 import { requireUser } from "@/lib/auth";
 import { getMetaSettings, publicUrl } from "@/lib/settings";
-import { BackLink } from "@/components/back-link";
-import { AgentTabs } from "../tabs";
 import { ChannelsManager, type ChannelItem } from "./manager";
 
 export default async function AgentChannelsPage({ params }: { params: Promise<{ agentId: string }> }) {
   const { agentId } = await params;
-  const { t } = await getT();
   const user = await requireUser();
   const [row] = await db
     .select({ agent: agents, clientId: clients.id, clientName: clients.name })
@@ -60,15 +56,7 @@ export default async function AgentChannelsPage({ params }: { params: Promise<{ 
   };
 
   return (
-    <div className="mx-auto max-w-4xl">
-      <BackLink href={`/clients/${row.clientId}`} label={row.clientName} />
-      <div className="mb-6 flex items-center gap-3">
-        <span className="grid size-12 place-items-center rounded-2xl bg-surface-2 text-2xl">
-          {(agent.config as { icon?: string }).icon ?? "🤖"}
-        </span>
-        <h1 className="text-xl font-semibold">{agent.name}</h1>
-      </div>
-      <AgentTabs agentId={agent.id} active="channels" channels={list.length} t={t} />
+    <div className="max-w-4xl">
       <ChannelsManager
         agentId={agent.id}
         agentStatus={agent.status}

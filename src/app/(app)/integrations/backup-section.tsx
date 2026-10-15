@@ -26,7 +26,7 @@ export function BackupSection({ offsite, subscribers }: { offsite: OffsiteView; 
       </div>
       <p className="text-sm text-muted">{s.backupHint}</p>
       <form action={action} className="space-y-3" key={JSON.stringify(offsite)}>
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Field label={s.backupRecipient}>
             <Select name="chatId" defaultValue={offsite?.chatId ?? subscribers[0]?.chatId}>
               {subscribers.map((sub) => (

@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { Check, EyeOff, Lightbulb, MessageSquareText, Pencil, RefreshCw, RotateCcw } from "lucide-react";
+import { Check, CheckCircle2, EyeOff, Lightbulb, MessageCircleQuestion, MessageSquareText, Pencil, RefreshCw, RotateCcw } from "lucide-react";
 import { analyzeGapsNow, resolveGap, setGapStatus } from "@/app/actions/gaps";
 import { useI18n } from "@/lib/i18n/client";
-import { Badge, Button, Card, Spinner, Textarea, cx } from "@/components/ui";
+import { Badge, Button, Card, EmptyState, Spinner, Textarea, cx } from "@/components/ui";
 
 type Gap = {
   id: string;
@@ -68,7 +68,7 @@ export function GapsManager({ agentId, clientId, gaps }: { agentId: string; clie
       </div>
 
       {shown.length === 0 ? (
-        <Card className="p-8 text-center text-sm text-muted">{tab === "open" ? g.emptyOpen : g.empty}</Card>
+        <EmptyState icon={tab === "open" ? <CheckCircle2 /> : <MessageCircleQuestion />} tone={tab === "open" ? "success" : "neutral"} text={tab === "open" ? g.emptyOpen : g.empty} />
       ) : (
         shown.map((gap) => <GapCard key={gap.id} gap={gap} clientId={clientId} />)
       )}

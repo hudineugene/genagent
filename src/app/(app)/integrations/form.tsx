@@ -114,7 +114,7 @@ function AppCard({
         </div>
       </div>
       <p className="text-sm text-muted">{hint}</p>
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label={s.appId}>
           <Input name={`${prefix}AppId`} defaultValue={app?.appId} inputMode="numeric" autoComplete="off" />
         </Field>

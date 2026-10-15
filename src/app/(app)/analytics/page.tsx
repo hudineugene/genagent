@@ -7,6 +7,7 @@ import { monthStart } from "@/lib/usage";
 import { findModel } from "@/lib/models";
 import { Card, PageHeader, cx } from "@/components/ui";
 import { AnalyticsCharts } from "./charts";
+import { ClientSelect } from "@/components/client-select";
 import { agentFunnels } from "@/lib/agent/funnel";
 
 const PERIODS = [7, 30, 90] as const;
@@ -130,38 +131,21 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
       <PageHeader title={t.analytics.title} subtitle={t.analytics.subtitle} />
 
       <div className="flex flex-wrap items-center gap-2">
-        {PERIODS.map((d) => (
-          <Link
-            key={d}
-            href={qs({ days: String(d) })}
-            replace
-            className={cx("rounded-full px-3 py-1.5 text-sm", d === days ? "bg-text text-bg" : "bg-surface-2 text-muted hover:text-text")}
-          >
-            {t.analytics.days.replace("{n}", String(d))}
-          </Link>
-        ))}
-        {clientList.length > 1 && (
-          <div className="ml-auto flex flex-wrap gap-1.5">
+        <div className="inline-flex rounded-xl bg-surface-2 p-1">
+          {PERIODS.map((d) => (
             <Link
-              href={qs({ client: undefined })}
+              key={d}
+              href={qs({ days: String(d) })}
               replace
-              className={cx("rounded-full px-3 py-1.5 text-sm", !clientId ? "bg-accent-soft text-accent" : "text-muted hover:text-text")}
+              className={cx("rounded-lg px-3 py-1.5 text-sm font-medium transition", d === days ? "bg-surface text-text shadow-sm" : "text-muted hover:text-text")}
             >
-              {t.inbox.allClients}
+              {t.analytics.days.replace("{n}", String(d))}
             </Link>
-            {clientList.map((c) => (
-              <Link
-                key={c.id}
-                href={qs({ client: c.id })}
-                replace
-                className={cx(
-                  "max-w-48 truncate rounded-full px-3 py-1.5 text-sm",
-                  clientId === c.id ? "bg-accent-soft text-accent" : "text-muted hover:text-text",
-                )}
-              >
-                {c.name}
-              </Link>
-            ))}
+          ))}
+        </div>
+        {clientList.length > 1 && (
+          <div className="ml-auto">
+            <ClientSelect clients={clientList} />
           </div>
         )}
       </div>
@@ -191,7 +175,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
             <h3 className="text-sm font-semibold">{t.analytics.funnelTitle}</h3>
             <p className="text-xs text-muted">{t.analytics.funnelHint}</p>
           </div>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             {funnels.map((f) => (
               <div key={f.agentId} className="space-y-2 rounded-xl border border-border p-4 text-sm">
                 <div className="font-medium">{f.title}</div>
@@ -230,7 +214,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
         </Card>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[2fr_1fr]">
         <Card className="overflow-x-auto p-5">
           <h3 className="mb-3 text-sm font-semibold">{t.analytics.byAgent}</h3>
           <table className="w-full min-w-[560px] text-sm">

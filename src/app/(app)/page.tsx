@@ -17,7 +17,7 @@ import type { Dict } from "@/lib/i18n";
 import { dashboardData, type Decision } from "@/lib/dashboard";
 import { ClientCard } from "@/components/client-card";
 import { contactLabel } from "@/lib/contact";
-import { Card, cx } from "@/components/ui";
+import { Card, EmptyState, cx } from "@/components/ui";
 
 /** Главная «Сегодня»: кто ждёт человека, что требует решения, сводка за сутки и клиенты. */
 export default async function TodayPage() {
@@ -53,11 +53,11 @@ export default async function TodayPage() {
         />
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-5">
+      <section className="grid grid-cols-1 gap-6 lg:grid-cols-5">
         <Card className="overflow-hidden lg:col-span-3">
           <SectionHead title={t.home.waitingTitle} count={waiting.length} tone="danger" link={{ href: "/inbox", label: t.home.waitingAll }} />
           {waiting.length === 0 ? (
-            <Empty icon={<Sparkles className="size-5" />} text={t.home.waitingEmpty} />
+            <EmptyState icon={<Sparkles />} tone="success" text={t.home.waitingEmpty} className="rounded-none border-0" />
           ) : (
             <ul className="divide-y divide-border">
               {waiting.slice(0, 6).map((w) => (
@@ -95,7 +95,7 @@ export default async function TodayPage() {
         <Card className="overflow-hidden lg:col-span-2">
           <SectionHead title={t.home.decisionsTitle} count={decisions.length} tone="accent" />
           {decisions.length === 0 ? (
-            <Empty icon={<Sparkles className="size-5" />} text={t.home.decisionsEmpty} />
+            <EmptyState icon={<Sparkles />} tone="success" text={t.home.decisionsEmpty} className="rounded-none border-0" />
           ) : (
             <ul className="divide-y divide-border">
               {decisions.map((d, i) => (
@@ -116,7 +116,7 @@ export default async function TodayPage() {
             <ArrowRight className="size-3.5" />
           </Link>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {data.clients.map((c) => (
             <ClientCard key={c.id} client={c} t={t} />
           ))}
@@ -167,15 +167,6 @@ function SectionHead({ title, count, tone, link }: { title: string; count: numbe
           <ArrowRight className="size-3.5" />
         </Link>
       )}
-    </div>
-  );
-}
-
-function Empty({ icon, text }: { icon: ReactNode; text: string }) {
-  return (
-    <div className="flex flex-col items-center gap-2 px-6 py-10 text-center">
-      <span className="grid size-10 place-items-center rounded-full bg-success/10 text-success">{icon}</span>
-      <p className="max-w-xs text-sm text-muted">{text}</p>
     </div>
   );
 }
