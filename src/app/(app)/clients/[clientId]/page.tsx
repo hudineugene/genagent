@@ -38,7 +38,7 @@ export default async function ClientPage({
 
   return (
     <div className="mx-auto max-w-6xl">
-      <BackLink href="/" label={t.nav.clients} />
+      <BackLink href="/clients" label={t.nav.clients} />
       <PageHeader
         icon={<ClientAvatar name={client.name} color={client.color} size={56} />}
         title={client.name}

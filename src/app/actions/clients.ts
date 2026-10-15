@@ -42,5 +42,5 @@ export async function deleteClient(id: string) {
   removeIndexForClient(id);
   await db.delete(clients).where(eq(clients.id, id));
   refresh();
-  redirect("/");
+  redirect("/clients");
 }

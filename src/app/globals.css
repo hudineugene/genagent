@@ -14,8 +14,11 @@
   --success: #12a150;
 }
 
+/* Тема: data-theme на <html> ставит скрипт в layout (выбор пользователя или системная); без скрипта — как в системе. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #0e1016;
     --surface: #161922;
     --surface-2: #1d212c;
@@ -29,6 +32,23 @@
     --success: #3ddc84;
   }
 }
+
+:root[data-theme="dark"] {
+  --bg: #0e1016;
+  --surface: #161922;
+  --surface-2: #1d212c;
+  --border: #2a2f3d;
+  --text: #eceef4;
+  --muted: #8d94a6;
+  --accent: #7c7cff;
+  --accent-soft: #23244a;
+  --accent-text: #ffffff;
+  --danger: #ff6b78;
+  --success: #3ddc84;
+}
+
+:root { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
 
 @theme inline {
   --color-bg: var(--bg);

@@ -8,7 +8,7 @@ export default async function NewClientPage() {
   const { t } = await getT();
   return (
     <div className="mx-auto max-w-3xl">
-      <BackLink href="/" label={t.nav.clients} />
+      <BackLink href="/clients" label={t.nav.clients} />
       <PageHeader title={t.clients.createTitle} />
       <ClientForm action={createClient} />
     </div>

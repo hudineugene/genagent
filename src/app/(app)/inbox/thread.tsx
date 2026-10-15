@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import { ArrowLeft, Bot, BookOpen, Check, CheckCircle2, ExternalLink, FlaskConical, Hand, Pencil, RotateCcw, SendHorizontal, Trash2, X } from "lucide-react";
 import { scenarioFromConversationAction } from "@/app/actions/tests";
 import {
@@ -17,9 +17,10 @@ import {
 } from "@/app/actions/inbox";
 import type { ConversationContext, MessageMeta } from "@/db/schema";
 import { useI18n } from "@/lib/i18n/client";
-import { Badge, Button, Spinner, cx } from "@/components/ui";
+import { Button, Spinner, cx } from "@/components/ui";
 import type { ChannelType } from "@/db/schema";
-import { CHANNEL_ICONS, contactLabel } from "./list";
+import { CHANNEL_ICONS, ContactAvatar, contactLabel } from "./list";
+import { InfoToggle } from "./info-panel";
 
 export type ThreadData = {
   id: string;
@@ -97,35 +98,50 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-3">
+      <div className="flex items-center gap-3 border-b border-border px-4 py-2.5">
         <Link href={backHref} replace className="text-muted hover:text-text md:hidden">
           <ArrowLeft className="size-5" />
         </Link>
+        <ContactAvatar id={data.id} label={contactLabel(data, t.inbox)} size={38} />
         <div className="min-w-0 flex-1">
           <div className="truncate font-semibold">{contactLabel(data, t.inbox)}</div>
           <div className="flex items-center gap-1.5 truncate text-xs text-muted">
-            <ChannelIcon className="size-3" />
-            {data.contactHandle && data.contactName ? `${data.contactHandle} · ` : ""}
-            {data.channelName === "Widget" ? t.channels.widget : data.channelName} · {data.clientName} ·{" "}
-            <Link href={`/agents/${data.agentId}`} className="hover:text-accent">
-              {data.agentIcon} {data.agentName}
-            </Link>
+            <span
+              className={cx(
+                "inline-flex shrink-0 items-center gap-1 font-medium whitespace-nowrap",
+                data.status === "closed" ? "text-muted" : data.mode === "human" ? "text-amber-600 dark:text-amber-400" : "text-success",
+              )}
+            >
+              <span className={cx("size-1.5 rounded-full", data.status === "closed" ? "bg-muted" : data.mode === "human" ? "bg-amber-500" : "bg-success")} />
+              {data.status === "closed" ? t.inbox.closed : data.mode === "human" ? t.inbox.humanMode : t.inbox.agentMode}
+            </span>
+            ·
+            <ChannelIcon className="size-3 shrink-0" />
+            <span className="truncate">
+              {data.contactHandle && data.contactName ? `${data.contactHandle} · ` : ""}
+              {data.channelName === "Widget" ? t.channels.widget : data.channelName} · {data.clientName} ·{" "}
+              <Link href={`/agents/${data.agentId}`} className="hover:text-accent">
+                {data.agentIcon} {data.agentName}
+              </Link>
+            </span>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {data.status === "closed" ? (
-            <Badge>{t.inbox.closed}</Badge>
+        <div className="flex shrink-0 items-center gap-1">
+          {pending && <Spinner className="mr-1 text-muted" />}
+          {!data.botReplies || data.status === "closed" ? null : data.mode === "ai" ? (
+            <Button size="sm" variant="secondary" disabled={pending} onClick={() => run(() => takeOver(data.id))}>
+              <Hand className="size-4" />
+              <span className="hidden sm:inline">{t.inbox.takeOver}</span>
+            </Button>
           ) : (
-            <Badge tone={data.mode === "human" ? "warning" : "success"}>
-              {data.mode === "human" ? t.inbox.humanMode : t.inbox.agentMode}
-            </Badge>
+            <Button size="sm" variant="secondary" disabled={pending} onClick={() => run(() => returnToAgent(data.id))}>
+              <Bot className="size-4" />
+              <span className="hidden sm:inline">{t.inbox.returnToAgent}</span>
+            </Button>
           )}
-          {pending && <Spinner className="text-muted" />}
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={pending}
+          <IconAction
             title={t.inbox.toTestHint}
+            disabled={pending}
             onClick={() =>
               run(async () => {
                 const r = await scenarioFromConversationAction(data.id);
@@ -135,45 +151,19 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
             }
           >
             <FlaskConical className="size-4" />
-            {t.inbox.toTest}
-          </Button>
-          {!data.botReplies ? null : data.mode === "ai" ? (
-            <Button size="sm" variant="secondary" disabled={pending} onClick={() => run(() => takeOver(data.id))}>
-              <Hand className="size-4" />
-              {t.inbox.takeOver}
-            </Button>
-          ) : (
-            <Button size="sm" variant="secondary" disabled={pending} onClick={() => run(() => returnToAgent(data.id))}>
-              <Bot className="size-4" />
-              {t.inbox.returnToAgent}
-            </Button>
-          )}
+          </IconAction>
           {data.status === "open" ? (
-            <Button
-              size="sm"
-              variant="ghost"
-              title={t.inbox.close}
-              disabled={pending}
-              onClick={() => run(() => setConversationStatus(data.id, "closed"))}
-            >
+            <IconAction title={t.inbox.close} disabled={pending} onClick={() => run(() => setConversationStatus(data.id, "closed"))}>
               <CheckCircle2 className="size-4" />
-            </Button>
+            </IconAction>
           ) : (
-            <Button
-              size="sm"
-              variant="ghost"
-              title={t.inbox.reopen}
-              disabled={pending}
-              onClick={() => run(() => setConversationStatus(data.id, "open"))}
-            >
+            <IconAction title={t.inbox.reopen} disabled={pending} onClick={() => run(() => setConversationStatus(data.id, "open"))}>
               <RotateCcw className="size-4" />
-            </Button>
+            </IconAction>
           )}
-          <Button
-            size="sm"
-            variant="ghost"
-            className="hover:text-danger"
+          <IconAction
             title={t.inbox.delete}
+            danger
             disabled={pending}
             onClick={() => {
               if (!confirm(t.inbox.deleteConfirm)) return;
@@ -185,7 +175,8 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
             }}
           >
             <Trash2 className="size-4" />
-          </Button>
+          </IconAction>
+          <InfoToggle />
         </div>
       </div>
 
@@ -319,6 +310,24 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
         <p className="px-4 pb-3 text-xs text-muted">{t.inbox.apiViaBot}</p>
       )}
     </div>
+  );
+}
+
+function IconAction({ title, onClick, disabled, danger, children }: { title: string; onClick: () => void; disabled?: boolean; danger?: boolean; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-label={title}
+      disabled={disabled}
+      onClick={onClick}
+      className={cx(
+        "grid size-8 place-items-center rounded-lg text-muted transition hover:bg-surface-2 disabled:opacity-50",
+        danger ? "hover:text-danger" : "hover:text-text",
+      )}
+    >
+      {children}
+    </button>
   );
 }
 
