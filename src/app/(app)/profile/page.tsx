@@ -11,7 +11,7 @@ export default async function ProfilePage() {
   const me = await requireUser();
   return (
     <div className="mx-auto max-w-2xl">
-      <PageHeader title={t.profile.title} subtitle={t.profile.subtitle} />
+      <PageHeader title={t.profile.title} />
       <ProfileForms name={me.name} email={me.email} />
       {/* Язык, тема и выход — на телефоне в меню их нет */}
       <Card className="mt-6 flex flex-wrap items-center gap-3 p-5">

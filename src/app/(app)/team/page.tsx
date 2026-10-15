@@ -16,7 +16,7 @@ export default async function TeamPage() {
 
   return (
     <div className="mx-auto max-w-4xl">
-      <PageHeader title={t.team.title} subtitle={t.team.subtitle} />
+      <PageHeader title={t.team.title} />
       <TeamManager members={members} meId={me.id} />
     </div>
   );

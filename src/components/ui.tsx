@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { InfoHint } from "./hint";
 import type {
   ButtonHTMLAttributes,
   InputHTMLAttributes,
@@ -67,9 +68,11 @@ export function Field({
 }) {
   return (
     <label className={cx("block", className)}>
-      <span className="mb-1.5 block text-sm font-medium">{label}</span>
+      <span className="mb-1.5 flex items-center gap-1 text-sm font-medium">
+        {label}
+        {hint && <InfoHint>{hint}</InfoHint>}
+      </span>
       {children}
-      {hint && <span className="mt-1.5 block text-xs text-muted">{hint}</span>}
     </label>
   );
 }
@@ -116,7 +119,7 @@ export function PageHeader({
   icon?: ReactNode;
 }) {
   return (
-    <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
+    <div className="mb-7 flex flex-wrap items-center justify-between gap-4">
       <div className="flex min-w-0 items-center gap-4">
         {icon}
         <div className="min-w-0">

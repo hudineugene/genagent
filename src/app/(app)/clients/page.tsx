@@ -13,7 +13,6 @@ export default async function ClientsPage() {
     <div className="mx-auto max-w-6xl">
       <PageHeader
         title={t.clients.title}
-        subtitle={t.clients.subtitle}
         actions={
           <Link href="/clients/new" className={buttonClass()}>
             <Plus className="size-4" />

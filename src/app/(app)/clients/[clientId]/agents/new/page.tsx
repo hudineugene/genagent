@@ -16,7 +16,7 @@ export default async function NewAgentPage({ params }: { params: Promise<{ clien
   return (
     <div className="mx-auto max-w-5xl">
       <BackLink href={`/clients/${client.id}`} label={client.name} />
-      <PageHeader title={t.newAgent.title} subtitle={t.newAgent.subtitle} />
+      <PageHeader title={t.newAgent.title} />
       <NewAgentWizard clientId={client.id} />
     </div>
   );

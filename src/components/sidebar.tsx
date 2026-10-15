@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useSyncExternalStore, useTransition } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import {
   BarChart3,
   Building2,
@@ -10,6 +10,7 @@ import {
   LogOut,
   MessagesSquare,
   Monitor,
+  MoreHorizontal,
   Moon,
   Plug,
   Search,
@@ -56,10 +57,7 @@ export function Sidebar({ userName, isAdmin, inboxBadge }: { userName: string; i
         <span className="grid size-9 place-items-center rounded-xl bg-gradient-to-br from-accent to-violet-500 text-accent-text shadow-md shadow-accent/25">
           <Sparkles className="size-5" />
         </span>
-        <span className="hidden leading-tight md:block">
-          <span className="block font-semibold tracking-tight">{t.app.name}</span>
-          <span className="block text-xs text-muted">{t.app.tagline}</span>
-        </span>
+        <span className="hidden font-semibold tracking-tight md:block">{t.app.name}</span>
       </Link>
 
       {/* Поиск: на телефоне — иконка, на компьютере — поле с подсказкой Ctrl K */}
@@ -74,9 +72,9 @@ export function Sidebar({ userName, isAdmin, inboxBadge }: { userName: string; i
         <kbd className="hidden rounded-md border border-border bg-surface px-1.5 text-[11px] font-medium md:inline">Ctrl K</kbd>
       </button>
 
-      <nav className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none] md:flex-col md:items-stretch md:gap-5 md:overflow-visible">
-        <NavGroup title={t.nav.groupWork} items={work} />
-        {settings.length > 0 && <NavGroup title={t.nav.groupSettings} items={settings} />}
+      <nav className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none] md:flex-col md:items-stretch md:gap-3 md:overflow-visible md:[&>div+div]:border-t md:[&>div+div]:border-border md:[&>div+div]:pt-3">
+        <NavGroup items={work} />
+        {settings.length > 0 && <NavGroup items={settings} />}
       </nav>
 
       {/* Телефон: профиль (там же язык и выход) — аватаром в конце строки */}
@@ -88,43 +86,80 @@ export function Sidebar({ userName, isAdmin, inboxBadge }: { userName: string; i
         {userName.trim().charAt(0).toUpperCase() || "?"}
       </Link>
 
-      <div className="hidden md:block md:space-y-3 md:border-t md:border-border md:pt-4">
-        <div className="flex items-center justify-between gap-1.5 px-1">
-          <LocaleSwitch />
-          <ThemeSwitch />
-        </div>
-        <div className="flex items-center gap-1">
-          <Link
-            href="/profile"
-            className={cx(
-              "flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-2 py-1.5 transition hover:bg-surface-2",
-              pathname.startsWith("/profile") && "bg-surface-2",
-            )}
-            title={t.nav.profile}
-          >
-            <span className="grid size-8 shrink-0 place-items-center rounded-full bg-accent-soft text-sm font-semibold text-accent">
-              {userName.trim().charAt(0).toUpperCase() || "?"}
-            </span>
-            <span className="min-w-0 leading-tight">
-              <span className="block truncate text-sm font-medium">{userName}</span>
-              <span className="block truncate text-xs text-muted">{t.nav.profile}</span>
-            </span>
-          </Link>
-          <form action={logout}>
-            <button className="grid size-9 place-items-center rounded-xl text-muted transition hover:bg-surface-2 hover:text-danger" title={t.nav.logout}>
-              <LogOut className="size-4" />
-            </button>
-          </form>
-        </div>
+      {/* Компьютер: внизу — профиль; язык, тема и выход — в меню «⋯» */}
+      <div className="relative hidden items-center gap-1 md:flex md:border-t md:border-border md:pt-3">
+        <Link
+          href="/profile"
+          className={cx(
+            "flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-2 py-1.5 transition hover:bg-surface-2",
+            pathname.startsWith("/profile") && "bg-surface-2",
+          )}
+          title={t.nav.profile}
+        >
+          <span className="grid size-8 shrink-0 place-items-center rounded-full bg-accent-soft text-sm font-semibold text-accent">
+            {userName.trim().charAt(0).toUpperCase() || "?"}
+          </span>
+          <span className="truncate text-sm font-medium">{userName}</span>
+        </Link>
+        <ProfileMenu />
       </div>
     </aside>
   );
 }
 
-function NavGroup({ title, items }: { title: string; items: NavItem[] }) {
+/** Меню «⋯» у профиля: язык, тема, выход. Закрывается кликом мимо и Esc. */
+function ProfileMenu() {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent | KeyboardEvent) => {
+      if (e instanceof KeyboardEvent ? e.key === "Escape" : !ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", close);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", close);
+    };
+  }, [open]);
+  return (
+    <div ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        title={t.nav.groupSettings}
+        className={cx("grid size-9 place-items-center rounded-xl text-muted transition hover:bg-surface-2 hover:text-text", open && "bg-surface-2 text-text")}
+      >
+        <MoreHorizontal className="size-4" />
+      </button>
+      {open && (
+        <div className="absolute right-0 bottom-full left-0 mb-2 space-y-3 rounded-2xl border border-border bg-surface p-3 shadow-xl">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs text-muted">{t.nav.language}</span>
+            <LocaleSwitch />
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs text-muted">{t.nav.theme}</span>
+            <ThemeSwitch />
+          </div>
+          <form action={logout} className="border-t border-border pt-2">
+            <button className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-muted transition hover:bg-surface-2 hover:text-danger">
+              <LogOut className="size-4" />
+              {t.nav.logout}
+            </button>
+          </form>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NavGroup({ items }: { items: NavItem[] }) {
   return (
     <div className="flex gap-0.5 md:flex-col">
-      <div className="hidden px-3 pb-1.5 text-[11px] font-semibold tracking-wider text-muted/80 uppercase md:block">{title}</div>
       {items.map(({ href, label, icon: Icon, active, badge }) => (
         <Link
           key={href}

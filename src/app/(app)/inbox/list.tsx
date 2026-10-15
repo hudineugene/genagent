@@ -61,20 +61,24 @@ export function ConversationList({ items, selectedId }: { items: ListItem[]; sel
               href={c.href}
               replace
               className={cx(
-                "relative flex gap-3 border-b border-border/60 px-4 py-2.5 transition",
+                "relative flex items-center gap-3 border-b border-border/60 px-4 py-3 transition",
                 selected ? "bg-accent-soft/70" : "hover:bg-surface-2/70",
               )}
             >
               {selected && <span className="absolute inset-y-0 left-0 w-0.5 bg-accent" />}
-              <span className="relative mt-0.5 h-fit self-start">
-                <ContactAvatar id={c.id} label={label} />
+              <span className="relative shrink-0">
+                <ContactAvatar id={c.id} label={label} anonymous={!c.contactName && !c.contactHandle} />
                 <span className="absolute -right-1 -bottom-1 grid size-[18px] place-items-center rounded-full border-2 border-surface bg-surface-2 text-muted">
                   <ChannelIcon className="size-2.5" />
                 </span>
               </span>
               <span className="min-w-0 flex-1">
-                <span className="flex items-center gap-2">
+                <span className="flex items-center gap-1.5">
+                  <span className="size-1.5 shrink-0 rounded-full" style={{ background: c.clientColor }} title={`${c.clientName} · ${c.agentName}`} />
                   <span className={cx("truncate text-sm", c.unread > 0 ? "font-semibold" : "font-medium")}>{label}</span>
+                  {c.mode === "human" && c.status !== "closed" && (
+                    <span className="shrink-0 rounded bg-amber-500/15 px-1 text-[10px] leading-4 text-amber-600 dark:text-amber-400">{t.inbox.humanMode}</span>
+                  )}
                   {c.upset && waiting && (
                     <span className="shrink-0 text-[11px]" title={t.home.upset}>
                       🔴
@@ -92,15 +96,6 @@ export function ConversationList({ items, selectedId }: { items: ListItem[]; sel
                     <span className="ml-auto min-w-5 shrink-0 rounded-full bg-accent px-1.5 text-center text-[11px] leading-5 font-semibold text-accent-text">
                       {c.unread}
                     </span>
-                  )}
-                </span>
-                <span className="mt-1 flex items-center gap-1.5 text-[11px] text-muted">
-                  <span className="size-1.5 shrink-0 rounded-full" style={{ background: c.clientColor }} />
-                  <span className="truncate">
-                    {c.clientName} · {c.agentName}
-                  </span>
-                  {c.mode === "human" && c.status !== "closed" && (
-                    <span className="shrink-0 rounded bg-amber-500/15 px-1 text-amber-600 dark:text-amber-400">{t.inbox.humanMode}</span>
                   )}
                 </span>
               </span>

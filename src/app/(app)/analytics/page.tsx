@@ -128,7 +128,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
   const funnels = (await agentFunnels(from.getTime())).filter((f) => !clientId || f.clientId === clientId);
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <PageHeader title={t.analytics.title} subtitle={t.analytics.subtitle} />
+      <PageHeader title={t.analytics.title} />
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="inline-flex rounded-xl bg-surface-2 p-1">

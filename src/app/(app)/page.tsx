@@ -24,6 +24,8 @@ export default async function TodayPage() {
   const { t, locale } = await getT();
   const data = await dashboardData();
   const { today, waiting, decisions } = data;
+  const gaps = decisions.filter((d): d is Extract<Decision, { kind: "gaps" }> => d.kind === "gaps");
+  const decisionRows = decisions.length - gaps.length + (gaps.length ? 1 : 0);
   const date = new Intl.DateTimeFormat(locale === "uk" ? "uk-UA" : "ru-RU", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Kyiv" }).format(new Date());
 
   return (
@@ -31,7 +33,6 @@ export default async function TodayPage() {
       <header>
         <p className="text-sm font-medium text-muted first-letter:uppercase">{date}</p>
         <h1 className="mt-1 text-3xl font-semibold tracking-tight">{t.home.title}</h1>
-        <p className="mt-1 text-sm text-muted">{t.home.greeting}</p>
       </header>
 
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -63,19 +64,25 @@ export default async function TodayPage() {
               {waiting.slice(0, 6).map((w) => (
                 <li key={w.id}>
                   <Link href={`/inbox?c=${w.id}`} className="flex items-center gap-3 px-5 py-3 transition hover:bg-surface-2/60">
-                    <span className="grid size-9 shrink-0 place-items-center rounded-full text-sm font-semibold text-white" style={{ background: w.color }}>
-                      {w.name || w.handle ? (w.name || w.handle).replace(/^@/, "").charAt(0).toUpperCase() : <UserRound className="size-4" />}
-                    </span>
+                    {w.name || w.handle ? (
+                      <span className="grid size-9 shrink-0 place-items-center rounded-full text-sm font-semibold text-white" style={{ background: w.color }}>
+                        {(w.name || w.handle).replace(/^@/, "").charAt(0).toUpperCase()}
+                      </span>
+                    ) : (
+                      <span className="grid size-9 shrink-0 place-items-center rounded-full bg-surface-2 text-muted">
+                        <UserRound className="size-4" />
+                      </span>
+                    )}
                     <span className="min-w-0 flex-1">
-                      <span className="flex items-center gap-2">
+                      <span className="flex items-baseline gap-2">
                         <span className="truncate text-sm font-semibold">{contactLabel({ contactName: w.name, contactHandle: w.handle, channelType: w.channelType, id: w.id }, t.inbox)}</span>
-                        {w.upset && <span className="shrink-0 rounded-full bg-danger/10 px-1.5 py-px text-[11px] font-semibold text-danger">🔴 {t.home.upset}</span>}
+                        <span className="truncate text-xs text-muted" title={`${w.client} · ${w.agent}`}>
+                          {w.client}
+                          {w.mode === "human" && ` · ${t.home.managerMode}`}
+                        </span>
+                        {w.upset && <span className="shrink-0 text-[11px]" title={t.home.upset}>🔴</span>}
                       </span>
                       <span className="block truncate text-sm text-muted">{w.preview}</span>
-                      <span className="block truncate text-xs text-muted/80">
-                        {w.client} · {w.agent}
-                        {w.mode === "human" && ` · ${t.home.managerMode}`}
-                      </span>
                     </span>
                     <span className="shrink-0 text-xs font-medium text-muted tabular-nums">{ago(w.at, t)}</span>
                   </Link>
@@ -92,17 +99,24 @@ export default async function TodayPage() {
           )}
         </Card>
 
-        <Card className="overflow-hidden lg:col-span-2">
-          <SectionHead title={t.home.decisionsTitle} count={decisions.length} tone="accent" />
+        <Card className="self-start overflow-hidden lg:col-span-2">
+          <SectionHead title={t.home.decisionsTitle} count={decisionRows} tone="accent" />
           {decisions.length === 0 ? (
             <EmptyState icon={<Sparkles />} tone="success" text={t.home.decisionsEmpty} className="rounded-none border-0" />
           ) : (
             <ul className="divide-y divide-border">
-              {decisions.map((d, i) => (
-                <li key={i}>
-                  <DecisionRow d={d} t={t} />
+              {gaps.length > 0 && (
+                <li>
+                  <GapsRow gaps={gaps} t={t} />
                 </li>
-              ))}
+              )}
+              {decisions
+                .filter((d) => d.kind !== "gaps")
+                .map((d, i) => (
+                  <li key={i}>
+                    <DecisionRow d={d} t={t} />
+                  </li>
+                ))}
             </ul>
           )}
         </Card>
@@ -143,11 +157,11 @@ function Stat({
 }) {
   const body = (
     <Card className={cx("h-full p-4 transition", href && "hover:border-accent/40 hover:shadow-md hover:shadow-black/5", tone === "danger" && "border-danger/30 bg-danger/[0.04]")}>
-      <div className={cx("flex items-center gap-2 text-xs font-medium text-muted", tone === "danger" && "text-danger")}>
-        <span className={cx("grid size-7 place-items-center rounded-lg bg-surface-2", tone === "danger" && "bg-danger/10")}>{icon}</span>
+      <div className={cx("flex items-center gap-1.5 text-xs font-medium text-muted", tone === "danger" && "text-danger")}>
+        <span className="opacity-70 [&>svg]:size-3.5">{icon}</span>
         {label}
       </div>
-      <div className={cx("mt-3 text-2xl font-semibold tracking-tight tabular-nums", tone === "danger" && "text-danger")}>{value}</div>
+      <div className={cx("mt-2 text-2xl font-semibold tracking-tight tabular-nums", tone === "danger" && "text-danger")}>{value}</div>
       {sub && <div className="mt-0.5 text-xs text-muted">{sub}</div>}
     </Card>
   );
@@ -192,6 +206,36 @@ function DecisionRow({ d, t }: { d: Decision; t: Dict }) {
     return row(`/agents/${d.agentId}`, <CircleDollarSign className="size-4" />, "bg-danger/10 text-danger", <>{t.home.decisionBudget}: ${d.spent.toFixed(2)} / ${d.limit}</>, `${d.client} · ${d.agent}`);
   }
   return row(`/clients/${d.clientId}?tab=kb`, <RefreshCwOff className="size-4" />, "bg-danger/10 text-danger", <>{t.home.decisionSync}{d.days ? ` · ${d.days} ${t.home.decisionSyncDays}` : ""}</>, `${d.client} · ${d.channel}`);
+}
+
+/** Вопросы без ответа у всех агентов — одной строкой: всего и ссылки по клиентам. */
+function GapsRow({ gaps, t }: { gaps: Extract<Decision, { kind: "gaps" }>[]; t: Dict }) {
+  const total = gaps.reduce((n, g) => n + g.count, 0);
+  return (
+    <div className="flex items-start gap-3 px-5 py-3">
+      <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-amber-500/12 text-amber-600 dark:text-amber-400">
+        <CircleHelp className="size-4" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-medium">
+          {t.home.decisionGaps} <Count n={total} />
+        </span>
+        <span className="mt-1.5 flex flex-wrap gap-1.5">
+          {gaps.map((g) => (
+            <Link
+              key={g.agentId}
+              href={`/agents/${g.agentId}/gaps`}
+              title={g.agent}
+              className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs text-muted transition hover:border-accent/40 hover:text-accent"
+            >
+              {g.client}
+              <b className="font-semibold text-text tabular-nums">{g.count}</b>
+            </Link>
+          ))}
+        </span>
+      </span>
+    </div>
+  );
 }
 
 function Count({ n }: { n: number }) {

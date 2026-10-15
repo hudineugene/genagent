@@ -145,7 +145,7 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
         <Link href={backHref} replace className="text-muted hover:text-text md:hidden">
           <ArrowLeft className="size-5" />
         </Link>
-        <ContactAvatar id={data.id} label={contactLabel(data, t.inbox)} size={38} />
+        <ContactAvatar id={data.id} label={contactLabel(data, t.inbox)} size={38} anonymous={!data.contactName && !data.contactHandle} />
         <div className="min-w-0 flex-1">
           <div className="truncate font-semibold">{contactLabel(data, t.inbox)}</div>
           <div className="flex items-center gap-1.5 truncate text-xs text-muted">

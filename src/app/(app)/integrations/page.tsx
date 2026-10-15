@@ -71,7 +71,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
 
   return (
     <div className="mx-auto max-w-5xl">
-      <PageHeader title={s.title} subtitle={s.subtitle} />
+      <PageHeader title={s.title} />
       <div className="grid grid-cols-1 gap-6 md:grid-cols-[220px_minmax(0,1fr)]">
         <nav className="flex gap-1 overflow-x-auto [scrollbar-width:none] md:flex-col md:overflow-visible">
           {TABS.map((key) => (

@@ -314,7 +314,7 @@ function PickHint({
             return (
               <li key={w.id}>
                 <Link href={hrefFor(w.id)} replace className="group flex items-center gap-3 px-4 py-3 transition hover:bg-surface-2/60">
-                  <ContactAvatar id={w.id} label={label} size={34} />
+                  <ContactAvatar id={w.id} label={label} size={34} anonymous={!w.contactName && !w.contactHandle} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-medium">{label}</span>
                     <span className="block truncate text-xs text-muted">
@@ -337,16 +337,11 @@ function PickHint({
 
 function ConversationInfo({ info, data, t, locale }: { info: Info; data: ThreadData; t: Dict; locale: string }) {
   const fmt = new Intl.DateTimeFormat(locale === "uk" ? "uk-UA" : "ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
-  const label = contactLabel(data, t.inbox);
   return (
     <div className="space-y-5 p-5 text-sm">
-      <div className="flex flex-col items-center text-center">
-        <ContactAvatar id={data.id} label={label} size={56} />
-        <div className="mt-2 font-semibold">{label}</div>
-        {data.contactHandle && data.contactName && <div className="text-xs text-muted">{data.contactHandle}</div>}
-        {info.language && <div className="mt-1 rounded-full bg-surface-2 px-2 py-0.5 text-[11px] text-muted uppercase">{info.language}</div>}
-      </div>
       <dl className="space-y-2.5">
+        {data.contactHandle && data.contactName && <Row label={t.inbox.infoHandle}>{data.contactHandle}</Row>}
+        {info.language && <Row label={t.inbox.infoLanguage}>{info.language.toUpperCase()}</Row>}
         <Row label={t.inbox.infoChannel}>{data.channelName === "Widget" ? t.channels.widget : data.channelName}</Row>
         <Row label={t.inbox.infoClient}>{data.clientName}</Row>
         <Row label={t.inbox.infoAgent}>
