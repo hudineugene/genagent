@@ -98,6 +98,17 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "Caddy: домен не подключён — смотрите сообщения выше" }
     }
     Write-Host "ГОТОВО. Студия: https://$AdminOrigin"
+
+    # Копия истории на GitHub (закрытый репозиторий hudineugene/genagent) — после успешной выкладки.
+    # Отправляются записанные изменения (git commit); не получилось — выкладка всё равно состоялась.
+    $ErrorActionPreference = "Continue"  # сообщения git в stderr Windows PowerShell иначе считает ошибкой
+    Push-Location $Root
+    if (git remote 2>$null) {
+        git push -q origin HEAD *> $null
+        if ($LASTEXITCODE -eq 0) { Write-Host "История отправлена на GitHub." }
+        else { Write-Host "История на GitHub не отправилась (нет сети или вход устарел) — выкладка при этом прошла. Вручную: git push" -ForegroundColor Yellow }
+    }
+    Pop-Location
 }
 finally {
     # во временной папке могли лежать база и секреты — убираем
