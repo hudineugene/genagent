@@ -9,7 +9,9 @@ import { addMessage, upsertConversation } from "@/lib/conversations";
  * Свой бот сообщает, что произошло в разговоре без агента, — чтобы в «Диалогах» была вся переписка:
  *  • user — клиент написал, пока его ведёт менеджер (агенту не отправлялось);
  *  • operator — менеджер ответил клиенту в самом боте (диалог у менеджера);
- *  • returned — менеджер в боте вернул клиента ИИ.
+ *  • returned — менеджер в боте вернул клиента ИИ;
+ *  • media — клиент прислал не текст (стикер, фото, голосовое…), text — подпись вроде «Стикер». Режим диалога
+ *    не меняем; у менеджера — как обычное сообщение клиента (с уведомлением), у агента — просто строка в истории.
  * Агент на эти события не отвечает. externalId «bot» — чтобы очередь /outbox не отправила их обратно в бот.
  */
 const bodySchema = z.object({
@@ -18,7 +20,7 @@ const bodySchema = z.object({
     name: z.string().max(200).optional(),
     username: z.string().max(100).optional(),
   }),
-  role: z.enum(["user", "operator", "returned"]),
+  role: z.enum(["user", "operator", "returned", "media"]),
   text: z.string().trim().max(4000).default(""),
 });
 
@@ -36,7 +38,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ channel
     name: user.name?.trim() || undefined,
     handle: user.username ? `@${user.username.replace(/^@/, "")}` : undefined,
   });
-  if (role === "user") {
+  if (role === "media") {
+    const label = `[${text}]`;
+    const m = await addMessage(conversation.id, "user", label, { externalId: "bot" });
+    if (conversation.mode !== "ai") {
+      await db.update(conversations).set({ needsAttention: true }).where(eq(conversations.id, conversation.id));
+      void import("@/lib/notify/telegram").then((n) => n.notifyClientMessage(conversation.id, label, m.id));
+    }
+  } else if (role === "user") {
     const m = await addMessage(conversation.id, "user", text, { externalId: "bot" });
     await db.update(conversations).set({ mode: "human", needsAttention: true }).where(eq(conversations.id, conversation.id));
     // Сотруднику в Telegram — с кнопкой «Ответить» (если бот забирает ответы менеджера)

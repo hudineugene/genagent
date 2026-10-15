@@ -45,6 +45,8 @@ export async function register() {
   startWeeklyReview();
   const { startMonthlyReports } = await import("./lib/agent/report");
   startMonthlyReports();
+  const { startWatch } = await import("./lib/agent/watch");
+  startWatch();
   const { startFollowUps } = await import("./lib/agent/followups");
   startFollowUps();
 

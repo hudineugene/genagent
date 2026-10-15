@@ -263,7 +263,7 @@ export async function notifyGaps(agentId: string, count: number) {
 /** Отчёт еженедельной проверки агентов (автотесты). */
 export async function notifyTestsReport(html: string, url?: string) {
   try {
-    await broadcast(html, url ? { inline_keyboard: [[{ text: url.includes("/analytics") ? "Открыть аналитику" : url.includes("/inbox") ? "Открыть диалоги" : "Открыть автотесты", url }]] } : undefined);
+    await broadcast(html, url ? { inline_keyboard: [[{ text: url.includes("/analytics") ? "Открыть аналитику" : url.includes("/inbox") ? "Открыть диалоги" : url.includes("tab=kb") ? "Открыть базу знаний" : url.includes("/review") ? "Открыть разбор" : "Открыть автотесты", url }]] } : undefined);
   } catch (e) {
     console.error("notify tests failed", e);
   }

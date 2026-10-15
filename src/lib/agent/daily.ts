@@ -1,7 +1,7 @@
 import "server-only";
 import { and, eq, gt } from "drizzle-orm";
 import { db } from "@/db";
-import { conversations, knowledgeGaps, messages } from "@/db/schema";
+import { conversations, knowledgeGaps, messages, usageLog } from "@/db/schema";
 import { getSetting, setSetting } from "@/lib/settings";
 import { agentFunnels } from "./funnel";
 
@@ -54,6 +54,9 @@ type AgentDay = {
   results: { label: string; n: number }[];
   ratingUp: number;
   ratingDown: number;
+  /** Расход на ИИ за сутки и обычный суточный (среднее за прошлую неделю), $ */
+  cost: number;
+  usualCost: number;
 };
 
 /** Сводка за сутки до sinceMs. Пустая строка — за сутки ничего не было и никто не ждёт. */
@@ -103,6 +106,8 @@ export async function dailyDigestHtml(sinceMs = Date.now() - DAY_MS, adminUrl?: 
       results: (f?.steps ?? []).filter((s) => !["followup_sent", "brief_started", "brief_prefilled"].includes(s.type)).map((s) => ({ label: s.label, n: s.total })),
       ratingUp: f?.ratingUp ?? 0,
       ratingDown: f?.ratingDown ?? 0,
+      cost: 0,
+      usualCost: 0,
     });
   }
   const people = new Map<string, { wrote: Set<string>; answered: Set<string> }>();
@@ -124,6 +129,17 @@ export async function dailyDigestHtml(sinceMs = Date.now() - DAY_MS, adminUrl?: 
     day.wrote = p.wrote.size;
     day.answered = p.answered.size;
   }
+  // Расходы на ИИ: за сутки и в среднем за сутки прошлой недели
+  const usage = await db
+    .select({ agentId: usageLog.agentId, cost: usageLog.cost, createdAt: usageLog.createdAt })
+    .from(usageLog)
+    .where(gt(usageLog.createdAt, new Date(sinceMs - 7 * DAY_MS)));
+  for (const u of usage) {
+    const day = u.agentId ? byAgent.get(u.agentId) : undefined;
+    if (!day) continue;
+    if (u.createdAt.getTime() > sinceMs) day.cost += u.cost ?? 0;
+    else day.usualCost += (u.cost ?? 0) / 7;
+  }
   for (const w of waitingRows) byAgent.get(w.agentId)?.waiting.push({ conversationId: w.id, name: w.name || w.handle || "клиент" });
 
   const list = [...byAgent.values()].filter((d) => d.wrote || d.answered || d.handoffs || d.waiting.length || d.results.length || d.newGaps);
@@ -137,6 +153,10 @@ export async function dailyDigestHtml(sinceMs = Date.now() - DAY_MS, adminUrl?: 
     if (d.upset) lines.push(`🔴 Недовольны: ${d.upset}`);
     if (d.results.length) lines.push(`Результаты: ${d.results.map((r) => `${esc(r.label)} — ${r.n}`).join(", ")}`);
     if (d.ratingUp || d.ratingDown) lines.push(`Оценки: 👍 ${d.ratingUp} · 👎 ${d.ratingDown}`);
+    if (d.cost >= 0.01) {
+      const high = d.usualCost > 0 && d.cost > d.usualCost * 2 && d.cost >= 0.5;
+      lines.push(`${high ? "⚠️ " : ""}Расход ИИ: ${d.cost.toFixed(2)}${d.usualCost >= 0.01 ? ` (обычно ~${d.usualCost.toFixed(2)} в сутки)` : ""}`);
+    }
     if (d.newGaps) lines.push(`Новых вопросов без ответа: ${d.newGaps}${adminUrl ? ` — <a href="${adminUrl}/agents/${d.agentId}/gaps">открыть</a>` : ""}`);
     if (d.waiting.length) {
       const names = d.waiting.slice(0, 5).map((w) => (adminUrl ? `<a href="${adminUrl}/inbox?c=${w.conversationId}">${esc(w.name)}</a>` : esc(w.name)));

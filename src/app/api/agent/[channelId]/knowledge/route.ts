@@ -5,6 +5,7 @@ import { kbSources } from "@/db/schema";
 import { apiChannel } from "@/lib/channels/api-auth";
 import { indexSource, removeIndexForSource } from "@/lib/kb/store";
 import { normalizeText } from "@/lib/kb/text";
+import { setSetting } from "@/lib/settings";
 
 /**
  * Свой бот присылает базу знаний целиком: { sources: [{ key, title, content }] }.
@@ -68,5 +69,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ channel
     result.removed++;
   }
 
+  // Когда бот последний раз присылал базу — фоновая проверка предупредит, если он замолчит (lib/agent/watch.ts).
+  await setSetting(`kbSyncAt:${channel.id}`, Date.now());
   return Response.json({ ok: true, ...result });
 }
