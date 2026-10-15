@@ -44,9 +44,12 @@ export async function describePhoto(
   const started = Date.now();
   try {
     const client = new Anthropic({ apiKey: key });
+    // Модель сперва размышляет: при маленьком max_tokens размышление съедало весь лимит, и описание
+    // приходило пустым или обрывалось («На фото»). Запас токенов + низкое усилие.
     const res = await client.messages.create({
       model: DESCRIBE_MODEL,
-      max_tokens: 300,
+      max_tokens: 4000,
+      output_config: { effort: "low" },
       system:
         "Ты описываешь фотографию, которую клиент прислал в чат компании, для консультанта, который её не видит. " +
         "Опиши по-русски в 2–4 предложениях, что на фото: главный предмет, важные детали (вид, стиль, состояние, цвета, " +
@@ -69,8 +72,11 @@ export async function describePhoto(
       clientId: owner.clientId,
       ms: Date.now() - started,
     }).catch(() => {});
-    const text = res.content.map((b) => (b.type === "text" ? b.text : "")).join("").trim();
-    return text ? text.slice(0, 800) : null;
+    let text = res.content.map((b) => (b.type === "text" ? b.text : "")).join("").trim();
+    // Обрезано лимитом — оставляем законченные предложения
+    if (res.stop_reason === "max_tokens") text = text.slice(0, text.search(/[.!?»][^.!?»]*$/) + 1).trim();
+    if (text.length > 800) text = text.slice(0, 800);
+    return text.length >= 15 ? text : null;
   } catch (e) {
     console.error("describe photo failed", e);
     return null;

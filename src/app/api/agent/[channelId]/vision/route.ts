@@ -33,7 +33,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ channel
     const client = new Anthropic({ apiKey: key });
     const res = await client.messages.create({
       model: MODEL,
-      max_tokens: 200,
+      // Запас на размышление модели: при 200 оно съедало лимит, и текст приходил пустым
+      max_tokens: 4000,
+      output_config: { effort: "low" },
       system:
         "Ты читаешь текст с фотографии для бота компании. Отвечай только тем, что прямо напечатано на фото, без пояснений и советов. Если прочитать нужное не получается — ответь ровно одним словом: NONE.",
       messages: [
@@ -54,7 +56,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ channel
       clientId: channel.clientId,
       ms: Date.now() - started,
     }).catch(() => {});
-    const text = res.content.map((b) => (b.type === "text" ? b.text : "")).join("").trim();
+    const text = res.stop_reason === "max_tokens" ? "" : res.content.map((b) => (b.type === "text" ? b.text : "")).join("").trim();
     return Response.json({ text: !text || /^NONE\.?$/i.test(text) ? null : text.slice(0, 300) });
   } catch (e) {
     console.error("vision failed", e);
