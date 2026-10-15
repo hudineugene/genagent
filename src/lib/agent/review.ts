@@ -55,6 +55,16 @@ export async function saveAgentReview(agentId: string, review: AgentReview) {
   await setSetting(key(agentId), review);
 }
 
+/** Разборы последних недель (для ежемесячного отчёта владельцу): последние 10, по времени разбора. */
+export async function agentReviewHistory(agentId: string) {
+  return (await getSetting<AgentReview[]>(`agentReviewHistory:${agentId}`)) ?? [];
+}
+
+async function pushReviewHistory(agentId: string, review: AgentReview) {
+  const list = (await agentReviewHistory(agentId)).filter((r) => r.at !== review.at);
+  await setSetting(`agentReviewHistory:${agentId}`, [...list, { ...review, proposals: [] }].slice(-10));
+}
+
 type Conv = { id: string; lines: string[]; flags: Set<string> };
 
 /** Переписки агента за период — компактно, с пометками 👎 / передан / недоволен / ответил сотрудник. */
@@ -203,6 +213,7 @@ export async function reviewAgent(agentId: string, sinceMs = Date.now() - WEEK_M
       })),
   };
   await saveAgentReview(agentId, review);
+  await pushReviewHistory(agentId, review);
   return review;
 }
 

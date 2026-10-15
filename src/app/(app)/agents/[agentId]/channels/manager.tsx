@@ -330,6 +330,9 @@ function WidgetCard({ c, publicUrl }: { c: ChannelItem; publicUrl: string | null
           <Field label={t.channels.subtitleLabel}>
             <Input name="subtitle" defaultValue={w.subtitle} maxLength={120} placeholder={t.channels.subtitlePlaceholder} />
           </Field>
+          <Field label={t.channels.widgetTelegram} hint={t.channels.widgetTelegramHint}>
+            <Input name="telegramBot" defaultValue={w.telegramBot ?? ""} maxLength={33} placeholder="@yourbot" />
+          </Field>
         </div>
         <div className="flex flex-wrap items-end justify-between gap-4">
           <fieldset>

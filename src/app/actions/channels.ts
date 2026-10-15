@@ -105,6 +105,12 @@ const widgetSchema = z.object({
   subtitle: z.string().trim().max(120).default(""),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   position: z.enum(["right", "left"]),
+  telegramBot: z
+    .string()
+    .trim()
+    .regex(/^@?[A-Za-z0-9_]{5,32}$|^$/)
+    .default("")
+    .transform((s) => s.replace(/^@/, "")),
 });
 
 export async function updateWidget(

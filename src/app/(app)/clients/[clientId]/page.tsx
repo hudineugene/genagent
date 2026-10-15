@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { count, desc, eq } from "drizzle-orm";
-import { BookOpen, Bot, Plus, Settings } from "lucide-react";
+import { BarChart3, BookOpen, Bot, Plus, Settings } from "lucide-react";
 import { db } from "@/db";
 import { agents, clients, kbSources } from "@/db/schema";
 import { getT } from "@/lib/i18n/server";
@@ -11,6 +11,7 @@ import { BackLink } from "@/components/back-link";
 import { Badge, Card, ClientAvatar, PageHeader, buttonClass, cx } from "@/components/ui";
 import { KnowledgeBase } from "./knowledge-base";
 import { embeddingProgress, embeddingStatus } from "@/lib/kb/embeddings";
+import { previousMonth } from "@/lib/agent/report";
 
 export default async function ClientPage({
   params,
@@ -44,6 +45,11 @@ export default async function ClientPage({
         subtitle={[client.industry, client.website].filter(Boolean).join(" · ") || undefined}
         actions={
           <>
+            {/* Отчёт владельцу бизнеса за прошлый месяц — открыть, распечатать в PDF, переслать */}
+            <a href={`/api/reports/${client.id}?month=${previousMonth()}`} target="_blank" rel="noopener" className={buttonClass("secondary")} title={t.client.reportHint}>
+              <BarChart3 className="size-4" />
+              {t.client.report}
+            </a>
             <Link href={`/clients/${client.id}/edit`} className={buttonClass("secondary")}>
               <Settings className="size-4" />
               {t.client.settings}

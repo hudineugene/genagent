@@ -3,13 +3,13 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 type Msg = { id: string; role: "user" | "agent"; text: string; pending?: boolean };
-type Config = { title: string; subtitle: string; color: string; greeting: string; icon: string };
+type Config = { title: string; subtitle: string; color: string; greeting: string; icon: string; telegramBot?: string };
 
 // Язык окна: как у страницы сайта (?lang=), иначе — язык браузера посетителя.
 const TEXTS = {
-  ru: { placeholder: "Напишите сообщение…", online: "онлайн", typing: "печатает…", operator: "Менеджер на связи", error: "Не удалось отправить. Попробуйте ещё раз.", close: "Закрыть", unavailable: "Чат временно недоступен" },
-  uk: { placeholder: "Напишіть повідомлення…", online: "онлайн", typing: "друкує…", operator: "Менеджер на зв'язку", error: "Не вдалося надіслати. Спробуйте ще раз.", close: "Закрити", unavailable: "Чат тимчасово недоступний" },
-  en: { placeholder: "Type a message…", online: "online", typing: "typing…", operator: "A manager has joined", error: "Couldn't send. Please try again.", close: "Close", unavailable: "Chat is temporarily unavailable" },
+  ru: { placeholder: "Напишите сообщение…", online: "онлайн", typing: "печатает…", operator: "Менеджер на связи", error: "Не удалось отправить. Попробуйте ещё раз.", close: "Закрыть", unavailable: "Чат временно недоступен", telegram: "Продолжить в Telegram" },
+  uk: { placeholder: "Напишіть повідомлення…", online: "онлайн", typing: "друкує…", operator: "Менеджер на зв'язку", error: "Не вдалося надіслати. Спробуйте ще раз.", close: "Закрити", unavailable: "Чат тимчасово недоступний", telegram: "Продовжити в Telegram" },
+  en: { placeholder: "Type a message…", online: "online", typing: "typing…", operator: "A manager has joined", error: "Couldn't send. Please try again.", close: "Close", unavailable: "Chat is temporarily unavailable", telegram: "Continue in Telegram" },
 };
 
 function pickLang(): keyof typeof TEXTS {
@@ -45,6 +45,8 @@ export function WidgetChat({ channelId }: { channelId: string }) {
   const [operator, setOperator] = useState(false);
   const [input, setInput] = useState("");
   const [error, setError] = useState(false);
+  // Ссылка «Продолжить в Telegram» с кодом этого разговора — бот продолжит с того же места.
+  const [tgUrl, setTgUrl] = useState<string | null>(null);
   const visitor = useRef<string>("");
   const loaded = useRef(false);
   const endRef = useRef<HTMLDivElement>(null);
@@ -104,6 +106,15 @@ export function WidgetChat({ channelId }: { channelId: string }) {
     }
   };
 
+  const talked = msgs.some((m) => m.role === "user" && !m.pending);
+  useEffect(() => {
+    if (!config?.telegramBot || !talked || tgUrl) return;
+    fetch(`/api/widget/${channelId}/link`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ visitor: visitor.current }) })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d?.url && setTgUrl(d.url))
+      .catch(() => {});
+  }, [config?.telegramBot, talked, tgUrl, channelId]);
+
   const color = config?.color ?? "#5b5bf0";
   const shown: Msg[] =
     msgs.length === 0 && config?.greeting ? [{ id: "greeting", role: "agent", text: config.greeting }] : msgs;
@@ -161,6 +172,19 @@ export function WidgetChat({ channelId }: { channelId: string }) {
         <div ref={endRef} />
       </div>
 
+      {tgUrl && (
+        <a
+          href={tgUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center justify-center gap-2 border-t border-[#e3e6ef] bg-white py-2 text-sm font-medium text-[#229ed9] hover:bg-[#f6f7fb]"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M21.9 4.3 18.6 20c-.2 1.1-.9 1.4-1.8.9l-5-3.7-2.4 2.3c-.3.3-.5.5-1 .5l.4-5.1 9.3-8.4c.4-.4-.1-.6-.6-.2L6 13.5l-4.9-1.5c-1.1-.3-1.1-1.1.2-1.6L20.5 3c.9-.3 1.7.2 1.4 1.3z" />
+          </svg>
+          {t.telegram}
+        </a>
+      )}
       {error && <p className="bg-[#fff1f2] px-4 py-2 text-xs text-[#dc3545]">{t.error}</p>}
       <form
         className="flex items-end gap-2 border-t border-[#e3e6ef] bg-white p-3"

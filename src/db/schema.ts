@@ -159,7 +159,14 @@ export type TelegramConfig = {
   /** Группа обсуждений, откуда последний раз пришёл комментарий (для показа в настройках) */
   group?: { id: number; title: string; channel?: string };
 };
-export type WidgetConfig = { title: string; subtitle: string; color: string; position: "right" | "left" };
+export type WidgetConfig = {
+  title: string;
+  subtitle: string;
+  color: string;
+  position: "right" | "left";
+  /** Бот клиента в Telegram (username без @): в окне чата — «Продолжить в Telegram» с переносом разговора */
+  telegramBot?: string;
+};
 /** Аккаунт Instagram (вход через Instagram): директ и/или комментарии. */
 export type InstagramConfig = {
   igUserId: string;
@@ -295,6 +302,12 @@ export type ConversationContext = {
   /** Свой бот (API): язык, на котором отвечать клиенту, и что клиент сейчас смотрит в боте */
   language?: string;
   botContext?: string;
+  /** Виджет: одноразовый код ссылки «Продолжить в Telegram» и когда выдан */
+  linkToken?: string;
+  linkAt?: number;
+  /** Разговор продолжен в боте (id разговора там) / пришёл с сайта (id разговора виджета) */
+  linkedTo?: string;
+  linkedFrom?: string;
 };
 
 export type MessageMeta = {
@@ -316,6 +329,8 @@ export type MessageMeta = {
   actions?: { type: string; value: string }[];
   /** Напоминание агента клиенту, который ушёл ни с чем */
   followUp?: boolean;
+  /** Сообщение перенесено из разговора на сайте (виджет), когда клиент перешёл в бота */
+  fromSite?: boolean;
   /** Оценка ответа клиентом в боте (👍/👎) */
   rating?: "up" | "down";
 };
