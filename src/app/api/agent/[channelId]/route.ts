@@ -7,7 +7,7 @@ import { addMessage, isTyping, respond, upsertConversation } from "@/lib/convers
 
 /**
  * Свой бот клиента спрашивает агента: POST с ключом канала (Authorization: Bearer …).
- * Отвечаем синхронно: { reply, handoff, summary, actions }. actions — служебные действия агента для бота
+ * Отвечаем синхронно: { reply, handoff, summary, upset, actions }. upset — агент передал недовольного клиента (срочно). actions — служебные действия агента для бота
  * (метки [[ACTION тип: значение]] в правилах агента), например { type: "check", value: "Нурофен 200" }. reply = null — агент не ответил (выключен, ошибка, лимит):
  * бот поступает как раньше — передаёт сообщение менеджеру.
  */
@@ -75,11 +75,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ channel
   const handoffMsg = after.find((m) => m.role === "system" && m.text === "handoff");
   const handoff = Boolean(handoffMsg) || Boolean(reply?.meta?.handoff);
   const summary = handoffMsg?.meta?.summary ?? null;
+  // Клиент недоволен — бот может пометить заявку как срочную.
+  const upset = Boolean(handoffMsg?.meta?.upset);
   if (!reply) {
     const reason = after.find((m) => m.role === "system" && m.meta?.error)?.text ?? (conversation.mode === "human" ? "manager_mode" : "no_reply");
-    return Response.json({ reply: null, handoff, summary, reason, conversationId: conversation.id });
+    return Response.json({ reply: null, handoff, summary, upset, reason, conversationId: conversation.id });
   }
   claimed.add(reply.id);
   if (claimed.size > 10_000) claimed.clear();
-  return Response.json({ reply: reply.text, handoff, summary, actions: reply.meta?.actions ?? [], conversationId: conversation.id });
+  return Response.json({ reply: reply.text, handoff, summary, upset, actions: reply.meta?.actions ?? [], conversationId: conversation.id });
 }

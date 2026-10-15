@@ -207,6 +207,23 @@ export async function saveWeeklyTestsAction(patch: { enabled: boolean; weekday: 
   return { ok: true };
 }
 
+// ---------- ежедневная сводка ----------
+
+export async function saveDailyDigestAction(patch: { enabled: boolean; hour: number }): Promise<IntegrationsResult> {
+  await requireAdmin();
+  const data = z.object({ enabled: z.boolean(), hour: z.number().int().min(0).max(23) }).parse(patch);
+  const { saveDailyDigest } = await import("@/lib/agent/daily");
+  await saveDailyDigest(data);
+  return { ok: true };
+}
+
+/** «Прислать сейчас»: сводка за последние сутки. error: empty — за сутки ничего не было. */
+export async function sendDailyDigestNow(): Promise<IntegrationsResult> {
+  await requireAdmin();
+  const { sendDailyDigest } = await import("@/lib/agent/daily");
+  return (await sendDailyDigest()) ? { ok: true } : { error: "empty" };
+}
+
 /** «Запустить сейчас»: прогон идёт в фоне (несколько минут), отчёт придёт в Telegram. */
 export async function runWeeklyTestsNow(): Promise<IntegrationsResult> {
   await requireAdmin();

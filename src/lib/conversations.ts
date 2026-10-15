@@ -263,8 +263,10 @@ export async function respond(conversationId: string): Promise<void> {
         .where(eq(conversations.id, conversationId));
       // Выжимка для менеджера: что клиент ищет и чего ждёт — чтобы не перечитывать всю переписку.
       const summary = await handoffSummary(conversationId, { agentId: agent.id, clientId: client.id });
-      await addMessage(conversationId, "system", "handoff", summary ? { meta: { summary } } : {});
-      void notify().then((n) => n.notifyHandoff(conversationId, summary));
+      // Клиент недоволен (агент поставил [[ACTION mood: upset]]) — уведомление с пометкой «срочно».
+      const upset = actions.some((a) => a.type === "mood" && /upset|angry/i.test(a.value));
+      await addMessage(conversationId, "system", "handoff", summary || upset ? { meta: { ...(summary ? { summary } : {}), ...(upset ? { upset } : {}) } } : {});
+      void notify().then((n) => n.notifyHandoff(conversationId, summary, { upset }));
     }
   } catch (e) {
     console.error("respond failed", conversationId, e);

@@ -96,15 +96,18 @@ function openLink(s: NotifySettings | undefined, conversationId: string) {
 }
 
 /** Агент передал клиента менеджеру. */
-export async function notifyHandoff(conversationId: string, summary: string | null) {
+export async function notifyHandoff(conversationId: string, summary: string | null, opts: { upset?: boolean } = {}) {
   try {
     const row = await conversationInfo(conversationId);
     if (!row) return;
     const s = await getNotifySettings();
     const note =
       row.channel.type === "api" ? "\n<i>Заявка создана в боте клиента — отвечает его менеджер.</i>" : "";
+    const title = opts.upset
+      ? "🔴 <b>Срочно: клиент недоволен — нужен человек</b>"
+      : "🙋 <b>Клиент передан менеджеру</b>";
     await broadcast(
-      `🙋 <b>Клиент передан менеджеру</b>\n${header(row)}\n\n${summary ? esc(summary) : "<i>Выжимки нет — откройте диалог.</i>"}${note}`,
+      `${title}\n${header(row)}\n\n${summary ? esc(summary) : "<i>Выжимки нет — откройте диалог.</i>"}${note}`,
       openLink(s, conversationId),
     );
   } catch (e) {
@@ -209,7 +212,7 @@ export async function notifyGaps(agentId: string, count: number) {
 /** Отчёт еженедельной проверки агентов (автотесты). */
 export async function notifyTestsReport(html: string, url?: string) {
   try {
-    await broadcast(html, url ? { inline_keyboard: [[{ text: url.includes("/analytics") ? "Открыть аналитику" : "Открыть автотесты", url }]] } : undefined);
+    await broadcast(html, url ? { inline_keyboard: [[{ text: url.includes("/analytics") ? "Открыть аналитику" : url.includes("/inbox") ? "Открыть диалоги" : "Открыть автотесты", url }]] } : undefined);
   } catch (e) {
     console.error("notify tests failed", e);
   }

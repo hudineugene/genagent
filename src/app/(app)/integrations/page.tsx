@@ -8,6 +8,7 @@ import { NotifyCard } from "./notify-card";
 import { getNotifySettings } from "@/lib/notify/telegram";
 import { getOffsiteSettings } from "@/lib/offsite-backup";
 import { getWeeklyTests, weeklyCoverage } from "@/lib/tests/weekly";
+import { getDailyDigest } from "@/lib/agent/daily";
 
 export default async function IntegrationsPage() {
   const { t } = await getT();
@@ -17,7 +18,7 @@ export default async function IntegrationsPage() {
   const google = await getGoogleSettings();
   const notify = await getNotifySettings();
   const offsite = await getOffsiteSettings();
-  const [weekly, coverage] = await Promise.all([getWeeklyTests(), weeklyCoverage()]);
+  const [weekly, coverage, daily] = await Promise.all([getWeeklyTests(), weeklyCoverage(), getDailyDigest()]);
   return (
     <div className="mx-auto max-w-3xl">
       <PageHeader title={t.integrations.title} subtitle={t.integrations.subtitle} />
@@ -57,6 +58,7 @@ export default async function IntegrationsPage() {
             lastSummary: weekly.lastSummary ?? null,
             ...coverage,
           }}
+          daily={{ enabled: daily.enabled, hour: daily.hour }}
         />
       </div>
       <div className="mt-6">
