@@ -297,6 +297,16 @@ export type ClientMemory = {
   upto: number;
 };
 
+/** Свой бот: расписание команды на момент вопроса клиента (для честного срока ответа менеджера) */
+export type TeamState = {
+  open: boolean;
+  /** Когда откроются, словами на языке клиента: «завтра з 10:00» */
+  next?: string;
+  /** Обычно отвечают за столько минут */
+  minutes?: number;
+  at: number;
+};
+
 export type OrderState = {
   id: string;
   title: string;
@@ -325,6 +335,8 @@ export type ConversationContext = {
   orders?: OrderState[];
   /** Что агент помнит о клиенте из прошлых разговоров */
   memory?: ClientMemory;
+  /** Свой бот: открыта ли сейчас команда и как быстро отвечает */
+  team?: TeamState;
   /** Свой бот (API): язык, на котором отвечать клиенту, и что клиент сейчас смотрит в боте */
   language?: string;
   botContext?: string;

@@ -30,6 +30,10 @@ const bodySchema = z.object({
   context: z.string().max(2000).optional(),
   /** Номер этого сообщения в журнале переписки бота (см. /sync) — чтобы не записать его дважды */
   messageId: z.string().min(1).max(120).optional(),
+  /** Расписание команды сейчас: открыто ли, когда откроются («завтра з 10:00»), за сколько минут обычно отвечают */
+  team: z
+    .object({ open: z.boolean(), next: z.string().trim().max(80).optional(), minutes: z.number().int().min(1).max(10080).optional() })
+    .optional(),
 });
 
 const WAIT_LIMIT_MS = 90_000;
@@ -46,7 +50,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ channel
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "bad_request", details: parsed.error.issues[0]?.message }, { status: 400 });
-  const { user, text, language, context, messageId, image } = parsed.data;
+  const { user, text, language, context, messageId, image, team } = parsed.data;
   if (!text && !image) return Response.json({ error: "bad_request", details: "text or image required" }, { status: 400 });
 
   const { conversation } = await upsertConversation(channel, user.id, {
@@ -55,7 +59,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ channel
   });
   await db
     .update(conversations)
-    .set({ context: { ...conversation.context, language: language ?? conversation.context?.language, botContext: context || undefined } })
+    .set({
+      context: {
+        ...conversation.context,
+        language: language ?? conversation.context?.language,
+        botContext: context || undefined,
+        team: team ? { ...team, at: Date.now() } : conversation.context?.team,
+      },
+    })
     .where(eq(conversations.id, conversation.id));
   // Бот сам решает, когда клиента ведёт менеджер. Раз он снова спрашивает агента — диалог вернулся к ИИ.
   if (conversation.mode === "human") {
