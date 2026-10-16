@@ -332,6 +332,18 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
                   ⚠️ {t.inbox.unverified}: {m.meta.unverified.join(", ")}
                 </div>
               ) : null}
+              {m.meta?.qa?.note ? (
+                <details className={cx("mt-1 max-w-[85%] rounded-lg px-2.5 py-1.5 text-[12px]", m.meta.qa.severity === "high" ? "bg-danger/8 text-danger" : "bg-amber-500/10 text-amber-700 dark:text-amber-400")}>
+                  <summary className="cursor-pointer select-none">
+                    {m.meta.qa.severity === "high" ? "🔴" : "🟡"} {t.inbox.qaTitle}: {m.meta.qa.note}
+                  </summary>
+                  {m.meta.qa.better && (
+                    <p className="mt-1 text-text/80">
+                      <b>{t.inbox.qaBetter}:</b> {m.meta.qa.better}
+                    </p>
+                  )}
+                </details>
+              ) : null}
             </div>
           );
         })}

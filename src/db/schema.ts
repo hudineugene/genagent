@@ -373,6 +373,8 @@ export type MessageMeta = {
   orderNote?: boolean;
   /** Ответ агента ушёл и голосовым */
   spoken?: boolean;
+  /** Утренняя проверка качества: замечание к ответу (или ok — проверен, в порядке) */
+  qa?: { ok?: boolean; severity?: "low" | "high"; kind?: string; note?: string; better?: string; at: number };
   /** Проверяемые факты ответа (цены, телефоны, ссылки), которых нет в базе знаний и переписке */
   unverified?: string[];
   /** Сообщение перенесено из разговора на сайте (виджет), когда клиент перешёл в бота */

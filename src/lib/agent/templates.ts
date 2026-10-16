@@ -30,6 +30,7 @@ export function emptyConfig(): AgentConfig {
     memory: true,
     voiceReplies: true,
     voice: "marin",
+    qualityCheck: true,
     rules: "",
     handoff: "",
     greeting: "",

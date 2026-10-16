@@ -201,6 +201,13 @@ export function Builder({
             )}
           </div>
         </Field>
+        <Field label={t.builder.qualityCheck} hint={t.builder.qualityCheckHint}>
+          <Segmented
+            value={config.qualityCheck === false ? "off" : "on"}
+            options={(["on", "off"] as const).map((v) => ({ value: v, label: t.builder.memoryModes[v] }))}
+            onChange={(v) => set("qualityCheck", v === "on")}
+          />
+        </Field>
         <Field label={t.builder.factGuard} hint={t.builder.factGuardHint}>
           <Segmented
             value={config.factGuard ?? "flag"}

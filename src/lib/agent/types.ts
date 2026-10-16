@@ -74,6 +74,8 @@ export const agentConfigSchema = z.object({
   voiceReplies: z.boolean().default(true),
   /** Голос озвучки (marin, cedar, coral, nova…) */
   voice: z.string().max(20).default("marin"),
+  /** Утренняя проверка качества ответов (более сильная модель, раз в сутки) */
+  qualityCheck: z.boolean().default(true),
   calendar: calendarConfigSchema.prefault({}),
 });
 

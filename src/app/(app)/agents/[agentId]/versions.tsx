@@ -36,6 +36,7 @@ const FIELDS: Field[] = [
   "memory",
   "voiceReplies",
   "voice",
+  "qualityCheck",
   "factGuard",
   "calendar",
 ];
@@ -94,6 +95,7 @@ export function VersionsPanel({
       memory: b.memory,
       voiceReplies: b.voiceReplies,
       voice: b.voice,
+      qualityCheck: b.qualityCheck,
       factGuard: b.factGuard,
       calendar: b.sections.calendar,
     };

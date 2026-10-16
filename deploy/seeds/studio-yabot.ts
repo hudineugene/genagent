@@ -143,6 +143,7 @@ const config: AgentConfig = {
   memory: true,
   voiceReplies: true,
   voice: "marin",
+  qualityCheck: true,
   calendar: {
     enabled: false,
     calendarId: "",

@@ -56,6 +56,8 @@ export async function register() {
   startMemory();
   const { startLearning } = await import("./lib/agent/learn");
   startLearning();
+  const { startQualityCheck } = await import("./lib/agent/quality");
+  startQualityCheck();
 
   if (process.env.BACKUP_DIR) {
     const { startBackups } = await import("./lib/backup");
