@@ -127,7 +127,7 @@ async function markDone(s: NotifySettings, q: { message?: { chat: { id: number |
 }
 
 /** Агент передал клиента менеджеру. */
-export async function notifyHandoff(conversationId: string, summary: string | null, opts: { upset?: boolean; draft?: string | null } = {}) {
+export async function notifyHandoff(conversationId: string, summary: string | null, opts: { upset?: boolean; draft?: string | null; reason?: string } = {}) {
   try {
     const row = await conversationInfo(conversationId);
     if (!row) return;
@@ -144,7 +144,8 @@ export async function notifyHandoff(conversationId: string, summary: string | nu
     const draft = reply && opts.draft ? `\n\n💡 <b>Черновик ответа:</b>\n<i>${esc(opts.draft)}</i>` : "";
     const buttons = conversationButtons(s, row);
     if (draft && buttons) buttons.inline_keyboard.unshift([{ text: "📤 Отправить черновик", callback_data: `sd:${row.conversation.id}` }]);
-    await broadcast(`${title}\n${header(row)}\n\n${summary ? esc(summary) : "<i>Выжимки нет — откройте диалог.</i>"}${draft}${note}`, buttons);
+    const why = opts.reason ? `<b>Причина:</b> ${esc(opts.reason)}\n` : "";
+    await broadcast(`${title}\n${header(row)}\n\n${why}${summary ? esc(summary) : "<i>Выжимки нет — откройте диалог.</i>"}${draft}${note}`, buttons);
   } catch (e) {
     console.error("notify handoff failed", e);
   }

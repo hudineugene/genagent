@@ -251,6 +251,8 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
               <div key={m.id} className="text-center text-xs text-muted">
                 <span className={cx("rounded-full px-3 py-1", m.meta?.error ? "bg-danger/10 text-danger" : "bg-surface-2")}>
                   {systemText(m.text)}
+                  {m.meta?.reason && `: ${m.meta.reason}`}
+                  {m.meta?.repeats ? ` · ${t.inbox.handoffRepeats.replace("{n}", String(m.meta.repeats))}` : ""}
                   {m.author && ` · ${m.author}`} · {time.format(new Date(m.createdAt))}
                 </span>
                 {m.meta?.summary && (

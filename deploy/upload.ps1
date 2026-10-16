@@ -40,7 +40,7 @@ $Stage = Join-Path $Work "genagent-upload"
 New-Item -ItemType Directory -Force (Join-Path $Stage "app"), (Join-Path $Stage "deploy") | Out-Null
 try {
     Write-Host "==> Собираю приложение"
-    robocopy (Join-Path $Root ".next-deploy\standalone") (Join-Path $Stage "app") /E /XD data .git .claude /XF ".env*" "*.db" "*.db-wal" "*.db-shm" /NFL /NDL /NJH /NJS /NP | Out-Null
+    robocopy (Join-Path $Root ".next-deploy\standalone") (Join-Path $Stage "app") /E /XD data .git .claude /XF ".env*" "*.db" "*.db-wal" "*.db-shm" "*ПАРОЛЬ*" /NFL /NDL /NJH /NJS /NP | Out-Null
     if ($LASTEXITCODE -ge 8) { throw "robocopy: ошибка копирования сборки ($LASTEXITCODE)" }
     foreach ($pair in @(@(".next-deploy\static", "app\.next-deploy\static"), @("public", "app\public"), @("drizzle", "app\drizzle"))) {
         robocopy (Join-Path $Root $pair[0]) (Join-Path $Stage $pair[1]) /E /NFL /NDL /NJH /NJS /NP | Out-Null

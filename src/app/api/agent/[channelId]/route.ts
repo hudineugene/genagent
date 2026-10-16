@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { agents, conversations, messages } from "@/db/schema";
@@ -80,7 +80,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ channel
     })
     .where(eq(conversations.id, conversation.id));
   // Бот сам решает, когда клиента ведёт менеджер. Раз он снова спрашивает агента — диалог вернулся к ИИ.
-  if (conversation.mode === "human") {
+  // Кроме случая, когда менеджер писал клиенту только что: бот мог ещё не узнать о его ответе (забирает ответы раз в
+  // несколько секунд) — разговор остаётся у менеджера.
+  if (conversation.mode === "human" && !(await operatorWroteWithin(conversation.id, 30 * 60 * 1000))) {
     await db.update(conversations).set({ mode: "ai", needsAttention: false }).where(eq(conversations.id, conversation.id));
     await addMessage(conversation.id, "system", "returned", { externalId: "bot" });
   }
@@ -150,4 +152,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ channel
     }
   }
   return Response.json({ reply: reply.text, handoff, summary, upset, actions: reply.meta?.actions ?? [], conversationId: conversation.id, ...(voice ? { voice } : {}) });
+}
+
+/** Менеджер писал клиенту за последние ms (и разговор после этого не возвращали агенту). */
+async function operatorWroteWithin(conversationId: string, ms: number) {
+  const [last] = await db
+    .select({ role: messages.role, text: messages.text, createdAt: messages.createdAt })
+    .from(messages)
+    .where(and(eq(messages.conversationId, conversationId), sql`(${messages.role} = 'operator' or (${messages.role} = 'system' and ${messages.text} = 'returned'))`))
+    .orderBy(desc(messages.createdAt))
+    .limit(1);
+  return Boolean(last && last.role === "operator" && Date.now() - last.createdAt.getTime() < ms);
 }

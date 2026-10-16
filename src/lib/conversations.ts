@@ -181,7 +181,7 @@ export async function respond(conversationId: string): Promise<void> {
     }
 
     const history = await db
-      .select({ role: messages.role, text: messages.text, meta: messages.meta, createdAt: messages.createdAt })
+      .select({ id: messages.id, role: messages.role, text: messages.text, meta: messages.meta, createdAt: messages.createdAt })
       .from(messages)
       .where(and(eq(messages.conversationId, conversationId), eq(messages.status, "sent")))
       // rowid — порядок вставки, на случай одинакового времени
@@ -199,6 +199,16 @@ export async function respond(conversationId: string): Promise<void> {
     }
     const chat = historyForAi(history.reverse());
     if (chat.at(-1)?.role !== "user") return; // уже ответили
+    // Менеджер только что ответил клиенту — клиент, скорее всего, отвечает ему: агент не вмешивается
+    if (managerJustReplied(history)) {
+      const last = history.at(-1);
+      await db.update(conversations).set({ needsAttention: true }).where(eq(conversations.id, conversationId));
+      if (last?.role === "user") void notify().then((n) => n.notifyClientMessage(conversationId, last.text));
+      // Менеджер так и не ответил за это время — агент подхватит (свой бот спросит агента сам, со следующим сообщением)
+      if (channel.type !== "api") recheckLater(conversationId, history);
+      return;
+    }
+    const pendingHandoff = openHandoff(history);
 
     const config = agentConfigSchema.parse(agent.config);
     // Месячный лимит расходов агента: превышен — молчим и зовём менеджера.
@@ -213,6 +223,7 @@ export async function respond(conversationId: string): Promise<void> {
       { mode: "live", agentId: agent.id, conversationId },
       withMemory(
         config.memory && conversation.kind === "dm" ? conversation.context?.memory : undefined,
+        [
         channel.type === "email"
         ? emailNote(client.name, conversation.contactName)
         : conversation.kind === "comment"
@@ -222,6 +233,8 @@ export async function respond(conversationId: string): Promise<void> {
             : channel.type === "api"
             ? apiNote(conversation.context?.language, conversation.context?.botContext, (channel.config as ApiConfig).botNote, botActivity(history), ordersNote(conversation.context?.orders), handoffEtaNote(conversation.context?.team, await measuredReplyMinutes(channel.id)))
             : undefined,
+        pendingHandoff ? handoffPendingNote(pendingHandoff.createdAt) : undefined,
+        ].filter(Boolean).join("\n\n") || undefined,
       ),
     );
 
@@ -268,7 +281,10 @@ export async function respond(conversationId: string): Promise<void> {
     // Запись уже создана в календаре — отмечаем это в переписке, что бы ни было дальше с ответом.
     if (booked) await addMessage(conversationId, "system", "booking_created");
 
-    const { text: clean, handoff, actions } = extractHandoff(text);
+    const { text: clean, handoff, actions: all } = extractHandoff(text);
+    // Причина передачи — для менеджера и аналитики, не для бота
+    const reason = all.find((a) => a.type === "reason")?.value.slice(0, 120);
+    const actions = all.filter((a) => a.type !== "reason");
     if (actions.length) meta = { ...meta, actions };
     // Комментарий, на который не нужно отвечать (реакция, эмодзи, разговор людей между собой), — молчим.
     if (conversation.kind === "comment" && SKIP_RE.test(clean.trim())) {
@@ -307,7 +323,23 @@ export async function respond(conversationId: string): Promise<void> {
       const externalId = await deliver(channel, conversation, reply);
       await addMessage(conversationId, "assistant", reply, { meta: { ...meta, handoff }, externalId: externalId ?? undefined });
     }
-    if (handoff) {
+    if (handoff && pendingHandoff) {
+      // Уже передан и менеджер ещё не ответил: не дёргаем менеджера снова — дописываем к той передаче
+      const { summary } = await handoffSummary(conversationId, {
+        agentId: agent.id,
+        clientId: client.id,
+        kbSourceIds: config.kbSourceIds,
+        language: conversation.context?.language,
+      });
+      const prev = pendingHandoff.meta ?? {};
+      await db
+        .update(messages)
+        .set({ meta: { ...prev, ...(summary ? { summary } : {}), repeats: (prev.repeats ?? 0) + 1, ...(reason && !prev.reason ? { reason } : {}) } })
+        .where(eq(messages.id, pendingHandoff.id));
+      await db.update(conversations).set({ needsAttention: true }).where(eq(conversations.id, conversationId));
+      const last = history.at(-1);
+      if (last?.role === "user") void notify().then((n) => n.notifyClientMessage(conversationId, last.text));
+    } else if (handoff) {
       // Свой бот сам передаёт клиента менеджеру (по флагу handoff) и сам решает, когда агенту снова отвечать.
       await db
         .update(conversations)
@@ -329,8 +361,8 @@ export async function respond(conversationId: string): Promise<void> {
       }
       // Клиент недоволен (агент поставил [[ACTION mood: upset]]) — уведомление с пометкой «срочно».
       const upset = actions.some((a) => a.type === "mood" && /upset|angry/i.test(a.value));
-      await addMessage(conversationId, "system", "handoff", summary || upset ? { meta: { ...(summary ? { summary } : {}), ...(upset ? { upset } : {}) } } : {});
-      void notify().then((n) => n.notifyHandoff(conversationId, summary, { upset, draft }));
+      await addMessage(conversationId, "system", "handoff", summary || upset || reason ? { meta: { ...(summary ? { summary } : {}), ...(upset ? { upset } : {}), ...(reason ? { reason } : {}) } } : {});
+      void notify().then((n) => n.notifyHandoff(conversationId, summary, { upset, draft, reason }));
     }
   } catch (e) {
     console.error("respond failed", conversationId, e);
@@ -399,6 +431,43 @@ export function botActivity(history: { role: string; text: string; meta?: Messag
 }
 
 /** Указания канала + что агент помнит о клиенте. */
+/** Сколько ждать, пока клиент отвечает менеджеру, прежде чем агент снова заговорит. */
+export const MANAGER_QUIET_MS = 15 * 60 * 1000;
+/** Передача, на которую менеджер ещё не ответил (не старше 12 часов) — повторно не передаём. */
+const HANDOFF_OPEN_MS = 12 * 60 * 60 * 1000;
+
+type HistoryRow = { id?: string; role: string; text: string; meta?: MessageMeta | null; createdAt: Date };
+
+/** Последняя передача менеджеру, после которой менеджер ещё не писал и разговор не возвращали агенту. */
+function openHandoff(history: HistoryRow[]): (HistoryRow & { id: string }) | null {
+  for (let i = history.length - 1; i >= 0; i--) {
+    const m = history[i];
+    if (m.role === "operator" || (m.role === "system" && (m.text === "returned" || m.text === "took_over"))) return null;
+    if (m.role === "system" && m.text === "handoff") {
+      return m.id && Date.now() - m.createdAt.getTime() < HANDOFF_OPEN_MS ? (m as HistoryRow & { id: string }) : null;
+    }
+  }
+  return null;
+}
+
+/** Менеджер написал клиенту меньше MANAGER_QUIET_MS назад (и после этого клиент написал). */
+function managerJustReplied(history: HistoryRow[]) {
+  const op = history.findLast((m) => m.role === "operator");
+  return Boolean(op && Date.now() - op.createdAt.getTime() < MANAGER_QUIET_MS);
+}
+
+function recheckLater(conversationId: string, history: HistoryRow[]) {
+  const op = history.findLast((m) => m.role === "operator");
+  if (!op) return;
+  const wait = op.createdAt.getTime() + MANAGER_QUIET_MS - Date.now() + 5_000;
+  setTimeout(() => scheduleReply(conversationId), Math.max(5_000, wait)).unref?.();
+}
+
+function handoffPendingNote(at: Date) {
+  const min = Math.max(1, Math.round((Date.now() - at.getTime()) / 60000));
+  return `# Разговор уже передан менеджеру\nТы передал вопрос менеджеру ${min} мин назад, он ещё не ответил. Не передавай повторно и не повторяй «передаю менеджеру» — отвечай по существу; если клиент спрашивает о менеджере, скажи, что он уже в курсе и ответит.`;
+}
+
 function withMemory(memory: ClientMemory | undefined, note: string | undefined) {
   const parts = [note, memoryNote(memory)].filter(Boolean);
   return parts.length ? parts.join("\n\n") : undefined;
