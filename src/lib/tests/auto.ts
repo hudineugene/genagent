@@ -4,6 +4,7 @@ import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { agentConfigSchema } from "@/lib/agent/types";
 import { compileSystemPrompt } from "@/lib/agent/compile";
+import { RUNTIME_REV } from "@/lib/agent/runtime";
 import { agents, clients, testResults, testRuns, testScenarios } from "@/db/schema";
 import { getSetting, setSetting } from "@/lib/settings";
 import { startRunTracked } from "./engine";
@@ -38,7 +39,7 @@ export async function saveAutoTests(patch: Partial<AutoTestsSettings>) {
 
 /** Что видит модель в автотестах агента: собранная инструкция (без базы знаний и даты) и набор сценариев. */
 export function fingerprint(prompt: string, scenarioIds: string[]) {
-  return createHash("sha256").update(prompt).update("\n--\n").update([...scenarioIds].sort().join(",")).digest("hex").slice(0, 16);
+  return createHash("sha256").update(RUNTIME_REV).update("\n--\n").update(prompt).update("\n--\n").update([...scenarioIds].sort().join(",")).digest("hex").slice(0, 16);
 }
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
