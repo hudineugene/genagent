@@ -29,6 +29,7 @@ import { logUsage } from "@/lib/usage";
 
 // Судья, генератор сценариев и «клиент» — на дешёвой модели: проверки по понятным критериям, каждую неделю.
 const JUDGE_MODEL = "claude-haiku-5-5";
+const JUDGE_LANGUAGE: Record<string, string> = { auto: "язык клиента", ru: "русский", uk: "украинский", en: "английский" };
 const PASS_SCORE = 7;
 
 function anthropicKey() {
@@ -190,6 +191,12 @@ async function loadAgent(agentId: string) {
 /** Ответ агента на текущий диалог — тем же путём, что в каналах. */
 async function agentReply(config: AgentConfig, client: ClientContext & { id: string }, agentId: string, t: Transcript) {
   const { system, messages, tools } = await prepareChat(config, client, t as ChatMessage[], { mode: "dry" });
+  // Что агент видел при ответе (инструкция с документами, найденные фрагменты, дата и время) — судья сверяет факты с этим
+  const last = messages.at(-1);
+  const seen = [
+    system,
+    last && typeof last.content === "string" ? last.content : "",
+  ].join("\n\n");
   let text = "";
   let cost = 0;
   const notes: string[] = [];
@@ -214,7 +221,7 @@ async function agentReply(config: AgentConfig, client: ClientContext & { id: str
   if (handoff) notes.push("[передал диалог менеджеру]");
   // Действия для своего бота (например, кнопка «проверить препарат в аптеке») — судье видны как пометка.
   for (const a of actions) notes.push(`[действие для бота: ${a.type} — ${a.value}]`);
-  return { text: [clean, ...notes].filter(Boolean).join("\n\n"), cost };
+  return { text: [clean, ...notes].filter(Boolean).join("\n\n"), cost, seen };
 }
 
 /** Следующая реплика клиента в режиме симуляции (или null — клиент закончил). */
@@ -272,8 +279,8 @@ async function judge(
     JUDGE_MODEL,
     {
       system:
-        "Ты — строгий и справедливый проверяющий качества чат-агента. Оцени ответы агента в диалоге по каждому критерию (pass=true только если критерий явно выполнен). В comment — кратко почему, с цитатой при необходимости. Пиши на русском. Пометка «[действие для бота: check — X]» означает, что агент служебной меткой попросил бота показать клиенту кнопку проверки препарата X в аптеке (клиент видит кнопку, а не метку). Пометка «[передал диалог менеджеру]» в ответе агента означает, что он передал диалог менеджеру служебной меткой (клиент её не видит) — считай это выполненной передачей. Пометка «[создал запись в календаре]» означает, что агент успешно создал запись через календарь (свободное время он брал из календаря, а не выдумывал).",
-      prompt: `Роль агента: ${config.role || "—"}\nЗадача: ${config.description || "—"}\nТон: ${config.tone}\nЯзык ответов (настройка агента): ${config.replyLanguage === "auto" ? "язык клиента" : config.replyLanguage}\nПравила: ${config.rules || "—"}\nКогда передавать менеджеру: ${config.handoff || "—"}\n\nСправка (что агент знает):\n${brief || "—"}\n\nСценарий: ${scenario.name}\n\nДиалог:\n${t.map((m) => `${m.role === "user" ? "Клиент" : "Агент"}: ${m.content}`).join("\n\n")}\n\nКритерии (по одному verdict на каждый, в том же порядке):\n${criteria.map((c, i) => `${i + 1}. ${c}`).join("\n")}`,
+        "Ты — строгий и справедливый проверяющий качества чат-агента. Оцени ответы агента в диалоге по каждому критерию (pass=true только если критерий явно выполнен). В comment — кратко почему, с цитатой при необходимости. Пиши на русском. Пометка «[действие для бота: check — X]» означает, что агент служебной меткой попросил бота показать клиенту кнопку проверки препарата X в аптеке (клиент видит кнопку, а не метку). Пометка «[передал диалог менеджеру]» в ответе агента означает, что он передал диалог менеджеру служебной меткой (клиент её не видит) — считай это выполненной передачей. Пометка «[создал запись в календаре]» означает, что агент успешно создал запись через календарь (свободное время он брал из календаря, а не выдумывал). Любая пометка «[действие для бота: …]» — правильно оформленная служебная метка для бота клиента. Агенту в каждом сообщении передаются текущие дата, день недели и время компании — упоминание сегодняшнего дня, даты или «сейчас рабочее время» не выдумка. Справка ниже включает ровно то, что агент видел при ответе (инструкция, документы, найденные фрагменты): факты оттуда — не выдумка. Язык определяй внимательно: украинский узнаётся по буквам і, ї, є, ґ и словам «що», «це», «будь ласка», «ви»; не путай украинский с русским.",
+      prompt: `Роль агента: ${config.role || "—"}\nЗадача: ${config.description || "—"}\nТон: ${config.tone}\nЯзык ответов (настройка агента): ${JUDGE_LANGUAGE[config.replyLanguage] ?? config.replyLanguage}\nПравила: ${config.rules || "—"}\nКогда передавать менеджеру: ${config.handoff || "—"}\n\nСправка (что агент знает):\n${brief || "—"}\n\nСценарий: ${scenario.name}\n\nДиалог:\n${t.map((m) => `${m.role === "user" ? "Клиент" : "Агент"}: ${m.content}`).join("\n\n")}\n\nКритерии (по одному verdict на каждый, в том же порядке):\n${criteria.map((c, i) => `${i + 1}. ${c}`).join("\n")}`,
       schema: JUDGE_SCHEMA as unknown as Record<string, unknown>,
       effort: "medium",
     },
@@ -318,6 +325,7 @@ async function execute(runId: string, agentId: string, scenarios: TestScenario[]
     const worker = async () => {
       for (let s = queue.shift(); s; s = queue.shift()) {
         const t: Transcript = [];
+        const seen = new Set<string>();
         let cost = 0;
         try {
           if (s.mode === "script") {
@@ -325,6 +333,7 @@ async function execute(runId: string, agentId: string, scenarios: TestScenario[]
               t.push({ role: "user", content: turn });
               const r = await agentReply(config, client, agentId, t);
               cost += r.cost;
+              seen.add(r.seen);
               t.push({ role: "assistant", content: r.text });
             }
           } else {
@@ -335,10 +344,11 @@ async function execute(runId: string, agentId: string, scenarios: TestScenario[]
               t.push({ role: "user", content: u.message });
               const r = await agentReply(config, client, agentId, t);
               cost += r.cost;
+              seen.add(r.seen);
               t.push({ role: "assistant", content: r.text });
             }
           }
-          const j = await judge(config, brief, s, t, agentId, client.id);
+          const j = await judge(config, [brief, ...seen].join("\n\n"), s, t, agentId, client.id);
           cost += j.cost;
           const ok = j.verdicts.every((v) => v.pass) && j.score >= PASS_SCORE;
           if (ok) passed++;

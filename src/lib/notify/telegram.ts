@@ -471,6 +471,9 @@ export async function sendGapsToOwners(clientId: string, opts: { chatId?: string
   if (!s?.token) return 0;
   const owners = (s.owners ?? []).filter((x) => x.clientId === clientId && (!opts.chatId || x.chatId === opts.chatId));
   if (!owners.length) return 0;
+  // Не спрашивать владельца о том, что агент уже знает (документ добавили после вопроса)
+  const { recheckClientGaps } = await import("@/lib/agent/gaps-recheck");
+  await recheckClientGaps(clientId).catch(() => 0);
   const gaps = await db
     .select({ gap: knowledgeGaps, agent: agents.name })
     .from(knowledgeGaps)

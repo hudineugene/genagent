@@ -186,6 +186,9 @@ export function startGapsAnalysis() {
     const list = await db.select({ id: agents.id, name: agents.name }).from(agents).where(eq(agents.status, "active"));
     for (const a of list) {
       try {
+        // Сначала закрыть вопросы, на которые база знаний уже отвечает (добавили документ)
+        const { recheckGaps } = await import("./gaps-recheck");
+        await recheckGaps(a.id).catch((e) => console.error("gaps recheck failed", a.id, e));
         const r = await analyzeGaps(a.id);
         if (r.newGaps) {
           const { notifyGaps } = await import("@/lib/notify/telegram");
