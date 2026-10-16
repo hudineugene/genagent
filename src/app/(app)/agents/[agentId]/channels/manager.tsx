@@ -365,6 +365,12 @@ function WidgetCard({ c, publicUrl }: { c: ChannelItem; publicUrl: string | null
           <Field label={t.channels.widgetQuick} hint={t.channels.widgetQuickHint}>
             <Textarea name="quick" rows={2} defaultValue={(w.quick ?? []).join("\n")} placeholder={t.channels.widgetQuickPlaceholder} />
           </Field>
+          <Field label={t.channels.widgetTeaser} hint={t.channels.widgetTeaserHint}>
+            <Input name="teaser" defaultValue={w.teaser ?? ""} maxLength={140} placeholder={t.channels.widgetTeaserPlaceholder} />
+          </Field>
+          <Field label={t.channels.widgetTeaserDelay}>
+            <Input name="teaserDelay" type="number" min={3} max={300} defaultValue={w.teaserDelay ?? 20} />
+          </Field>
         </div>
         <details className="rounded-xl border border-border px-4 py-3">
           <summary className="cursor-pointer text-sm font-medium select-none">
@@ -382,6 +388,8 @@ function WidgetCard({ c, publicUrl }: { c: ChannelItem; publicUrl: string | null
                   <span className="hidden sm:block" />
                   <Textarea name={`l_${lang}_greeting`} rows={2} defaultValue={loc.greeting ?? ""} maxLength={1000} placeholder={t.channels.widgetGreeting} />
                   <Textarea name={`l_${lang}_quick`} rows={2} defaultValue={(loc.quick ?? []).join("\n")} placeholder={t.channels.widgetQuick} />
+                  <span className="hidden sm:block" />
+                  <Input name={`l_${lang}_teaser`} defaultValue={loc.teaser ?? ""} maxLength={140} placeholder={t.channels.widgetTeaser} className="sm:col-span-2" />
                 </div>
               );
             })}

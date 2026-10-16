@@ -112,6 +112,8 @@ const widgetSchema = z.object({
     .regex(/^@?[A-Za-z0-9_]{5,32}$|^$/)
     .default("")
     .transform((s) => s.replace(/^@/, "")),
+  teaser: z.string().trim().max(140).default(""),
+  teaserDelay: z.coerce.number().int().min(3).max(300).default(20),
 });
 
 /** Кнопки-подсказки: по одной в строке, до 4, каждая до 40 символов. */
@@ -134,8 +136,8 @@ export async function updateWidget(
   const locales: NonNullable<WidgetConfig["locales"]> = {};
   for (const lang of WIDGET_LANGS) {
     const v = (k: string) => String(formData.get(`l_${lang}_${k}`) ?? "").trim();
-    const loc = { title: v("title").slice(0, 80), subtitle: v("subtitle").slice(0, 120), greeting: v("greeting").slice(0, 1000), quick: quickList(formData.get(`l_${lang}_quick`)) };
-    if (loc.title || loc.subtitle || loc.greeting || loc.quick.length) locales[lang] = loc;
+    const loc = { title: v("title").slice(0, 80), subtitle: v("subtitle").slice(0, 120), greeting: v("greeting").slice(0, 1000), quick: quickList(formData.get(`l_${lang}_quick`)), teaser: v("teaser").slice(0, 140) };
+    if (loc.title || loc.subtitle || loc.greeting || loc.quick.length || loc.teaser) locales[lang] = loc;
   }
   const config: WidgetConfig = { ...parsed.data, quick: quickList(formData.get("quick")), locales };
   await db.update(channels).set({ config }).where(eq(channels.id, channelId));

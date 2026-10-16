@@ -37,7 +37,7 @@ const SCRIPT = `(function () {
     frame.contentWindow.postMessage(msg, base);
   }
 
-  fetch(base + "/api/widget/" + channel).then(function (r) { return r.ok ? r.json() : null; }).then(function (data) {
+  fetch(base + "/api/widget/" + channel + (lang ? "?lang=" + encodeURIComponent(lang) : "")).then(function (r) { return r.ok ? r.json() : null; }).then(function (data) {
     if (!data || !data.config) return;
     var cfg = data.config;
     var side = cfg.position === "left" ? "left" : "right";
@@ -72,7 +72,30 @@ const SCRIPT = `(function () {
       btn.innerHTML = open ? closeIcon : chatIcon;
       layout();
     }
-    btn.onclick = function () { toggle(); };
+    btn.onclick = function () { hideTeaser(); toggle(); };
+    // Приглашение к разговору: облачко у кнопки, один раз за визит; закрыли или открыли чат — больше не показываем
+    var teaser = null, teaserKey = "genagent_teaser_" + channel;
+    function seen() { try { return sessionStorage.getItem(teaserKey) === "1"; } catch (e) { return false; } }
+    function markSeen() { try { sessionStorage.setItem(teaserKey, "1"); } catch (e) {} }
+    function hideTeaser() { if (teaser) { teaser.remove(); teaser = null; } markSeen(); }
+    if (cfg.teaser && !seen()) {
+      setTimeout(function () {
+        if (open || seen()) return;
+        teaser = document.createElement("div");
+        teaser.setAttribute("role", "button");
+        teaser.style.cssText = "position:fixed;bottom:92px;" + side + ":20px;max-width:min(280px,calc(100vw - 40px));padding:12px 34px 12px 14px;background:#fff;color:#111;border-radius:14px;box-shadow:0 8px 28px rgba(0,0,0,.18);font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;cursor:pointer;z-index:2147483646;";
+        teaser.textContent = cfg.teaser;
+        var x = document.createElement("button");
+        x.setAttribute("aria-label", "×");
+        x.textContent = "×";
+        x.style.cssText = "position:absolute;top:4px;right:6px;width:24px;height:24px;border:0;background:transparent;color:#888;font-size:18px;line-height:1;cursor:pointer;";
+        x.onclick = function (e) { e.stopPropagation(); hideTeaser(); };
+        teaser.appendChild(x);
+        teaser.onclick = function () { hideTeaser(); toggle(true); };
+        document.body.appendChild(teaser);
+        markSeen();
+      }, Math.max(3, Number(cfg.teaserDelay) || 20) * 1000);
+    }
     window.addEventListener("resize", layout);
     window.addEventListener("message", function (e) {
       if (e.origin !== base || !e.data) return;
@@ -86,7 +109,7 @@ const SCRIPT = `(function () {
       }
     });
     var pendingAsk = [];
-    api.open = function () { toggle(true); };
+    api.open = function () { hideTeaser(); toggle(true); };
     api.close = function () { toggle(false); };
     api.ask = function (text) {
       text = String(text || "").trim();

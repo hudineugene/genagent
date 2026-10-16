@@ -84,6 +84,8 @@ function widgetView(cfg: WidgetConfig, agentCfg: { greeting?: string; icon?: str
     greeting: loc?.greeting || agentCfg?.greeting || "",
     icon: agentCfg?.icon ?? "💬",
     quick: loc?.quick?.length ? loc.quick : (cfg.quick ?? []),
+    teaser: loc?.teaser || cfg.teaser || "",
+    teaserDelay: cfg.teaserDelay ?? 20,
   };
 }
 

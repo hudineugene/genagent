@@ -168,12 +168,15 @@ export type WidgetConfig = {
   telegramBot?: string;
   /** Кнопки-подсказки до первого сообщения («Подобрать виллу», «Записаться на просмотр») */
   quick?: string[];
+  /** Приглашение к разговору: облачко у кнопки чата через teaserDelay секунд (пусто — не показывать) */
+  teaser?: string;
+  teaserDelay?: number;
   /** Тексты на языке посетителя (сайт на нескольких языках): заголовок, подзаголовок, приветствие, подсказки */
   locales?: Partial<Record<WidgetLang, WidgetLocale>>;
 };
 export const WIDGET_LANGS = ["ru", "uk", "en", "es"] as const;
 export type WidgetLang = (typeof WIDGET_LANGS)[number];
-export type WidgetLocale = { title?: string; subtitle?: string; greeting?: string; quick?: string[] };
+export type WidgetLocale = { title?: string; subtitle?: string; greeting?: string; quick?: string[]; teaser?: string };
 /** Аккаунт Instagram (вход через Instagram): директ и/или комментарии. */
 export type InstagramConfig = {
   igUserId: string;
