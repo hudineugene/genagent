@@ -38,12 +38,13 @@ export async function updateLead(conversationId: string): Promise<LeadCard | nul
   if (dialog.filter((m) => m.role === "user" && m.text.trim().length >= 2).length < 1) return null;
   const fields = (cfg.leadFields?.trim() || DEFAULT_LEAD_FIELDS).slice(0, 400);
   const started = Date.now();
-  const { data, usage, model } = await generateJson<{ temperature: LeadCard["temperature"]; reason: string; fields: { label: string; value: string }[] }>(key, MODEL, {
+  const { data, usage, model } = await generateJson<{ temperature: LeadCard["temperature"]; reason: string; fields: { label: string; value: string }[]; test: boolean }>(key, MODEL, {
     system: [
       `Ты помогаешь менеджеру компании быстро понять клиента по переписке с консультантом (${cfg.role || "консультант"}).`,
       `Заполни карточку: поля — ${fields}. Пиши только то, что клиент сам сказал или явно подтвердил; чего нет — не включай поле. Значения коротко, по-русски (до 12 слов). «Контакт» — только способ связи, который клиент оставил (телефон, почта, «пишите сюда»), без самих цифр, если их нет в переписке.`,
       "temperature: hot — клиент готов к шагу: оставил контакт, просит звонок, просмотр, встречу, счёт или заказ, спрашивает про оплату или резерв конкретного товара/объекта; warm — конкретный интерес с параметрами (бюджет, что именно, когда), но шага ещё нет; cold — общий вопрос, справка, болтовня, тест или вопрос не по делу.",
       "reason — одна короткая фраза, почему такая оценка (что сказал клиент).",
+      "test — true, только если переписка явно проверка бота, а не настоящий клиент: человек сам пишет, что тестирует или проверяет бота, называет себя разработчиком или сотрудником, шлёт заведомо абсурдные запросы ради проверки. Иначе false.",
     ].join("\n"),
     prompt: `Переписка:\n${dialog
       .map((m) => `${m.role === "user" ? "Клиент" : m.role === "operator" ? "Менеджер" : "Консультант"}: ${m.text.replace(/\s+/g, " ").slice(0, 500)}`)
@@ -51,9 +52,10 @@ export async function updateLead(conversationId: string): Promise<LeadCard | nul
     schema: {
       type: "object",
       additionalProperties: false,
-      required: ["temperature", "reason", "fields"],
+      required: ["temperature", "reason", "fields", "test"],
       properties: {
         temperature: { type: "string", enum: ["hot", "warm", "cold"] },
+        test: { type: "boolean" },
         reason: { type: "string" },
         fields: {
           type: "array",
@@ -71,6 +73,7 @@ export async function updateLead(conversationId: string): Promise<LeadCard | nul
       .map((f) => ({ label: f.label.trim().slice(0, 40), value: f.value.trim().slice(0, 160) }))
       .filter((f) => f.label && f.value)
       .slice(0, 8),
+    ...(data.test ? { looksTest: true } : {}),
     at: Date.now(),
     upto: dialog.at(-1)?.createdAt.getTime() ?? Date.now(),
   };
@@ -96,7 +99,7 @@ async function inWorkHours(now = new Date()) {
  */
 export async function hotAlert(conversationId: string): Promise<boolean> {
   const [c] = await db.select().from(conversations).where(eq(conversations.id, conversationId));
-  if (!c || c.isTest || c.status === "closed" || c.context?.lead?.temperature !== "hot" || c.context?.hotAlertAt) return false;
+  if (!c || c.isTest || c.status === "closed" || c.context?.lead?.temperature !== "hot" || c.context.lead.looksTest || c.context?.hotAlertAt) return false;
   const [known] = await db
     .select({ id: messages.id })
     .from(messages)

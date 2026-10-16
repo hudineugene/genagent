@@ -69,6 +69,7 @@ export async function collectLeads(sinceMs = Date.now() - DAY_MS): Promise<Lead[
         eq(conversations.kind, "dm"),
         gt(conversations.lastMessageAt, since),
         sql`json_extract(${conversations.context}, '$.lead.temperature') = 'hot'`,
+        sql`coalesce(json_extract(${conversations.context}, '$.lead.looksTest'), 0) = 0`,
       ),
     );
   const ids = [...new Set([...handoffs.map((h) => h.conversationId), ...resultEvents.map((e) => e.conversationId as string), ...hot.map((h) => h.id)])];

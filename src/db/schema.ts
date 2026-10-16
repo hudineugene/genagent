@@ -346,6 +346,8 @@ export type LeadCard = {
   temperature: "hot" | "warm" | "cold";
   reason: string;
   fields: { label: string; value: string }[];
+  /** Похоже на проверку бота, а не на клиента — в «Диалогах» подсказка пометить разговор тестовым */
+  looksTest?: boolean;
   at: number;
   /** До какого сообщения переписка учтена (мс) */
   upto: number;

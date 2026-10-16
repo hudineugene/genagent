@@ -7,6 +7,8 @@ import { agentConfigSchema } from "@/lib/agent/types";
 import { getGoogleSettings } from "@/lib/google/calendar";
 import { AgentStudio } from "./studio";
 import { getExamples } from "@/lib/agent/examples";
+import { SetupChecklist } from "@/components/setup-checklist";
+import { setupChecklist } from "@/lib/setup-checklist";
 
 export default async function AgentPage({ params }: { params: Promise<{ agentId: string }> }) {
   const { agentId } = await params;
@@ -29,8 +31,11 @@ export default async function AgentPage({ params }: { params: Promise<{ agentId:
   const parsed = agentConfigSchema.safeParse(agent.config);
   const config = parsed.success ? parsed.data : agent.config;
 
+  const setup = await setupChecklist(agent.id);
+
   return (
-    <div>
+    <div className="space-y-6">
+      {setup.length > 0 && <SetupChecklist compact items={setup.map(({ key, kind, title, n, href }) => ({ key, kind, title, n, href }))} />}
       <AgentStudio
         agent={{ id: agent.id, name: agent.name, status: agent.status, version: agent.version, config }}
         client={{

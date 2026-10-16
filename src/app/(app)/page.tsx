@@ -18,11 +18,13 @@ import { dashboardData, type Decision } from "@/lib/dashboard";
 import { ClientCard } from "@/components/client-card";
 import { contactLabel } from "@/lib/contact";
 import { Card, EmptyState, cx } from "@/components/ui";
+import { SetupChecklist } from "@/components/setup-checklist";
+import { setupChecklist } from "@/lib/setup-checklist";
 
 /** Главная «Сегодня»: кто ждёт человека, что требует решения, сводка за сутки и клиенты. */
 export default async function TodayPage() {
   const { t, locale } = await getT();
-  const data = await dashboardData();
+  const [data, setup] = await Promise.all([dashboardData(), setupChecklist()]);
   const { today, waiting, decisions } = data;
   const gaps = decisions.filter((d): d is Extract<Decision, { kind: "gaps" }> => d.kind === "gaps");
   const decisionRows = decisions.length - gaps.length + (gaps.length ? 1 : 0);
@@ -121,6 +123,12 @@ export default async function TodayPage() {
           )}
         </Card>
       </section>
+
+      {setup.length > 0 && (
+        <section>
+          <SetupChecklist items={setup.map(({ key, kind, title, n, href }) => ({ key, kind, title, n, href }))} />
+        </section>
+      )}
 
       <section>
         <div className="mb-3 flex items-center justify-between">

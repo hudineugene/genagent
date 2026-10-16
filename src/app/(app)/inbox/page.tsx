@@ -421,6 +421,9 @@ function ConversationInfo({ info, data, t, locale }: { info: Info; data: ThreadD
           </ul>
         </div>
       )}
+      {data.context?.lead?.looksTest && !info.isTest && (
+        <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-[13px] leading-snug text-amber-800 dark:text-amber-300">{t.inbox.looksTest}</p>
+      )}
       <TestToggle conversationId={data.id} isTest={info.isTest} labels={{ mark: t.inbox.markTest, unmark: t.inbox.unmarkTest, hint: t.inbox.markTestHint }} />
       <div className="space-y-1.5 border-t border-border pt-4">
         <InfoLink href={`/agents/${data.agentId}`} icon={<Bot className="size-4" />}>
