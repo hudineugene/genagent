@@ -154,6 +154,7 @@ export async function scenarioFromConversation(conversationId: string): Promise<
         m.status === "rejected" ? "не отправлен" : "",
         m.meta?.rating === "down" ? "клиент поставил 👎" : "",
         m.meta?.unverified?.length ? `данных нет в базе знаний: ${m.meta.unverified.join(", ")}` : "",
+        m.meta?.qa?.severity === "high" ? `проверка качества: ${m.meta.qa.note ?? ""}${m.meta.qa.better ? `; как надо: ${m.meta.qa.better}` : ""}` : "",
       ].filter(Boolean);
       return `${who}: ${m.text.replace(/\s+/g, " ").slice(0, 600)}${marks.length ? ` [${marks.join("; ")}]` : ""}`;
     });

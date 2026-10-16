@@ -18,8 +18,14 @@ import { agents, channels, conversations, messages } from "@/db/schema";
       const sys = typeof parsed.system === "string" ? parsed.system : JSON.stringify(parsed.system ?? "");
       // Выжимка для менеджера (generateJson) — отдельный короткий ответ
       const isSummary = /выжимк|summary/i.test(sys) && !/Передача менеджеру/.test(sys);
-      if (!isSummary) systems.push(sys);
-      const text = isSummary ? JSON.stringify({ summary: "Ищет: дом с 5 спальнями", draft: "" }) : (queue.shift() ?? "Ответ агента");
+      // Карточка лида (обновляется при передаче) — свой ответ, очередь ответов агента не трогает
+      const isLead = sys.includes("Заполни карточку");
+      if (!isSummary && !isLead) systems.push(sys);
+      const text = isLead
+        ? JSON.stringify({ temperature: "warm", reason: "ищет дом", fields: [] })
+        : isSummary
+          ? JSON.stringify({ summary: "Ищет: дом с 5 спальнями", draft: "" })
+          : (queue.shift() ?? "Ответ агента");
       const ev = (type: string, d: object) => `event: ${type}\ndata: ${JSON.stringify({ type, ...d })}\n\n`;
       res.writeHead(200, { "content-type": "text/event-stream" });
       res.end(

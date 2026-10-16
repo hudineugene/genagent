@@ -90,6 +90,7 @@ export function VersionsPanel({
       knowledge: b.knowledge,
       rules: b.rules,
       handoff: b.handoff,
+      leadFields: b.leadFields,
       extraInstructions: b.extra,
       monthlyBudgetUsd: b.budget,
       memory: b.memory,

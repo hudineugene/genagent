@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, gt, inArray } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { agentEvents, clients, conversations, messages } from "@/db/schema";
 import { getSetting, setSetting } from "@/lib/settings";
@@ -34,11 +34,14 @@ export type Lead = {
   who: string;
   channel: string;
   wants: string;
-  status: "upset" | "waiting" | "answered" | "result";
+  status: "upset" | "waiting" | "hot" | "answered" | "result";
+  /** Карточка лида: «горячесть» и поля со слов клиента */
+  temperature?: "hot" | "warm" | "cold";
   waitingMs: number;
   results: string[];
 };
 
+const HEAT = { hot: "🔥", warm: "🌤", cold: "❄️" } as const;
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 /** Лиды за период (по умолчанию — последние сутки). */
@@ -56,7 +59,19 @@ export async function collectLeads(sinceMs = Date.now() - DAY_MS): Promise<Lead[
     .innerJoin(conversations, eq(conversations.id, agentEvents.conversationId))
     .where(and(gt(agentEvents.createdAt, since), eq(conversations.isTest, false)));
   const resultEvents = events.filter((e) => e.conversationId && !NOT_LEAD.has(e.type));
-  const ids = [...new Set([...handoffs.map((h) => h.conversationId), ...resultEvents.map((e) => e.conversationId as string)])];
+  // Горячие по карточке лида — даже если до передачи менеджеру ещё не дошло
+  const hot = await db
+    .select({ id: conversations.id })
+    .from(conversations)
+    .where(
+      and(
+        eq(conversations.isTest, false),
+        eq(conversations.kind, "dm"),
+        gt(conversations.lastMessageAt, since),
+        sql`json_extract(${conversations.context}, '$.lead.temperature') = 'hot'`,
+      ),
+    );
+  const ids = [...new Set([...handoffs.map((h) => h.conversationId), ...resultEvents.map((e) => e.conversationId as string), ...hot.map((h) => h.id)])];
   if (!ids.length) return [];
 
   const convs = await db
@@ -83,9 +98,12 @@ export async function collectLeads(sinceMs = Date.now() - DAY_MS): Promise<Lead[
     const wantsLine = summary.split("\n").find((l) => l.startsWith("Ищет:"))?.replace(/^Ищет:\s*/, "");
     const memory = c.context?.memory?.facts?.find((f) => !/^зовут|^имя/i.test(f));
     const said = lastUser.find((m) => m.conversationId === c.id)?.text;
-    const wants = (wantsLine || (results.length ? results.join(", ") : "") || memory || said || "—").replace(/\s+/g, " ").slice(0, 160);
+    const card = c.context?.lead;
+    const cardLine = card?.fields.length ? card.fields.map((f) => `${f.label}: ${f.value}`).join("; ") : "";
+    const wants = (cardLine || wantsLine || (results.length ? results.join(", ") : "") || memory || said || "—").replace(/\s+/g, " ").slice(0, 200);
     const answered = h ? ops.some((o) => o.conversationId === c.id && o.createdAt > h.createdAt) : ops.some((o) => o.conversationId === c.id);
-    const status: Lead["status"] = h?.meta?.upset && !answered ? "upset" : h && !answered && c.needsAttention ? "waiting" : h ? "answered" : "result";
+    const status: Lead["status"] =
+      h?.meta?.upset && !answered ? "upset" : h && !answered && c.needsAttention ? "waiting" : h ? "answered" : results.length ? "result" : "hot";
     leads.push({
       conversationId: c.id,
       client,
@@ -95,10 +113,12 @@ export async function collectLeads(sinceMs = Date.now() - DAY_MS): Promise<Lead[
       status,
       waitingMs: status === "waiting" || status === "upset" ? now - (h?.createdAt.getTime() ?? now) : 0,
       results,
+      temperature: card?.temperature,
     });
   }
-  const rank = { upset: 0, waiting: 1, result: 2, answered: 3 } as const;
-  return leads.sort((a, b) => rank[a.status] - rank[b.status] || b.waitingMs - a.waitingMs);
+  const rank = { upset: 0, waiting: 1, hot: 2, result: 3, answered: 4 } as const;
+  const heat = (l: Lead) => (l.temperature === "hot" ? 0 : l.temperature === "warm" ? 1 : 2);
+  return leads.sort((a, b) => rank[a.status] - rank[b.status] || heat(a) - heat(b) || b.waitingMs - a.waitingMs);
 }
 
 const hours = (ms: number) => (ms < 3600_000 ? `${Math.max(1, Math.round(ms / 60000))} мин` : `${Math.round(ms / 3600_000)} ч`);
@@ -108,9 +128,18 @@ export function leadsHtml(leads: Lead[], adminUrl?: string) {
   const lines = [`🎯 <b>Лиды за сутки: ${leads.length}</b>${waiting ? ` · ждут ответа: ${waiting}` : ""}`];
   for (const l of leads.slice(0, MAX_LEADS)) {
     const mark =
-      l.status === "upset" ? `🔴 недоволен, ждёт ${hours(l.waitingMs)}` : l.status === "waiting" ? `⏳ ждёт ${hours(l.waitingMs)}` : l.status === "answered" ? "✅ ответили" : "📌 " + esc(l.results.join(", "));
+      l.status === "upset"
+        ? `🔴 недоволен, ждёт ${hours(l.waitingMs)}`
+        : l.status === "waiting"
+          ? `⏳ ждёт ${hours(l.waitingMs)}`
+          : l.status === "answered"
+            ? "✅ ответили"
+            : l.status === "hot"
+              ? "🔥 горячий — менеджеру ещё не передан"
+              : "📌 " + esc(l.results.join(", "));
     const link = adminUrl ? ` <a href="${adminUrl}/inbox?c=${l.conversationId}">→</a>` : "";
-    lines.push("", `<b>${esc(l.who)}</b> · ${esc(l.client)} · ${l.channel}${link}`, `${esc(l.wants)}`, mark);
+    const heat = l.temperature ? `${HEAT[l.temperature]} ` : "";
+    lines.push("", `${heat}<b>${esc(l.who)}</b> · ${esc(l.client)} · ${l.channel}${link}`, `${esc(l.wants)}`, mark);
   }
   if (leads.length > MAX_LEADS) lines.push("", `…и ещё ${leads.length - MAX_LEADS}`);
   return lines.join("\n");

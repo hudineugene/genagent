@@ -18,6 +18,8 @@ export type ListItem = {
   status: "open" | "closed";
   needsAttention: boolean;
   upset: boolean;
+  /** Карточка лида: горячий клиент — значок 🔥 */
+  lead: "hot" | "warm" | "cold" | null;
   unread: number;
   typing: boolean;
   lastMessageText: string;
@@ -78,6 +80,11 @@ export function ConversationList({ items, selectedId }: { items: ListItem[]; sel
                   <span className={cx("truncate text-sm", c.unread > 0 ? "font-semibold" : "font-medium")}>{label}</span>
                   {c.mode === "human" && c.status !== "closed" && (
                     <span className="shrink-0 rounded bg-amber-500/15 px-1 text-[10px] leading-4 text-amber-600 dark:text-amber-400">{t.inbox.humanMode}</span>
+                  )}
+                  {c.lead === "hot" && c.status !== "closed" && (
+                    <span className="shrink-0 text-[11px]" title={t.inbox.leadTemp.hot}>
+                      🔥
+                    </span>
                   )}
                   {c.upset && waiting && (
                     <span className="shrink-0 text-[11px]" title={t.home.upset}>

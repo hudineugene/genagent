@@ -362,7 +362,11 @@ export async function respond(conversationId: string): Promise<void> {
       // Клиент недоволен (агент поставил [[ACTION mood: upset]]) — уведомление с пометкой «срочно».
       const upset = actions.some((a) => a.type === "mood" && /upset|angry/i.test(a.value));
       await addMessage(conversationId, "system", "handoff", summary || upset || reason ? { meta: { ...(summary ? { summary } : {}), ...(upset ? { upset } : {}), ...(reason ? { reason } : {}) } } : {});
-      void notify().then((n) => n.notifyHandoff(conversationId, summary, { upset, draft, reason }));
+      // Карточка лида — свежая, к уведомлению (дешёвая модель; не задерживает ответ клиенту — он уже отправлен)
+      void import("@/lib/agent/lead")
+        .then((m) => m.updateLead(conversationId))
+        .catch(() => null)
+        .then((lead) => notify().then((n) => n.notifyHandoff(conversationId, summary, { upset, draft, reason, lead })));
     }
   } catch (e) {
     console.error("respond failed", conversationId, e);

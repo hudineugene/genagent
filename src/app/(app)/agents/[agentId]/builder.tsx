@@ -371,6 +371,14 @@ export function Builder({
             placeholder={t.builder.handoffPlaceholder}
           />
         </Field>
+        <Field label={t.builder.leadFields} hint={t.builder.leadFieldsHint}>
+          <Input
+            value={config.leadFields ?? ""}
+            maxLength={400}
+            onChange={(e) => set("leadFields", e.target.value)}
+            placeholder={t.builder.leadFieldsPlaceholder}
+          />
+        </Field>
         <Field label={t.builder.extra}>
           <Textarea
             rows={3}

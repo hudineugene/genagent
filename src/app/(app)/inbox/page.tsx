@@ -69,6 +69,8 @@ export default async function InboxPage({
         unread: conversations.unread,
         lastMessageText: conversations.lastMessageText,
         lastMessageAt: conversations.lastMessageAt,
+        // «Горячесть» лида — значок в списке
+        lead: sql<"hot" | "warm" | "cold" | null>`json_extract(${conversations.context}, '$.lead.temperature')`,
         clientName: clients.name,
         clientColor: clients.color,
         agentName: agents.name,
@@ -361,6 +363,36 @@ function ConversationInfo({ info, data, t, locale }: { info: Info; data: ThreadD
         {info.cost > 0 && <Row label={t.inbox.infoCost}>${info.cost.toFixed(3)}</Row>}
         {info.linked && <Row label={t.inbox.infoLinked}>✓</Row>}
       </dl>
+      {data.context?.lead && (
+        <div className="space-y-2 border-t border-border pt-4">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-medium text-muted">{t.inbox.infoLead}</span>
+            <span
+              className={cx(
+                "rounded-full px-2 py-0.5 text-xs font-semibold",
+                data.context.lead.temperature === "hot"
+                  ? "bg-danger/10 text-danger"
+                  : data.context.lead.temperature === "warm"
+                    ? "bg-amber-500/15 text-amber-700 dark:text-amber-400"
+                    : "bg-surface-2 text-muted",
+              )}
+            >
+              {t.inbox.leadTemp[data.context.lead.temperature]}
+            </span>
+          </div>
+          {data.context.lead.reason && <p className="text-[13px] leading-snug text-muted">{data.context.lead.reason}</p>}
+          {data.context.lead.fields.length > 0 && (
+            <dl className="space-y-1.5">
+              {data.context.lead.fields.map((f, i) => (
+                <div key={i} className="flex items-baseline justify-between gap-3">
+                  <dt className="shrink-0 text-xs text-muted">{f.label}</dt>
+                  <dd className="min-w-0 text-right text-[13px]">{f.value}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </div>
+      )}
       {Boolean(data.context?.orders?.length) && (
         <div className="space-y-2 border-t border-border pt-4">
           <div className="text-xs font-medium text-muted">{t.inbox.infoOrders}</div>

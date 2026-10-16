@@ -9,6 +9,7 @@ import { approveDraftCore, rejectDraftCore } from "@/lib/drafts";
 import { canReply, operatorReplyCore, returnToAgentCore } from "@/lib/operator";
 import { addAnswerToKb } from "@/lib/agent/kb-answers";
 import { isSticker } from "@/lib/sticker";
+import type { LeadCard } from "@/db/schema";
 
 /**
  * Уведомления студии в Telegram — отдельный бот (его создают в @BotFather).
@@ -134,7 +135,7 @@ async function markDone(s: NotifySettings, q: { message?: { chat: { id: number |
 }
 
 /** Агент передал клиента менеджеру. */
-export async function notifyHandoff(conversationId: string, summary: string | null, opts: { upset?: boolean; draft?: string | null; reason?: string } = {}) {
+export async function notifyHandoff(conversationId: string, summary: string | null, opts: { upset?: boolean; draft?: string | null; reason?: string; lead?: LeadCard | null } = {}) {
   try {
     const row = await conversationInfo(conversationId);
     if (!row) return;
@@ -152,10 +153,21 @@ export async function notifyHandoff(conversationId: string, summary: string | nu
     const buttons = conversationButtons(s, row);
     if (draft && buttons) buttons.inline_keyboard.unshift([{ text: "📤 Отправить черновик", callback_data: `sd:${row.conversation.id}` }]);
     const why = opts.reason ? `<b>Причина:</b> ${esc(opts.reason)}\n` : "";
-    await broadcast(`${title}\n${header(row)}\n\n${why}${summary ? esc(summary) : "<i>Выжимки нет — откройте диалог.</i>"}${draft}${note}`, buttons);
+    const lead = opts.lead ? `${leadHtml(opts.lead)}\n\n` : "";
+    await broadcast(`${title}\n${header(row)}\n\n${why}${lead}${summary ? esc(summary) : "<i>Выжимки нет — откройте диалог.</i>"}${draft}${note}`, buttons);
   } catch (e) {
     console.error("notify handoff failed", e);
   }
+}
+
+const LEAD_TEMP: Record<LeadCard["temperature"], string> = { hot: "🔥 Горячий", warm: "🌤 Тёплый", cold: "❄️ Холодный" };
+
+/** Карточка лида для Telegram: «горячесть», почему и поля со слов клиента. */
+export function leadHtml(lead: LeadCard) {
+  return [
+    `<b>${LEAD_TEMP[lead.temperature]}</b>${lead.reason ? ` — ${esc(lead.reason)}` : ""}`,
+    ...lead.fields.map((f) => `${esc(f.label)}: <b>${esc(f.value)}</b>`),
+  ].join("\n");
 }
 
 // Сообщения клиента, о которых уже сообщили (разговор у сотрудника) — по одному уведомлению на сообщение.

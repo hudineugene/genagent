@@ -339,6 +339,16 @@ export type OrderState = {
   steps: { label: string; at: number }[];
 };
 
+/** Карточка лида: поля со слов клиента и «горячесть» (hot — готов к шагу, warm — конкретный интерес, cold — общий вопрос). */
+export type LeadCard = {
+  temperature: "hot" | "warm" | "cold";
+  reason: string;
+  fields: { label: string; value: string }[];
+  at: number;
+  /** До какого сообщения переписка учтена (мс) */
+  upto: number;
+};
+
 export type ConversationContext = {
   postId?: string;
   postUrl?: string;
@@ -356,6 +366,8 @@ export type ConversationContext = {
   orders?: OrderState[];
   /** Что агент помнит о клиенте из прошлых разговоров */
   memory?: ClientMemory;
+  /** Карточка лида: что клиент хочет и насколько готов к шагу (lib/agent/lead.ts) */
+  lead?: LeadCard;
   /** Свой бот: открыта ли сейчас команда и как быстро отвечает */
   team?: TeamState;
   /** Черновик ответа менеджеру, который агент подготовил при передаче (в Telegram — «Отправить черновик») */

@@ -58,6 +58,8 @@ export const agentConfigSchema = z.object({
   kbSourceIds: z.array(z.string()).nullable().default(null),
   rules: z.string().max(5000).default(""),
   handoff: z.string().max(2000).default(""),
+  /** Поля карточки лида через запятую (пусто — общие: что ищет, бюджет, сроки, контакт) */
+  leadFields: z.string().max(400).optional(),
   greeting: z.string().max(1000).default(""),
   extraInstructions: z.string().max(10000).default(""),
   useBrandVoice: z.boolean().default(true),

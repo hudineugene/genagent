@@ -41,6 +41,10 @@ export async function register() {
   startWeeklyTests();
   const { startAutoTests } = await import("./lib/tests/auto");
   startAutoTests();
+  const { startLeads } = await import("./lib/agent/lead");
+  startLeads();
+  const { startRealScenarios } = await import("./lib/tests/from-real");
+  startRealScenarios();
   const { startOwnerGapsDigest } = await import("./lib/agent/gaps-digest");
   startOwnerGapsDigest();
   const { startDailyDigest } = await import("./lib/agent/daily");
