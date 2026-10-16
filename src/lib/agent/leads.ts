@@ -18,7 +18,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_LEADS = 15;
 /** Не результат: оценки, служебные события */
 const NOT_LEAD = new Set(["rating_up", "rating_down", "followup_sent", "brief_started"]);
-const CHANNEL: Record<string, string> = { telegram: "Telegram", widget: "сайт", instagram: "Instagram", threads: "Threads", email: "почта", api: "бот" };
+const CHANNEL: Record<string, string> = { telegram: "Telegram", widget: "сайт", instagram: "Instagram", threads: "Threads", email: "почта", api: "бот", whatsapp: "WhatsApp" };
 
 export async function getLeadsSettings(): Promise<LeadsSettings> {
   return { ...LEADS_DEFAULTS, ...((await getSetting<LeadsSettings>(KEY)) ?? {}) };

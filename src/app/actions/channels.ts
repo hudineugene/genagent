@@ -1,11 +1,12 @@
 "use server";
+import { getPhone } from "@/lib/channels/meta/whatsapp";
 
 import { randomBytes } from "node:crypto";
 import { refresh } from "next/cache";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { agents, channels, clients, type ApiConfig, type EmailConfig, type InstagramConfig, type TelegramConfig, type ThreadsConfig, type WidgetConfig, WIDGET_LANGS } from "@/db/schema";
+import { agents, channels, clients, type ApiConfig, type EmailConfig, type InstagramConfig, type TelegramConfig, type ThreadsConfig, type WidgetConfig, WIDGET_LANGS, type WhatsAppConfig } from "@/db/schema";
 import { EmailError, GMAIL, pollNow, verifyEmail } from "@/lib/channels/email";
 import { createAuthorizeUrl } from "@/lib/channels/meta/connect";
 import { requireUser } from "@/lib/auth";
@@ -270,6 +271,26 @@ export async function addApiChannel(agentId: string, label: string): Promise<Cha
   const name = label.trim().slice(0, 80) || "API";
   const config: ApiConfig = { key: newApiKey(), label: name };
   await db.insert(channels).values({ agentId, clientId: row.client.id, type: "api", name, config });
+  refresh();
+  return { ok: true };
+}
+
+/** WhatsApp Business: ID номера и постоянный токен — проверяем у Meta и создаём канал. */
+export async function addWhatsAppChannel(agentId: string, phoneNumberId: string, token: string): Promise<ChannelResult> {
+  await requireUser();
+  const row = await loadAgent(agentId);
+  if (!row) return { error: "not_found" };
+  const id = phoneNumberId.trim();
+  const tok = token.trim();
+  if (!/^\d{6,25}$/.test(id) || tok.length < 20) return { error: "invalid" };
+  let phone: Awaited<ReturnType<typeof getPhone>>;
+  try {
+    phone = await getPhone(tok, id);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message.slice(0, 200) : "whatsapp_error" };
+  }
+  const config: WhatsAppConfig = { phoneNumberId: id, displayPhone: phone.display_phone_number, verifiedName: phone.verified_name, token: tok };
+  await db.insert(channels).values({ agentId, clientId: row.client.id, type: "whatsapp", name: phone.display_phone_number, config });
   refresh();
   return { ok: true };
 }

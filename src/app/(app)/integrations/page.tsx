@@ -157,6 +157,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
             <IntegrationsForm
               instagram={meta.instagram ? { appId: meta.instagram.appId, hasSecret: true } : null}
               threads={meta.threads ? { appId: meta.threads.appId, hasSecret: true } : null}
+              whatsapp={meta.whatsapp ? { appId: meta.whatsapp.appId, hasSecret: true } : null}
               verifyToken={meta.verifyToken}
               urls={base ? metaUrls(base) : null}
             />

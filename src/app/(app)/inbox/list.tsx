@@ -2,7 +2,7 @@
 
 import type { ChannelType } from "@/db/schema";
 import Link from "next/link";
-import { AtSign, Camera, Globe, Send, Mail, Bot } from "lucide-react";
+import { AtSign, Camera, Globe, Send, Mail, Bot, MessageCircle } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
 import { cx } from "@/components/ui";
 import { contactLabel, waited } from "@/lib/contact";
@@ -27,7 +27,7 @@ export type ListItem = {
   agentName: string;
 };
 
-export const CHANNEL_ICONS = { telegram: Send, widget: Globe, instagram: Camera, threads: AtSign, email: Mail, api: Bot } as const;
+export const CHANNEL_ICONS = { telegram: Send, widget: Globe, instagram: Camera, threads: AtSign, email: Mail, api: Bot, whatsapp: MessageCircle } as const;
 
 export { contactLabel, waited, ContactAvatar };
 

@@ -15,6 +15,7 @@ import { type ApiConfig,
   type ThreadsConfig,
   type EmailConfig,
   type ClientMemory,
+  type WhatsAppConfig,
 } from "@/db/schema";
 import * as ig from "@/lib/channels/meta/instagram";
 import * as th from "@/lib/channels/meta/threads";
@@ -30,6 +31,7 @@ import { memoryNote } from "@/lib/agent/memory";
 import { handoffEtaNote, measuredReplyMinutes } from "@/lib/agent/eta";
 import { sendChatAction, sendText, replyInGroup } from "@/lib/channels/telegram-api";
 import { sendEmailReply } from "@/lib/channels/email-send";
+import * as wa from "@/lib/channels/meta/whatsapp";
 
 const HISTORY_LIMIT = 40;
 /** Пауза перед ответом: клиент часто пишет несколькими сообщениями подряд. */
@@ -527,6 +529,10 @@ export async function deliver(
     }
     case "email":
       return sendEmailReply(channel.config as EmailConfig, conversation, text);
+    case "whatsapp": {
+      const cfg = channel.config as WhatsAppConfig;
+      return wa.sendText(cfg.token, cfg.phoneNumberId, conversation.externalId, toPlainText(text));
+    }
     default:
       return null;
   }

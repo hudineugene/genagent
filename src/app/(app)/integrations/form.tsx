@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
-import { AlertTriangle, AtSign, CalendarDays, Camera, Check, Copy } from "lucide-react";
+import { AlertTriangle, AtSign, CalendarDays, Camera, Check, Copy, MessageCircle } from "lucide-react";
 import { removeGoogleKey, saveGoogleKey, saveMetaSettings, type IntegrationsResult } from "@/app/actions/integrations";
 import { useI18n } from "@/lib/i18n/client";
 import { Button, Card, Field, Input, Spinner, Textarea } from "@/components/ui";
@@ -12,6 +12,7 @@ type Urls = {
   threadsRedirect: string;
   instagramWebhook: string;
   threadsWebhook: string;
+  whatsappWebhook: string;
   deauthorize: string;
   dataDeletion: string;
 };
@@ -19,11 +20,13 @@ type Urls = {
 export function IntegrationsForm({
   instagram,
   threads,
+  whatsapp,
   verifyToken,
   urls,
 }: {
   instagram: App;
   threads: App;
+  whatsapp: App;
   verifyToken: string;
   urls: Urls | null;
 }) {
@@ -56,6 +59,14 @@ export function IntegrationsForm({
           prefix="threads"
           app={threads}
           urls={urls ? [[s.redirectUrl, urls.threadsRedirect], [s.webhookUrl, urls.threadsWebhook]] : []}
+        />
+        <AppCard
+          icon={<MessageCircle className="size-5" />}
+          title="WhatsApp Business"
+          hint={s.whatsappHint}
+          prefix="whatsapp"
+          app={whatsapp}
+          urls={urls ? [[s.webhookUrl, urls.whatsappWebhook]] : []}
         />
         <div className="flex items-center justify-end gap-3">
           {state?.ok && (
@@ -98,7 +109,7 @@ function AppCard({
   icon: React.ReactNode;
   title: string;
   hint: string;
-  prefix: "instagram" | "threads";
+  prefix: "instagram" | "threads" | "whatsapp";
   app: App;
   urls: [string, string][];
 }) {

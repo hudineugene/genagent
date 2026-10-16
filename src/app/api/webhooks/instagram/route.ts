@@ -4,6 +4,7 @@ import { getMetaSettings } from "@/lib/settings";
 import { validSignature, verifyChallenge } from "@/lib/channels/meta/webhook";
 import { findChannelByAccount, handleInstagramComment, handleInstagramDm } from "@/lib/channels/meta/inbound";
 import { getMedia } from "@/lib/channels/meta/instagram";
+import { markWebhook } from "@/lib/channels/health";
 
 export const GET = verifyChallenge;
 
@@ -44,6 +45,7 @@ export async function POST(req: Request) {
     for (const entry of body.entry ?? []) {
       const channel = await findChannelByAccount("instagram", String(entry.id));
       if (!channel) continue;
+      await markWebhook(channel.id).catch(() => {});
       const cfg = channel.config as InstagramConfig;
       try {
         for (const m of entry.messaging ?? []) {

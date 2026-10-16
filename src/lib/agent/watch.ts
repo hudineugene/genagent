@@ -101,8 +101,33 @@ async function oldReferences() {
   }
 }
 
+/** Включённый канал неделю ничего не получал — возможно, сломалось подключение (или нет трафика). */
+async function silentChannels() {
+  const list = await db
+    .select({ id: channels.id, name: channels.name, type: channels.type, createdAt: channels.createdAt, client: clients.name })
+    .from(channels)
+    .innerJoin(clients, eq(clients.id, channels.clientId))
+    .where(and(eq(channels.enabled, true), lt(channels.createdAt, new Date(Date.now() - 7 * DAY))));
+  if (!list.length) return;
+  const { lastInbound, webhookTimes } = await import("@/lib/channels/health");
+  const [inbound, hooks] = await Promise.all([lastInbound(list.map((c) => c.id)), webhookTimes()]);
+  for (const c of list) {
+    const last = Math.max(inbound.get(c.id) ?? 0, hooks[c.id] ?? 0);
+    if (Date.now() - last < 7 * DAY) continue;
+    if (!(await once(`silent:${c.id}`, 7 * DAY))) continue;
+    const meta = c.type === "instagram" || c.type === "threads" || c.type === "whatsapp";
+    await notify(
+      `📭 <b>Канал неделю без сообщений</b>\n${esc(c.client)} · ${esc(c.name)} (${c.type})\n${
+        meta
+          ? "От Meta не пришло ни одного уведомления. Проверьте, что приложение Meta в режиме Live и подписано на события аккаунта, — или в канал просто никто не писал."
+          : "Проверьте, что канал подключён и доступен клиентам (кнопка на сайте, бот), — или в него просто никто не писал."
+      }`,
+    );
+  }
+}
+
 export async function runWatch() {
-  for (const [name, fn] of [["spend", spendSpikes], ["sync", staleSync], ["references", oldReferences]] as const) {
+  for (const [name, fn] of [["spend", spendSpikes], ["sync", staleSync], ["references", oldReferences], ["silent", silentChannels]] as const) {
     try {
       await fn();
     } catch (e) {

@@ -25,7 +25,9 @@ export async function saveMetaSettings(
   const current = await getMetaSettings();
   const next: MetaSettings = { ...current };
 
-  for (const p of ["instagram", "threads"] as const) {
+  for (const p of ["instagram", "threads", "whatsapp"] as const) {
+    // Поля этого приложения не пришли в форме — не трогаем его ключи
+    if (!formData.has(`${p}AppId`)) continue;
     const appId = String(formData.get(`${p}AppId`) ?? "").trim();
     const secret = String(formData.get(`${p}AppSecret`) ?? "").trim();
     if (appId && !/^\d{5,25}$/.test(appId)) return { error: "app_id" };

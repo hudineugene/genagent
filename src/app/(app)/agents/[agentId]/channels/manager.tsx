@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useState, useSyncExternalStore, useTransition } from "react";
 import Link from "next/link";
-import { AlertTriangle, AtSign, Bot, Camera, Check, Copy, ExternalLink, Eye, Globe, Mail, Plus, Power, RefreshCw, Send, Trash2 } from "lucide-react";
+import { AlertTriangle, AtSign, Bot, Camera, Check, Copy, ExternalLink, Eye, Globe, Mail, MessageCircle, Plus, Power, RefreshCw, Send, Trash2 } from "lucide-react";
 import {
   addApiChannel,
   addEmailChannel,
@@ -16,8 +16,7 @@ import {
   updateApiChannel,
   updateSocialChannel,
   updateTelegramChannel,
-  updateWidget,
-} from "@/app/actions/channels";
+  updateWidget, addWhatsAppChannel } from "@/app/actions/channels";
 import { WIDGET_LANGS, type ChannelType, type WidgetConfig } from "@/db/schema";
 import { useI18n } from "@/lib/i18n/client";
 import { Badge, Button, Card, Field, Input, Spinner, Textarea, cx } from "@/components/ui";
@@ -30,15 +29,21 @@ export type ChannelItem = {
   enabled: boolean;
   error: string | null;
   live: boolean;
+  /** Последнее сообщение клиента и последнее уведомление Meta (мс) — видно, доходят ли сообщения */
+  lastInboundAt: number | null;
+  webhookAt: number | null;
+  /** Неделю (или ни разу) без сообщений клиентов */
+  inboundStale: boolean;
   username: string | null;
   widget: WidgetConfig | null;
+  whatsapp: { phone: string; name: string } | null;
   social: { dm?: boolean; comments?: boolean; approval: boolean; tokenExpiresAt: number } | null;
   email: { address: string; approval: boolean; fromName: string } | null;
   api: { key: string; label: string; approval: boolean; botNote: string; followUps: boolean; orderNotes: boolean } | null;
   telegram: { comments: boolean; approval: boolean; group: { id: number; title: string; channel?: string } | null } | null;
 };
 
-type SocialReady = { publicUrl: boolean; instagram: boolean; threads: boolean };
+type SocialReady = { publicUrl: boolean; instagram: boolean; threads: boolean; whatsapp: boolean };
 
 type ErrKey = keyof ReturnType<typeof useI18n>["t"]["channels"]["errors"];
 
@@ -58,7 +63,7 @@ export function ChannelsManager({
   isAdmin: boolean;
 }) {
   const { t } = useI18n();
-  const [adding, setAdding] = useState<"telegram" | "instagram" | "threads" | "email" | "api" | null>(null);
+  const [adding, setAdding] = useState<"telegram" | "instagram" | "threads" | "email" | "api" | "whatsapp" | null>(null);
   const [pending, start] = useTransition();
   const errText = (code: string | null | undefined) =>
     code ? (t.channels.errors[code as ErrKey] ?? code) : null;
@@ -81,6 +86,8 @@ export function ChannelsManager({
           <EmailCard key={c.id} c={c} errText={errText} />
         ) : c.type === "api" ? (
           <ApiCard key={c.id} c={c} publicUrl={publicUrl} />
+        ) : c.type === "whatsapp" ? (
+          <WhatsAppCard key={c.id} c={c} />
         ) : (
           <SocialCard key={c.id} c={c} agentId={agentId} errText={errText} />
         ),
@@ -124,6 +131,13 @@ export function ChannelsManager({
             onClick={() => setAdding(adding === "email" ? null : "email")}
           />
           <AddCard
+            icon={<MessageCircle className="size-5" />}
+            title="WhatsApp Business"
+            desc={socialReady.whatsapp ? t.channels.whatsappDesc : t.channels.whatsappSoon}
+            active={adding === "whatsapp"}
+            onClick={() => setAdding(adding === "whatsapp" ? null : "whatsapp")}
+          />
+          <AddCard
             icon={<Bot className="size-5" />}
             title={t.channels.api}
             desc={t.channels.apiDesc}
@@ -132,6 +146,7 @@ export function ChannelsManager({
           />
         </div>
         {adding === "api" && <ApiForm agentId={agentId} onDone={() => setAdding(null)} />}
+        {adding === "whatsapp" && <WhatsAppForm agentId={agentId} ready={socialReady.whatsapp && socialReady.publicUrl} onDone={() => setAdding(null)} />}
         {adding === "email" && <EmailForm agentId={agentId} onDone={() => setAdding(null)} errText={errText} />}
         {adding === "telegram" && <TelegramForm agentId={agentId} onDone={() => setAdding(null)} errText={errText} />}
         {(adding === "instagram" || adding === "threads") && (
@@ -210,6 +225,20 @@ function TelegramForm({
   );
 }
 
+/** «Последнее сообщение: 15 окт., 18:35» (или «ещё не было») — и для Meta: когда пришло последнее уведомление. */
+function LastActivity({ c }: { c: ChannelItem }) {
+  const { t, locale } = useI18n();
+  const fmt = new Intl.DateTimeFormat(locale === "uk" ? "uk-UA" : "ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Kyiv" });
+  const stale = c.inboundStale;
+  const meta = c.type === "instagram" || c.type === "threads" || c.type === "whatsapp";
+  return (
+    <span className={cx("text-xs", stale ? "text-amber-600 dark:text-amber-400" : "text-muted")} title={meta ? t.channels.webhookHint : undefined}>
+      {c.lastInboundAt ? `${t.channels.lastInbound}: ${fmt.format(c.lastInboundAt)}` : t.channels.noInbound}
+      {meta && ` · ${c.webhookAt ? `${t.channels.lastWebhook}: ${fmt.format(c.webhookAt)}` : t.channels.noWebhook}`}
+    </span>
+  );
+}
+
 function ChannelHeader({ c, icon, title }: { c: ChannelItem; icon: React.ReactNode; title: React.ReactNode }) {
   const { t } = useI18n();
   const [pending, start] = useTransition();
@@ -221,6 +250,7 @@ function ChannelHeader({ c, icon, title }: { c: ChannelItem; icon: React.ReactNo
         <Badge tone={c.enabled ? (c.error ? "warning" : "success") : "neutral"}>
           {c.enabled ? (c.type === "telegram" && c.live && !c.error ? t.channels.polling : t.channels.enabled) : t.channels.disabled}
         </Badge>
+        {c.enabled && <LastActivity c={c} />}
       </div>
       <Button
         size="sm"
@@ -626,7 +656,7 @@ function SocialCard({
         <SocialConnect
           agentId={agentId}
           provider={c.type as "instagram" | "threads"}
-          ready={{ publicUrl: true, instagram: true, threads: true }}
+          ready={{ publicUrl: true, instagram: true, threads: true, whatsapp: true }}
           isAdmin={false}
           compact
         />
@@ -709,6 +739,68 @@ function EmailCard({ c, errText }: { c: ChannelItem; errText: (c: string | null 
         </div>
       </div>
       <p className="text-xs text-muted">{ch.emailNote}</p>
+    </Card>
+  );
+}
+
+/** WhatsApp Business: ID номера и постоянный токен из кабинета Meta. Пока нет приложения Meta — только объяснение. */
+function WhatsAppForm({ agentId, ready, onDone }: { agentId: string; ready: boolean; onDone: () => void }) {
+  const { t } = useI18n();
+  const ch = t.channels;
+  const [phoneId, setPhoneId] = useState("");
+  const [token, setToken] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  if (!ready) {
+    return (
+      <Card className="mt-3 space-y-2 p-5 text-sm">
+        <p className="font-medium">{ch.whatsappSoon}</p>
+        <p className="text-muted">{ch.whatsappSteps}</p>
+      </Card>
+    );
+  }
+  return (
+    <Card className="mt-3 p-5">
+      <form
+        className="space-y-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          setError(null);
+          start(async () => {
+            const r = await addWhatsAppChannel(agentId, phoneId, token);
+            if (r.ok) onDone();
+            else setError(r.error ?? "error");
+          });
+        }}
+      >
+        <p className="text-sm text-muted">{ch.whatsappHow}</p>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label={ch.whatsappPhoneId}>
+            <Input value={phoneId} onChange={(e) => setPhoneId(e.target.value)} inputMode="numeric" required />
+          </Field>
+          <Field label={ch.whatsappToken}>
+            <Input value={token} onChange={(e) => setToken(e.target.value)} type="password" autoComplete="new-password" required />
+          </Field>
+        </div>
+        {error && <p className="text-sm text-danger">{error}</p>}
+        <div className="flex justify-end">
+          <Button disabled={pending || !phoneId.trim() || !token.trim()}>
+            {pending ? <Spinner /> : <Plus className="size-4" />}
+            {ch.whatsappConnect}
+          </Button>
+        </div>
+      </form>
+    </Card>
+  );
+}
+
+function WhatsAppCard({ c }: { c: ChannelItem }) {
+  const { t } = useI18n();
+  return (
+    <Card className="space-y-3 p-5">
+      <ChannelHeader c={c} icon={<MessageCircle className="size-5" />} title={`WhatsApp · ${c.whatsapp?.phone ?? c.name}`} />
+      {c.whatsapp?.name && <p className="text-sm text-muted">{c.whatsapp.name}</p>}
+      <p className="text-xs text-muted">{t.channels.whatsappNote}</p>
     </Card>
   );
 }

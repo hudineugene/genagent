@@ -10,6 +10,8 @@ export type AppCredentials = { appId: string; appSecret: string };
 export type MetaSettings = {
   instagram?: AppCredentials;
   threads?: AppCredentials;
+  /** Приложение с продуктом WhatsApp (может совпадать с приложением Instagram) */
+  whatsapp?: AppCredentials;
   /** Секрет для подтверждения адреса вебхука в кабинете Meta (Verify Token). */
   verifyToken: string;
 };
@@ -46,6 +48,7 @@ export function metaUrls(base: string) {
     threadsRedirect: `${base}/oauth/threads/callback`,
     instagramWebhook: `${base}/api/webhooks/instagram`,
     threadsWebhook: `${base}/api/webhooks/threads`,
+    whatsappWebhook: `${base}/api/webhooks/whatsapp`,
     deauthorize: `${base}/api/webhooks/deauthorize`,
     dataDeletion: `${base}/api/webhooks/data-deletion`,
   };

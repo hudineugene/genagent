@@ -6,6 +6,7 @@ import { isPolling } from "@/lib/channels/telegram-poller";
 import { requireUser } from "@/lib/auth";
 import { getMetaSettings, publicUrl } from "@/lib/settings";
 import { ChannelsManager, type ChannelItem } from "./manager";
+import { inboundStale, lastInbound, webhookTimes } from "@/lib/channels/health";
 
 export default async function AgentChannelsPage({ params }: { params: Promise<{ agentId: string }> }) {
   const { agentId } = await params;
@@ -19,6 +20,7 @@ export default async function AgentChannelsPage({ params }: { params: Promise<{ 
   const { agent } = row;
 
   const list = await db.select().from(channels).where(eq(channels.agentId, agentId)).orderBy(asc(channels.createdAt));
+  const [inbound, hooks] = await Promise.all([lastInbound(list.map((c) => c.id)), webhookTimes()]);
   // Токен бота в браузер не отдаём.
   const items: ChannelItem[] = list.map((c) => ({
     id: c.id,
@@ -27,8 +29,12 @@ export default async function AgentChannelsPage({ params }: { params: Promise<{ 
     enabled: c.enabled,
     error: c.error,
     live: c.type === "telegram" ? isPolling(c.id) : c.enabled,
+    lastInboundAt: inbound.get(c.id) ?? null,
+    webhookAt: hooks[c.id] ?? null,
+    inboundStale: inboundStale(inbound.get(c.id)),
     username: "username" in c.config ? c.config.username : null,
     widget: "color" in c.config ? c.config : null,
+    whatsapp: c.type === "whatsapp" && "phoneNumberId" in c.config ? { phone: c.config.displayPhone, name: c.config.verifiedName ?? "" } : null,
     social:
       c.type === "instagram" || c.type === "threads"
         ? {
@@ -53,6 +59,7 @@ export default async function AgentChannelsPage({ params }: { params: Promise<{ 
     publicUrl: Boolean(publicUrl()),
     instagram: Boolean(meta.instagram),
     threads: Boolean(meta.threads),
+    whatsapp: Boolean(meta.whatsapp ?? meta.instagram),
   };
 
   return (

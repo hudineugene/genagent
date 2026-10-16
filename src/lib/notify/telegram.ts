@@ -84,6 +84,7 @@ const CHANNEL_LABEL: Record<string, string> = {
   threads: "Threads",
   email: "почта",
   api: "свой бот",
+  whatsapp: "WhatsApp",
 };
 
 function header(row: NonNullable<Awaited<ReturnType<typeof conversationInfo>>>) {

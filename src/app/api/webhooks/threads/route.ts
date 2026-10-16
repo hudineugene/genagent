@@ -2,6 +2,7 @@ import { after } from "next/server";
 import { getMetaSettings } from "@/lib/settings";
 import { validSignature, verifyChallenge } from "@/lib/channels/meta/webhook";
 import { findChannelByAccount, handleThreadsReply } from "@/lib/channels/meta/inbound";
+import { markWebhook } from "@/lib/channels/health";
 
 export const GET = verifyChallenge;
 
@@ -39,6 +40,7 @@ export async function POST(req: Request) {
       if (ev.values?.field !== "replies" || !v?.id || !ev.target_id) continue;
       const channel = await findChannelByAccount("threads", String(ev.target_id));
       if (!channel) continue;
+      await markWebhook(channel.id).catch(() => {});
       await handleThreadsReply(channel, {
         id: v.id,
         text: v.text,

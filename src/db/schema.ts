@@ -234,8 +234,17 @@ export type ApiConfig = {
   /** Агент сопровождает заказ: при смене статуса бот берёт у агента живой текст вместо шаблона (POST /order) */
   orderNotes?: boolean;
 };
-export type ChannelConfig = TelegramConfig | WidgetConfig | InstagramConfig | ThreadsConfig | EmailConfig | ApiConfig;
-export const CHANNEL_TYPES = ["telegram", "widget", "instagram", "threads", "email", "api"] as const;
+/** WhatsApp Business (Cloud API): ID номера и постоянный токен системного пользователя Meta. */
+export type WhatsAppConfig = {
+  phoneNumberId: string;
+  /** Номер, как его видят клиенты: +34 600 000 000 */
+  displayPhone: string;
+  /** Подтверждённое имя компании в WhatsApp */
+  verifiedName?: string;
+  token: string;
+};
+export type ChannelConfig = TelegramConfig | WidgetConfig | InstagramConfig | ThreadsConfig | EmailConfig | ApiConfig | WhatsAppConfig;
+export const CHANNEL_TYPES = ["telegram", "widget", "instagram", "threads", "email", "api", "whatsapp"] as const;
 export type ChannelType = (typeof CHANNEL_TYPES)[number];
 
 /** Канал, через который агент общается с клиентами: Telegram-бот или виджет на сайте. */
