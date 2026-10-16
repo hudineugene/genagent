@@ -39,7 +39,7 @@ export type ChannelItem = {
   whatsapp: { phone: string; name: string } | null;
   social: { dm?: boolean; comments?: boolean; approval: boolean; tokenExpiresAt: number } | null;
   email: { address: string; approval: boolean; fromName: string } | null;
-  api: { key: string; label: string; approval: boolean; botNote: string; followUps: boolean; orderNotes: boolean } | null;
+  api: { key: string; label: string; approval: boolean; botNote: string; followUps: boolean; orderNotes: boolean; ratingInvite: boolean } | null;
   telegram: { comments: boolean; approval: boolean; group: { id: number; title: string; channel?: string } | null } | null;
 };
 
@@ -908,6 +908,13 @@ function ApiCard({ c, publicUrl }: { c: ChannelItem; publicUrl: string | null })
         checked={a.orderNotes}
         disabled={pending}
         onChange={(v) => start(async () => void (await updateApiChannel(c.id, { orderNotes: v })))}
+      />
+      <Toggle
+        label={ch.apiRatingInvite}
+        hint={ch.apiRatingInviteHint}
+        checked={a.ratingInvite}
+        disabled={pending}
+        onChange={(v) => start(async () => void (await updateApiChannel(c.id, { ratingInvite: v })))}
       />
       <Toggle
         label={ch.apiFollowUps}

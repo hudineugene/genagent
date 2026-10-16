@@ -234,6 +234,7 @@ export async function respond(conversationId: string): Promise<void> {
             ? apiNote(conversation.context?.language, conversation.context?.botContext, (channel.config as ApiConfig).botNote, botActivity(history), ordersNote(conversation.context?.orders), handoffEtaNote(conversation.context?.team, await measuredReplyMinutes(channel.id)))
             : undefined,
         pendingHandoff ? handoffPendingNote(pendingHandoff.createdAt) : undefined,
+        channel.type === "api" && (channel.config as ApiConfig).ratingInvite && !conversation.context?.ratingAskedAt ? RATING_NOTE : undefined,
         ].filter(Boolean).join("\n\n") || undefined,
       ),
     );
@@ -284,7 +285,12 @@ export async function respond(conversationId: string): Promise<void> {
     const { text: clean, handoff, actions: all } = extractHandoff(text);
     // Причина передачи — для менеджера и аналитики, не для бота
     const reason = all.find((a) => a.type === "reason")?.value.slice(0, 120);
-    const actions = all.filter((a) => a.type !== "reason");
+    // Агент попросил оценить ответ — запоминаем, чтобы больше в этом разговоре не просил
+    if (all.some((a) => a.type === "ask_rating")) {
+      const [cur] = await db.select({ context: conversations.context }).from(conversations).where(eq(conversations.id, conversationId));
+      await db.update(conversations).set({ context: { ...cur?.context, ratingAskedAt: Date.now() } }).where(eq(conversations.id, conversationId));
+    }
+    const actions = all.filter((a) => a.type !== "reason" && a.type !== "ask_rating");
     if (actions.length) meta = { ...meta, actions };
     // Комментарий, на который не нужно отвечать (реакция, эмодзи, разговор людей между собой), — молчим.
     if (conversation.kind === "comment" && SKIP_RE.test(clean.trim())) {
@@ -466,6 +472,9 @@ function recheckLater(conversationId: string, history: HistoryRow[]) {
   const wait = op.createdAt.getTime() + MANAGER_QUIET_MS - Date.now() + 5_000;
   setTimeout(() => scheduleReply(conversationId), Math.max(5_000, wait)).unref?.();
 }
+
+const RATING_NOTE =
+  "# Оценка ответа\nВ боте под твоими ответами есть кнопки 👍 и 👎. Когда клиент сам завершает разговор (благодарит, пишет «понятно», «ок, спасибо») и его вопрос решён — в конце короткого ответа один раз попроси оценить, на языке клиента, например: «Если я помог — отметьте 👍 под этим сообщением». Тогда добавь в самом конце отдельной строкой служебную метку [[ACTION ask_rating: yes]]. Не проси оценку посреди разговора, если клиент недоволен, ждёт менеджера или вопрос не решён.";
 
 function handoffPendingNote(at: Date) {
   const min = Math.max(1, Math.round((Date.now() - at.getTime()) / 60000));

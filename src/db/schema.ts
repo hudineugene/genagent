@@ -236,6 +236,8 @@ export type ApiConfig = {
   followUps?: boolean;
   /** Агент сопровождает заказ: при смене статуса бот берёт у агента живой текст вместо шаблона (POST /order) */
   orderNotes?: boolean;
+  /** Под ответами бот показывает 👍/👎: агент один раз за разговор, в конце, просит оценить */
+  ratingInvite?: boolean;
 };
 /** WhatsApp Business (Cloud API): ID номера и постоянный токен системного пользователя Meta. */
 export type WhatsAppConfig = {
@@ -368,6 +370,8 @@ export type ConversationContext = {
   memory?: ClientMemory;
   /** Карточка лида: что клиент хочет и насколько готов к шагу (lib/agent/lead.ts) */
   lead?: LeadCard;
+  /** Когда агент попросил оценить ответ (один раз за разговор) */
+  ratingAskedAt?: number;
   /** Свой бот: открыта ли сейчас команда и как быстро отвечает */
   team?: TeamState;
   /** Черновик ответа менеджеру, который агент подготовил при передаче (в Telegram — «Отправить черновик») */

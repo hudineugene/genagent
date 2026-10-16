@@ -43,6 +43,8 @@ export type ClientReport = {
   topics: string[];
   unmet: { demand: string; detail: string }[];
   ideas: string[];
+  /** Карточки лидов за месяц: сколько горячих/тёплых/холодных и что чаще всего искали (по полям карточки) */
+  leads: { hot: number; warm: number; cold: number; demand: { label: string; values: { value: string; count: number }[] }[] };
 };
 
 /** Смещение времени Киева от UTC в момент t (зима +2 ч, лето +3 ч). */
@@ -79,7 +81,7 @@ export async function clientReport(clientId: string, month: string): Promise<Cli
   const agentRows = await db.select().from(agents).where(eq(agents.clientId, clientId));
   const lang: "ru" | "uk" = agentRows.some((a) => (a.config as AgentConfig).replyLanguage === "uk") ? "uk" : "ru";
   const convs = await db
-    .select({ id: conversations.id, externalId: conversations.externalId, channelId: conversations.channelId, channelType: conversations.channelType })
+    .select({ id: conversations.id, externalId: conversations.externalId, channelId: conversations.channelId, channelType: conversations.channelType, context: conversations.context })
     .from(conversations)
     // тестовые разговоры — не в счёт
     .where(and(eq(conversations.clientId, clientId), eq(conversations.isTest, false)));
@@ -171,6 +173,30 @@ export async function clientReport(clientId: string, month: string): Promise<Cli
     .map((u) => ({ demand: u.demand, detail: u.detail }));
   const ideas = [...new Set(reviews.flatMap((r) => r.ideas))].slice(0, 5);
 
+  // Спрос по карточкам лидов: «горячесть» и самые частые значения полей (без контактов)
+  const leads: ClientReport["leads"] = { hot: 0, warm: 0, cold: 0, demand: [] };
+  const fields = new Map<string, { label: string; values: Map<string, { value: string; count: number }> }>();
+  for (const c of convs) {
+    const lead = c.context?.lead;
+    if (!lead || lead.at < from || lead.at >= to + 3 * 24 * 3_600_000) continue;
+    leads[lead.temperature]++;
+    for (const f of lead.fields) {
+      const key = f.label.trim().toLowerCase();
+      if (!key || /контакт|телефон|почт|email/.test(key)) continue;
+      const entry = fields.get(key) ?? { label: f.label.trim(), values: new Map() };
+      const v = f.value.trim();
+      const vk = v.toLowerCase();
+      const cur = entry.values.get(vk) ?? { value: v, count: 0 };
+      cur.count++;
+      entry.values.set(vk, cur);
+      fields.set(key, entry);
+    }
+  }
+  leads.demand = [...fields.values()]
+    .map((f) => ({ label: f.label, values: [...f.values.values()].sort((a, b) => b.count - a.count).slice(0, 4) }))
+    .filter((f) => f.values.reduce((n, v) => n + v.count, 0) >= 2)
+    .slice(0, 8);
+
   const days: { day: string; people: number }[] = [];
   for (let t = from; t < to; t += 24 * 3_600_000) {
     const day = dayKey(new Date(t + 12 * 3_600_000));
@@ -197,6 +223,7 @@ export async function clientReport(clientId: string, month: string): Promise<Cli
     topics,
     unmet,
     ideas,
+    leads,
   };
 }
 
@@ -221,6 +248,10 @@ const T = {
     topics: "О чём спрашивали",
     unmet: "Чего клиентам не хватило",
     ideas: "Идеи",
+    leadsTitle: "Кого привёл агент",
+    leadsTemp: "горячих (готовы к шагу) · тёплых (конкретный интерес) · холодных (общий вопрос)",
+    leadsDemand: "Что искали чаще всего",
+    ownerHint: "Откройте файл в браузере — там итоги месяца, что спрашивали клиенты и чего им не хватило.",
     footer: "Подготовлено GenAgent · студия YABOT",
     months: ["январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"],
   },
@@ -244,6 +275,10 @@ const T = {
     topics: "Про що питали",
     unmet: "Чого клієнтам забракло",
     ideas: "Ідеї",
+    leadsTitle: "Кого привів агент",
+    leadsTemp: "гарячих (готові до кроку) · теплих (конкретний інтерес) · холодних (загальне питання)",
+    leadsDemand: "Що шукали найчастіше",
+    ownerHint: "Відкрийте файл у браузері — там підсумки місяця, про що питали клієнти й чого їм забракло.",
     footer: "Підготовлено GenAgent · студія YABOT",
     months: ["січень", "лютий", "березень", "квітень", "травень", "червень", "липень", "серпень", "вересень", "жовтень", "листопад", "грудень"],
   },
@@ -305,6 +340,7 @@ ${r.results.length ? `<table>${r.results.map((x) => `<tr><td>${esc(x.label)}</td
 <h2>${esc(t.byDay)}</h2>
 <svg viewBox="0 0 ${W} ${H}" width="100%" role="img">${bars}</svg>
 ${r.byChannel.length ? `<h2>${esc(t.byChannel)}</h2><table>${r.byChannel.map((c) => `<tr><td>${esc(c.label)}</td><td class="r">${num(c.people)} ${t.peopleShort}</td></tr>`).join("")}</table>` : ""}
+${r.leads.hot + r.leads.warm + r.leads.cold ? `<h2>${esc(t.leadsTitle)}</h2><p>🔥 ${r.leads.hot} · 🌤 ${r.leads.warm} · ❄️ ${r.leads.cold} <span class="muted">— ${esc(t.leadsTemp)}</span></p>${r.leads.demand.length ? `<table>${r.leads.demand.map((d) => `<tr><td>${esc(d.label)}</td><td class="r">${d.values.map((v) => `${esc(v.value)}${v.count > 1 ? ` (${v.count})` : ""}`).join(", ")}</td></tr>`).join("")}</table>` : ""}` : ""}
 ${r.ratingUp || r.ratingDown ? `<h2>${esc(t.ratings)}</h2><p>👍 ${r.ratingUp} · 👎 ${r.ratingDown}</p>` : ""}
 ${r.topics.length ? `<h2>${esc(t.topics)}</h2><div class="chips">${r.topics.map((x) => `<span>${esc(x)}</span>`).join("")}</div>` : ""}
 ${r.unmet.length ? `<h2>${esc(t.unmet)}</h2><ul>${r.unmet.map((u) => `<li><b>${esc(u.demand)}</b>${u.detail ? ` — ${esc(u.detail)}` : ""}</li>`).join("")}</ul>` : ""}
@@ -323,7 +359,7 @@ export function reportFileName(r: ClientReport, month: string) {
 export async function sendMonthlyReports(month = previousMonth()): Promise<number> {
   const { getNotifySettings } = await import("@/lib/notify/telegram");
   const notify = await getNotifySettings();
-  if (!notify?.token || !notify.subscribers.length) return 0;
+  if (!notify?.token || (!notify.subscribers.length && !notify.owners?.length)) return 0;
   const api = process.env.TELEGRAM_API_URL ?? "https://api.telegram.org";
   let sent = 0;
   for (const c of await db.select({ id: clients.id }).from(clients)) {
@@ -332,10 +368,16 @@ export async function sendMonthlyReports(month = previousMonth()): Promise<numbe
     const html = clientReportHtml(r);
     const t = T[r.lang];
     const caption = `📊 <b>${esc(t.title)}</b> — ${esc(r.client)}, ${esc(reportMonthTitle(r))}\n${num(r.people)} ${t.people} · ${r.people ? Math.round((r.selfServed / r.people) * 100) : 0}% ${t.selfServed}\n<i>Откройте файл в браузере и перешлите владельцу (можно распечатать в PDF).</i>`;
-    for (const sub of notify.subscribers) {
+    // Сотрудникам студии — с подсказкой переслать; владельцам этого клиента (подписка из карточки клиента) — напрямую
+    const ownerCaption = `📊 <b>${esc(t.title)}</b> — ${esc(r.client)}, ${esc(reportMonthTitle(r))}\n${num(r.people)} ${t.people} · ${r.people ? Math.round((r.selfServed / r.people) * 100) : 0}% ${t.selfServed}\n<i>${esc(t.ownerHint)}</i>`;
+    const recipients = [
+      ...notify.subscribers.map((s) => ({ chatId: s.chatId, caption })),
+      ...(notify.owners ?? []).filter((o) => o.clientId === c.id).map((o) => ({ chatId: o.chatId, caption: ownerCaption })),
+    ];
+    for (const sub of recipients) {
       const form = new FormData();
       form.set("chat_id", sub.chatId);
-      form.set("caption", caption);
+      form.set("caption", sub.caption);
       form.set("parse_mode", "HTML");
       form.set("document", new Blob([html], { type: "text/html" }), reportFileName(r, month));
       await fetch(`${api}/bot${notify.token}/sendDocument`, { method: "POST", body: form, signal: AbortSignal.timeout(60_000) }).catch((e) =>
