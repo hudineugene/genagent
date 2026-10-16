@@ -18,9 +18,9 @@ const TONE_TEXT: Record<Exclude<AgentConfig["tone"], "custom">, string> = {
 
 const LANGUAGE_TEXT: Record<AgentConfig["replyLanguage"], string> = {
   auto: "Отвечай на том языке, на котором пишет клиент (русский, украинский, английский и др.).",
-  ru: "Всегда отвечай только на русском языке — даже если клиент пишет на другом.",
-  uk: "Завжди відповідай лише українською мовою — навіть якщо клієнт пише іншою (always reply in Ukrainian, whatever language the customer uses).",
-  en: "Always reply in English only, even if the customer writes in another language.",
+  ru: "Всегда отвечай только на русском языке — даже если клиент пишет на другом; приветствие тоже на русском.",
+  uk: "Завжди відповідай лише українською мовою — навіть якщо клієнт пише іншою, і привітання теж українською («Вітаю!», «Добрий день!», а не «Здравствуйте») (always reply in Ukrainian, greeting included, whatever language the customer uses).",
+  en: "Always reply in English only, greeting included, even if the customer writes in another language.",
 };
 
 /** Как база знаний попадает в промпт. */

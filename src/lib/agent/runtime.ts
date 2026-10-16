@@ -16,6 +16,18 @@ export type KbInfo = { mode: "full" | "search"; sources: { title: string; url: s
  * История должна начинаться с сообщения клиента; найденные фрагменты базы знаний
  * в режиме поиска прикладываются к последнему сообщению клиента.
  */
+const REPEAT_NOTE =
+  "[Клиент повторил своё прошлое сообщение слово в слово (или нажал ту же кнопку). Не повторяй и не пересказывай прежний ответ. Одной-двумя фразами спроси, что осталось непонятным, и предложи конкретный следующий шаг.]";
+
+/** Последнее сообщение клиента совпадает с его предыдущим (без учёта регистра, эмодзи и знаков). */
+export function isRepeat(messages: { role: string; content: unknown }[]) {
+  const norm = (c: unknown) => (typeof c === "string" ? c.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim() : "");
+  const users = messages.filter((m) => m.role === "user");
+  if (users.length < 2) return false;
+  const a = norm(users.at(-1)?.content);
+  return a.length > 0 && a === norm(users.at(-2)?.content);
+}
+
 export async function prepareChat(
   config: AgentConfig,
   client: ClientContext & { id: string },
@@ -46,6 +58,9 @@ export async function prepareChat(
   const agentTools = config.calendar.enabled ? calendarTools(config.calendar, { ...tools, clientId: client.id }) : undefined;
 
   const last = messages[messages.length - 1];
+  // Клиент прислал то же, что и прошлым сообщением (часто — та же кнопка): прямая пометка, иначе модель повторяет ответ
+  const repeated = last?.role === "user" && isRepeat(messages);
+  if (repeated) last.content = `${REPEAT_NOTE}\n\n${last.content}`;
   if (kb.mode === "search" && kb.context && last?.role === "user") {
     last.content = `<knowledge>\n${kb.context}\n</knowledge>\n\n${last.content}`;
   }

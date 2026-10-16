@@ -25,6 +25,7 @@ export type AutoTestsSettings = {
 const KEY = "autoTests";
 const QUIET_MS = 10 * 60 * 1000;
 const MAX_PER_DAY = 3;
+const SERIOUS_SCORE = 6;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export async function getAutoTests(): Promise<AutoTestsSettings> {
@@ -104,8 +105,6 @@ export async function runAutoTests(): Promise<number> {
       const [run] = await db.select().from(testRuns).where(eq(testRuns.id, runId));
       cost += run?.cost ?? 0;
       const results = await db.select().from(testResults).where(eq(testResults.runId, runId)).orderBy(asc(testResults.scenarioName));
-      const failed = results.filter((r) => !r.passed);
-      if (run?.status !== "error" && !failed.length) continue;
       const prevPassed = new Set(
         prev
           ? (await db.select({ scenarioId: testResults.scenarioId, passed: testResults.passed }).from(testResults).where(eq(testResults.runId, prev.id)))
@@ -113,6 +112,12 @@ export async function runAutoTests(): Promise<number> {
               .map((r) => r.scenarioId as string)
           : [],
       );
+      // В Telegram — только важное: сломалось с прошлого прогона, серьёзный провал (оценка 6 и ниже) или ошибка.
+      // Мелкие замечания судьи видны в отчёте прогона на вкладке «Тесты».
+      const failed = results.filter(
+        (r) => !r.passed && (r.error || (r.score ?? 0) <= SERIOUS_SCORE || Boolean(r.scenarioId && prevPassed.has(r.scenarioId))),
+      );
+      if (run?.status !== "error" && !failed.length) continue;
       lines.push(`⚠️ <b>${esc(a.title)}</b> — ${run?.passed ?? 0}/${run?.total ?? results.length}${run?.status === "error" ? `, ошибка: ${esc(run.error ?? "")}` : ""}`);
       for (const f of failed.slice(0, 5)) {
         const why = f.error ? `ошибка: ${f.error}` : f.summary || f.verdicts.filter((v) => !v.pass).map((v) => v.comment).join("; ");

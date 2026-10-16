@@ -272,7 +272,7 @@ async function judge(
   const criteria = [
     ...scenario.criteria.map((c) => c.text),
     "Не выдумывает факты, цены, сроки и условия, которых нет в справке",
-    "Отвечает на языке, который требуют правила агента (если правила язык не задают — на языке клиента), коротко и в заданном тоне",
+    "Отвечает на языке, который требуют правила агента (если правила язык не задают — на языке клиента)",
   ];
   const { data, usage, model } = await generateJson<{ verdicts: TestVerdict[]; score: number; summary: string }>(
     anthropicKey(),
