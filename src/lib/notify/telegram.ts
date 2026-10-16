@@ -8,6 +8,7 @@ import { callTelegram, TelegramError } from "@/lib/channels/telegram-api";
 import { approveDraftCore, rejectDraftCore } from "@/lib/drafts";
 import { canReply, operatorReplyCore, returnToAgentCore } from "@/lib/operator";
 import { addAnswerToKb } from "@/lib/agent/kb-answers";
+import { isSticker } from "@/lib/sticker";
 
 /**
  * Уведомления студии в Telegram — отдельный бот (его создают в @BotFather).
@@ -153,12 +154,21 @@ export async function notifyHandoff(conversationId: string, summary: string | nu
 
 // Сообщения клиента, о которых уже сообщили (разговор у сотрудника) — по одному уведомлению на сообщение.
 const told = new Map<string, string>();
+// Когда сообщили о стикере клиента: серия стикеров подряд — одно уведомление
+const stickerTold = new Map<string, number>();
+const STICKER_QUIET_MS = 10 * 60 * 1000;
 
 /** Клиент написал, пока разговор ведёт сотрудник: текст и кнопка «Ответить». */
 export async function notifyClientMessage(conversationId: string, text: string, messageKey = text) {
   try {
     if (told.get(conversationId) === messageKey) return;
     told.set(conversationId, messageKey);
+    if (isSticker(text)) {
+      const at = stickerTold.get(conversationId);
+      if (at && Date.now() - at < STICKER_QUIET_MS) return;
+      stickerTold.set(conversationId, Date.now());
+      if (stickerTold.size > 500) stickerTold.delete(stickerTold.keys().next().value as string);
+    } else stickerTold.delete(conversationId);
     if (told.size > 500) told.delete(told.keys().next().value as string);
     const row = await conversationInfo(conversationId);
     if (!row) return;

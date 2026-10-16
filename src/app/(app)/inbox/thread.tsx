@@ -47,6 +47,7 @@ import { Button, Spinner, cx } from "@/components/ui";
 import type { ChannelType } from "@/db/schema";
 import { CHANNEL_ICONS, ContactAvatar, contactLabel } from "./list";
 import { InfoToggle } from "./info-panel";
+import { isSticker } from "@/lib/sticker";
 
 // Значки для сообщений из журнала бота: что именно прислал клиент или бот
 const KIND_ICONS: Record<string, LucideIcon> = {
@@ -244,8 +245,30 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
             <span className="text-text">{data.context.subject}</span>
           </div>
         )}
-        {data.messages.map((m) => {
+        {data.messages.map((m, i) => {
           if (m.status === "draft") return <DraftMessage key={m.id} id={m.id} text={m.text} />;
+          // Стикеры клиента подряд — одной строкой «Стикер ×N»
+          const userSticker = (x?: ThreadData["messages"][number]) => x?.role === "user" && isSticker(x.text, x.meta?.kind);
+          if (userSticker(m)) {
+            if (userSticker(data.messages[i - 1])) return null;
+            let n = 1;
+            while (userSticker(data.messages[i + n])) n++;
+            const emoji = data.messages
+              .slice(i, i + n)
+              .map((x) => x.text.trim())
+              .filter((x) => /^\p{Extended_Pictographic}/u.test(x) && x.length <= 8);
+            if (n > 1 || !emoji.length) {
+              return (
+                <div key={m.id} className="flex justify-start px-1 text-xs text-muted">
+                  <span className="flex items-center gap-1.5 rounded-full bg-surface px-2.5 py-1 ring-1 ring-border">
+                    <Smile className="size-3.5" />
+                    {emoji.length ? <span className="text-base leading-none">{emoji.slice(0, 6).join(" ")}</span> : t.inbox.kinds.sticker}
+                    {n > 1 && ` ×${n}`} · {time.format(new Date(m.createdAt))}
+                  </span>
+                </div>
+              );
+            }
+          }
           if (m.role === "system") {
             return (
               <div key={m.id} className="text-center text-xs text-muted">
