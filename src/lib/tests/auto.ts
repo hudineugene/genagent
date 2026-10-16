@@ -1,6 +1,6 @@
 import "server-only";
 import { createHash } from "node:crypto";
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { agentConfigSchema } from "@/lib/agent/types";
 import { compileSystemPrompt } from "@/lib/agent/compile";
@@ -91,7 +91,7 @@ export async function runAutoTests(): Promise<number> {
       const [prev] = await db
         .select({ id: testRuns.id })
         .from(testRuns)
-        .where(and(eq(testRuns.agentId, a.id), eq(testRuns.status, "done")))
+        .where(and(eq(testRuns.agentId, a.id), eq(testRuns.status, "done"), isNull(testRuns.model)))
         .orderBy(desc(testRuns.createdAt))
         .limit(1);
       let runId: string;

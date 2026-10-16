@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, inArray, ne } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { agents, clients, testResults, testRuns, testScenarios } from "@/db/schema";
 import { getSetting, setSetting } from "@/lib/settings";
@@ -88,7 +88,7 @@ export async function runWeeklyTests(): Promise<number> {
         const [prev] = await db
           .select({ id: testRuns.id })
           .from(testRuns)
-          .where(and(eq(testRuns.agentId, a.id), eq(testRuns.status, "done")))
+          .where(and(eq(testRuns.agentId, a.id), eq(testRuns.status, "done"), isNull(testRuns.model)))
           .orderBy(desc(testRuns.createdAt))
           .limit(1);
         const { runId, done } = await startRunTracked(a.id, null);

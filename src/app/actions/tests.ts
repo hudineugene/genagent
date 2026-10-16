@@ -6,6 +6,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { testScenarios } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
+import { findModel } from "@/lib/models";
 import { generateScenarios, scenarioFromConversation, startRun } from "@/lib/tests/engine";
 
 export type TestsResult = { error?: string; ok?: boolean; runId?: string; count?: number };
@@ -82,10 +83,12 @@ export async function deleteScenario(id: string): Promise<TestsResult> {
   return { ok: true };
 }
 
-export async function runTests(agentId: string): Promise<TestsResult> {
+export async function runTests(agentId: string, model?: string): Promise<TestsResult> {
   const user = await requireUser();
+  // Сравнение моделей: только модели из списка студии
+  if (model && !findModel(model)) return { error: "invalid" };
   try {
-    const runId = await startRun(agentId, user.id);
+    const runId = await startRun(agentId, user.id, model ? { model } : {});
     refresh();
     return { ok: true, runId };
   } catch (e) {

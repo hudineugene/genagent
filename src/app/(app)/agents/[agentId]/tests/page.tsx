@@ -34,6 +34,7 @@ export default async function AgentTestsPage({
       <TestsManager
         agentId={agent.id}
         agentVersion={agent.version}
+        agentModel={agent.config.model}
         scenarios={scenarios.map((s) => ({
           id: s.id,
           name: s.name,
@@ -46,6 +47,7 @@ export default async function AgentTestsPage({
         runs={runs.map((r) => ({
           id: r.id,
           agentVersion: r.agentVersion,
+          model: r.model,
           status: r.status,
           total: r.total,
           passed: r.passed,

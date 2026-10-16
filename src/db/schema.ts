@@ -501,6 +501,8 @@ export const testRuns = sqliteTable(
       .notNull()
       .references(() => agents.id, { onDelete: "cascade" }),
     agentVersion: integer("agent_version").notNull(),
+    /** Сравнение моделей: прогон на другой модели (агент не меняется). null — модель агента */
+    model: text("model"),
     status: text("status", { enum: ["running", "done", "error"] }).notNull().default("running"),
     total: integer("total").notNull().default(0),
     passed: integer("passed").notNull().default(0),

@@ -307,28 +307,31 @@ async function judge(
 const running = new Set<string>();
 
 /** Запуск всех сценариев агента в фоне. Возвращает id прогона. */
-export async function startRun(agentId: string, userId: string | null) {
-  return (await startRunTracked(agentId, userId)).runId;
+export async function startRun(agentId: string, userId: string | null, opts: { model?: string } = {}) {
+  return (await startRunTracked(agentId, userId, opts)).runId;
 }
 
 /** То же, но с обещанием окончания прогона — для еженедельной проверки (ждёт результат и шлёт отчёт). */
-export async function startRunTracked(agentId: string, userId: string | null) {
+export async function startRunTracked(agentId: string, userId: string | null, opts: { model?: string } = {}) {
   const { agent } = await loadAgent(agentId);
   anthropicKey();
   const scenarios = await db.select().from(testScenarios).where(eq(testScenarios.agentId, agentId)).orderBy(asc(testScenarios.createdAt));
   if (!scenarios.length) throw new Error("no_scenarios");
   const [run] = await db
     .insert(testRuns)
-    .values({ agentId, agentVersion: agent.version, total: scenarios.length, createdBy: userId })
+    .values({ agentId, agentVersion: agent.version, model: opts.model ?? null, total: scenarios.length, createdBy: userId })
     .returning({ id: testRuns.id });
   running.add(run.id);
-  const done = execute(run.id, agentId, scenarios).finally(() => running.delete(run.id));
+  const done = execute(run.id, agentId, scenarios, opts.model).finally(() => running.delete(run.id));
   return { runId: run.id, done };
 }
 
-async function execute(runId: string, agentId: string, scenarios: TestScenario[]) {
+async function execute(runId: string, agentId: string, scenarios: TestScenario[], model?: string) {
   try {
-    const { client, config } = await loadAgent(agentId);
+    const loaded = await loadAgent(agentId);
+    const client = loaded.client;
+    // Сравнение моделей: те же сценарии и инструкция, другая модель
+    const config = model ? { ...loaded.config, model } : loaded.config;
     const brief = await knowledgeBrief(config, client);
     let passed = 0;
     let scoreSum = 0;

@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
-import { Check, ChevronDown, FlaskConical, Pencil, Play, Plus, Trash2, Wand2, X } from "lucide-react";
+import { Check, ChevronDown, FlaskConical, Pencil, Play, Plus, Scale, Trash2, Wand2, X } from "lucide-react";
 import { deleteScenario, generateTestScenarios, runTests, saveScenario } from "@/app/actions/tests";
 import type { TestVerdict } from "@/db/schema";
 import { useI18n } from "@/lib/i18n/client";
 import { ColumnChart, StatTile } from "@/components/charts";
-import { Badge, Button, Card, EmptyState, Field, Input, Spinner, Textarea, cx } from "@/components/ui";
+import { Badge, Button, Card, EmptyState, Field, Input, Select, Spinner, Textarea, cx } from "@/components/ui";
+import { MODELS, findModel } from "@/lib/models";
 
 type Scenario = {
   id: string;
@@ -22,6 +23,8 @@ type Scenario = {
 type Run = {
   id: string;
   agentVersion: number;
+  /** Прогон на другой модели (сравнение); null — модель агента */
+  model: string | null;
   status: "running" | "done" | "error";
   total: number;
   passed: number;
@@ -45,6 +48,7 @@ type Result = {
 export function TestsManager({
   agentId,
   agentVersion,
+  agentModel,
   scenarios,
   runs,
   selectedRunId,
@@ -52,6 +56,7 @@ export function TestsManager({
 }: {
   agentId: string;
   agentVersion: number;
+  agentModel: string;
   scenarios: Scenario[];
   runs: Run[];
   selectedRunId: string | null;
@@ -64,6 +69,10 @@ export function TestsManager({
   const [busy, setBusy] = useState<"run" | "generate" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Scenario | "new" | null>(null);
+  // Сравнение моделей: другая модель Anthropic, чем у агента
+  const others = MODELS.filter((m) => m.provider === "anthropic" && m.id !== agentModel);
+  const [compareModel, setCompareModel] = useState(others[0]?.id ?? "");
+  const label = (id: string | null) => findModel(id ?? agentModel)?.label ?? id ?? agentModel;
   const fmt = new Intl.DateTimeFormat(locale === "uk" ? "uk-UA" : "ru-RU", { dateStyle: "short", timeStyle: "short" });
 
   const running = runs.some((r) => r.status === "running");
@@ -90,7 +99,8 @@ export function TestsManager({
     });
 
   const selected = runs.find((r) => r.id === selectedRunId) ?? null;
-  const history = [...runs].reverse().filter((r) => r.status === "done" && r.score !== null);
+  // История оценок агента — без прогонов на других моделях (сравнения)
+  const history = [...runs].reverse().filter((r) => r.status === "done" && r.score !== null && !r.model);
 
   return (
     <div className="space-y-6">
@@ -107,6 +117,23 @@ export function TestsManager({
         </Button>
         <span className="text-xs text-muted">{tt.costHint}</span>
       </div>
+      {others.length > 0 && scenarios.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-muted">{tt.compareLabel.replace("{model}", label(null))}</span>
+          <Select value={compareModel} onChange={(e) => setCompareModel(e.target.value)} className="w-auto" disabled={pending || running}>
+            {others.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.label}
+              </option>
+            ))}
+          </Select>
+          <Button size="sm" variant="secondary" disabled={pending || running || !compareModel} onClick={() => act("run", () => runTests(agentId, compareModel))}>
+            <Scale className="size-4" />
+            {tt.compare}
+          </Button>
+          <span className="text-xs text-muted">{tt.compareHint}</span>
+        </div>
+      )}
       {error && <p className="text-sm text-danger">{error}</p>}
 
       {history.length > 1 && (
@@ -140,7 +167,8 @@ export function TestsManager({
                 r.id === selectedRunId ? "bg-text text-bg" : "bg-surface-2 text-muted hover:text-text",
               )}
             >
-              v{r.agentVersion} · {fmt.format(new Date(r.createdAt))} ·{" "}
+              v{r.agentVersion}
+              {r.model && ` · ${label(r.model)}`} · {fmt.format(new Date(r.createdAt))} ·{" "}
               {r.status === "running" ? "…" : r.status === "error" ? "!" : `${r.passed}/${r.total}`}
             </Link>
           ))}
@@ -163,6 +191,7 @@ export function TestsManager({
               hint={selected.agentVersion !== agentVersion ? `${tt.currentVersion}: v${agentVersion}` : tt.isCurrent}
             />
           </div>
+          {selected.model && <ModelComparison run={selected} base={runs.find((r) => !r.model && r.status === "done" && r.total > 0) ?? null} label={label} />}
           {selected.status === "error" && selected.error && <p className="text-sm text-danger">{errText(selected.error)}</p>}
           {results.map((r) => (
             <ResultCard key={r.id} r={r} />
@@ -196,6 +225,42 @@ export function TestsManager({
         )}
       </div>
     </div>
+  );
+}
+
+/** Прогон на другой модели рядом с последним обычным: пройдено, оценка, цена прогона. */
+function ModelComparison({ run, base, label }: { run: Run; base: Run | null; label: (id: string | null) => string }) {
+  const { t } = useI18n();
+  const tt = t.tests;
+  const rows = [base, run].filter((r): r is Run => Boolean(r));
+  return (
+    <Card className="overflow-x-auto p-4">
+      <div className="mb-2 text-sm font-semibold">{tt.compareTitle}</div>
+      {!base && <p className="text-xs text-muted">{tt.compareNoBase}</p>}
+      <table className="w-full text-sm">
+        <thead className="text-left text-xs text-muted">
+          <tr>
+            <th className="py-1 font-medium">{tt.compareModel}</th>
+            <th className="py-1 font-medium">{tt.passed}</th>
+            <th className="py-1 font-medium">{tt.avgScore}</th>
+            <th className="py-1 font-medium">{tt.cost}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.id} className={cx(r.id === run.id && "font-medium")}>
+              <td className="py-1">{label(r.model)}</td>
+              <td className="py-1">
+                {r.passed} / {r.total}
+              </td>
+              <td className="py-1">{r.score !== null ? r.score.toFixed(1) : "—"}</td>
+              <td className="py-1">${r.cost.toFixed(3)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="mt-2 text-xs text-muted">{tt.compareNote}</p>
+    </Card>
   );
 }
 
