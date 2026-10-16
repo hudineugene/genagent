@@ -39,6 +39,8 @@ import { agents, channels, conversations, messages } from "@/db/schema";
   await new Promise<void>((r) => stub.listen(4033, r));
   process.env.ANTHROPIC_BASE_URL = "http://127.0.0.1:4033";
   process.env.ANTHROPIC_API_KEY = "stub";
+  // Оповещения о горячих клиентах — в никуда: тест не должен писать в настоящий Telegram
+  process.env.TELEGRAM_API_URL = "http://127.0.0.1:9";
 
   const [ch] = await db.select().from(channels).where(eq(channels.type, "widget")).limit(1);
   const [agent] = await db.select().from(agents).where(eq(agents.id, ch.agentId));
@@ -80,8 +82,10 @@ import { agents, channels, conversations, messages } from "@/db/schema";
   // runLeads проходит по всей копии базы — убрать карточки, которые заполнил этот прогон
   for (const r of await db.select({ id: conversations.id, context: conversations.context }).from(conversations)) {
     if ((r.context?.lead?.at ?? 0) >= started) {
-      const { lead: _drop, ...rest } = r.context ?? {};
+      const { lead: _drop, hotAlertAt: _at, hotAlertPending: _p, ...rest } = r.context ?? {};
       void _drop;
+      void _at;
+      void _p;
       await db.update(conversations).set({ context: rest }).where(eq(conversations.id, r.id));
     }
   }

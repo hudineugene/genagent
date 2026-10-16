@@ -208,6 +208,28 @@ export async function notifyClientMessage(conversationId: string, text: string, 
   }
 }
 
+/** Горячий клиент сейчас в чате (карточка лида), а менеджеру его ещё не передавали. */
+export async function notifyHotLead(conversationId: string, lead: LeadCard) {
+  try {
+    const row = await conversationInfo(conversationId);
+    if (!row) return;
+    const s = await getNotifySettings();
+    const [last] = await db
+      .select({ text: messages.text })
+      .from(messages)
+      .where(and(eq(messages.conversationId, conversationId), eq(messages.role, "user")))
+      .orderBy(desc(messages.createdAt))
+      .limit(1);
+    const quote = last?.text ? `\n\n💬 <i>${esc(last.text.slice(0, 400))}</i>` : "";
+    await broadcast(
+      `🔥 <b>Горячий клиент сейчас в чате</b>\n${header(row)}\n\n${leadHtml(lead)}${quote}\n\n<i>Агент ведёт разговор сам — подключитесь, если хотите закрыть сделку лично.</i>`,
+      conversationButtons(s, row),
+    );
+  } catch (e) {
+    console.error("notify hot lead failed", e);
+  }
+}
+
 /** Клиент ждёт ответа человека дольше порога (lib/agent/waiting): повторное уведомление, urgent — 🔴. */
 export async function notifyWaiting(conversationId: string, minutes: number, urgent: boolean, lastText: string) {
   try {

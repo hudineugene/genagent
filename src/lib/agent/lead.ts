@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, gt, inArray, lt } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { agents, conversations, messages, type LeadCard } from "@/db/schema";
 import { generateJson } from "@/lib/llm/anthropic";
@@ -77,11 +77,65 @@ export async function updateLead(conversationId: string): Promise<LeadCard | nul
   // Свежий контекст: пока модель думала, могли дописаться язык, память, заказы
   const [cur] = await db.select({ context: conversations.context }).from(conversations).where(eq(conversations.id, c.id));
   await db.update(conversations).set({ context: { ...cur?.context, lead } }).where(eq(conversations.id, c.id));
+  if (lead.temperature === "hot") await hotAlert(c.id).catch((e) => console.error("hot lead alert failed", c.id, e));
   return lead;
+}
+
+/** Рабочие часы студии (как у напоминаний «клиент ждёт человека»), по Киеву. */
+async function inWorkHours(now = new Date()) {
+  const { getWaitingSettings } = await import("./waiting");
+  const s = await getWaitingSettings();
+  const hour = Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Kyiv", hour: "2-digit", hourCycle: "h23" }).format(now));
+  return s.fromHour <= s.toHour ? hour >= s.fromHour && hour < s.toHour : hour >= s.fromHour || hour < s.toHour;
+}
+
+/**
+ * Клиент стал горячим, а менеджер о нём ещё не знает — сразу сообщить в Telegram («🔥 горячий клиент сейчас в чате»).
+ * Один раз на разговор; не тестовые; не тем, кого уже передали менеджеру, кто у менеджера или кому менеджер писал.
+ * Вне рабочих часов — откладываем до их начала. Возвращает true, если отправлено.
+ */
+export async function hotAlert(conversationId: string): Promise<boolean> {
+  const [c] = await db.select().from(conversations).where(eq(conversations.id, conversationId));
+  if (!c || c.isTest || c.status === "closed" || c.context?.lead?.temperature !== "hot" || c.context?.hotAlertAt) return false;
+  const [known] = await db
+    .select({ id: messages.id })
+    .from(messages)
+    .where(and(eq(messages.conversationId, c.id), sql`(${messages.role} = 'operator' or (${messages.role} = 'system' and ${messages.text} = 'handoff'))`))
+    .limit(1);
+  const save = async (patch: { hotAlertAt?: number; hotAlertPending?: boolean }) => {
+    const [cur] = await db.select({ context: conversations.context }).from(conversations).where(eq(conversations.id, c.id));
+    await db.update(conversations).set({ context: { ...cur?.context, ...patch } }).where(eq(conversations.id, c.id));
+  };
+  // Менеджер уже в курсе — оповещать не о чем
+  if (known || c.mode === "human" || c.needsAttention) {
+    if (c.context?.hotAlertPending) await save({ hotAlertPending: false });
+    return false;
+  }
+  if (!(await inWorkHours())) {
+    if (!c.context?.hotAlertPending) await save({ hotAlertPending: true });
+    return false;
+  }
+  await save({ hotAlertAt: Date.now(), hotAlertPending: false });
+  const { notifyHotLead } = await import("@/lib/notify/telegram");
+  await notifyHotLead(c.id, c.context.lead);
+  return true;
+}
+
+/** Отложенные ночью оповещения — в рабочие часы. */
+export async function flushHotAlerts() {
+  if (!(await inWorkHours())) return 0;
+  const rows = await db
+    .select({ id: conversations.id })
+    .from(conversations)
+    .where(sql`json_extract(${conversations.context}, '$.hotAlertPending') = 1`);
+  let n = 0;
+  for (const r of rows) if (await hotAlert(r.id).catch(() => false)) n++;
+  return n;
 }
 
 /** Обновить карточки разговоров, где клиент написал новое и затем помолчал QUIET_MS. Возвращает число обновлённых. */
 export async function runLeads(): Promise<number> {
+  await flushHotAlerts().catch((e) => console.error("hot lead alerts failed", e));
   if (!process.env.ANTHROPIC_API_KEY) return 0;
   const now = Date.now();
   const rows = await db
