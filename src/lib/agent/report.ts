@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, gt, inArray, lt } from "drizzle-orm";
+import { and, eq, gt, inArray, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { agentEvents, agents, clients, conversations, messages, usageLog } from "@/db/schema";
 import { getSetting, setSetting } from "@/lib/settings";
@@ -81,7 +81,8 @@ export async function clientReport(clientId: string, month: string): Promise<Cli
   const convs = await db
     .select({ id: conversations.id, externalId: conversations.externalId, channelId: conversations.channelId, channelType: conversations.channelType })
     .from(conversations)
-    .where(eq(conversations.clientId, clientId));
+    // тестовые разговоры — не в счёт
+    .where(and(eq(conversations.clientId, clientId), eq(conversations.isTest, false)));
   const convById = new Map(convs.map((c) => [c.id, c]));
   const rows = convs.length
     ? await db
@@ -124,7 +125,14 @@ export async function clientReport(clientId: string, month: string): Promise<Cli
     ? await db
         .select()
         .from(agentEvents)
-        .where(and(inArray(agentEvents.agentId, agentRows.map((a) => a.id)), gt(agentEvents.createdAt, new Date(from)), lt(agentEvents.createdAt, new Date(to))))
+        .where(
+          and(
+            inArray(agentEvents.agentId, agentRows.map((a) => a.id)),
+            gt(agentEvents.createdAt, new Date(from)),
+            lt(agentEvents.createdAt, new Date(to)),
+            sql`(${agentEvents.conversationId} is null or ${agentEvents.conversationId} not in (select id from conversations where is_test = 1))`,
+          ),
+        )
     : [];
   const results = new Map<string, { label: string; people: Set<string>; value: number }>();
   let ratingUp = 0;

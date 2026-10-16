@@ -26,7 +26,8 @@ export async function measuredReplyMinutes(channelId: string): Promise<number | 
     .select({ conversationId: messages.conversationId, role: messages.role, text: messages.text, createdAt: messages.createdAt })
     .from(messages)
     .innerJoin(conversations, eq(conversations.id, messages.conversationId))
-    .where(and(eq(conversations.channelId, channelId), gt(messages.createdAt, since), inArray(messages.role, ["system", "operator"])));
+    // тестовые разговоры — не в счёт
+    .where(and(eq(conversations.channelId, channelId), eq(conversations.isTest, false), gt(messages.createdAt, since), inArray(messages.role, ["system", "operator"])));
   const byConv = new Map<string, typeof rows>();
   for (const r of rows) byConv.set(r.conversationId, [...(byConv.get(r.conversationId) ?? []), r]);
   const samples: number[] = [];

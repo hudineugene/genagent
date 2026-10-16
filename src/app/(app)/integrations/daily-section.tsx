@@ -1,31 +1,41 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check, Moon, Send } from "lucide-react";
-import { saveDailyDigestAction, sendDailyDigestNow } from "@/app/actions/integrations";
+import { Check, Moon, Send, Target } from "lucide-react";
+import { saveDailyDigestAction, saveLeadsAction, sendDailyDigestNow, sendLeadsNow } from "@/app/actions/integrations";
 import { useI18n } from "@/lib/i18n/client";
 import { Button, Field, Select, Spinner } from "@/components/ui";
 
 export type DailyView = { enabled: boolean; hour: number };
 
-/** Ежедневная сводка по агентам в Telegram: кто написал, кому ответил агент, кто ждёт человека. */
-export function DailyDigestSection({ daily }: { daily: DailyView }) {
+/**
+ * Ежедневная сводка по агентам в Telegram (кто написал, кому ответил агент, кто ждёт человека) —
+ * или утренняя сводка лидов (kind="leads"): те же настройки — включено и час.
+ */
+export function DailyDigestSection({ daily, kind = "daily" }: { daily: DailyView; kind?: "daily" | "leads" }) {
   const { t } = useI18n();
-  const s = t.integrations;
+  const i = t.integrations;
+  const s =
+    kind === "leads"
+      ? { ...i, dailyTitle: i.leadsTitle, dailyHint: i.leadsHint, dailyEnabled: i.leadsEnabled, dailyEmpty: i.leadsEmpty }
+      : i;
+  const saveAction = kind === "leads" ? saveLeadsAction : saveDailyDigestAction;
+  const sendNow = kind === "leads" ? sendLeadsNow : sendDailyDigestNow;
+  const Icon = kind === "leads" ? Target : Moon;
   const [enabled, setEnabled] = useState(daily.enabled);
   const [hour, setHour] = useState(daily.hour);
   const [status, setStatus] = useState<"saved" | "sent" | "empty" | null>(null);
   const [pending, start] = useTransition();
   const save = (patch: { enabled?: boolean; hour?: number }) =>
     start(async () => {
-      await saveDailyDigestAction({ enabled, hour, ...patch });
+      await saveAction({ enabled, hour, ...patch });
       setStatus("saved");
     });
 
   return (
-    <div className="space-y-3 border-t border-border pt-4">
+    <div className={kind === "leads" ? "mt-5 space-y-3 border-t border-border pt-5" : "space-y-3 border-t border-border pt-4"}>
       <div className="flex items-center gap-2 font-medium">
-        <Moon className="size-4 text-accent" />
+        <Icon className="size-4 text-accent" />
         {s.dailyTitle}
       </div>
       <p className="text-sm text-muted">{s.dailyHint}</p>
@@ -75,7 +85,7 @@ export function DailyDigestSection({ daily }: { daily: DailyView }) {
             disabled={pending}
             onClick={() =>
               start(async () => {
-                const r = await sendDailyDigestNow();
+                const r = await sendNow();
                 setStatus(r.ok ? "sent" : "empty");
               })
             }

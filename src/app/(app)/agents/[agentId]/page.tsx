@@ -6,6 +6,7 @@ import { agents, clients, kbSources } from "@/db/schema";
 import { agentConfigSchema } from "@/lib/agent/types";
 import { getGoogleSettings } from "@/lib/google/calendar";
 import { AgentStudio } from "./studio";
+import { getExamples } from "@/lib/agent/examples";
 
 export default async function AgentPage({ params }: { params: Promise<{ agentId: string }> }) {
   const { agentId } = await params;
@@ -42,6 +43,7 @@ export default async function AgentPage({ params }: { params: Promise<{ agentId:
         }}
         sources={sources}
         googleEmail={(await getGoogleSettings())?.clientEmail ?? null}
+        examples={await getExamples(agent.id)}
       />
     </div>
   );

@@ -5,7 +5,7 @@ import { refresh } from "next/cache";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { agents, channels, clients, type ApiConfig, type EmailConfig, type InstagramConfig, type TelegramConfig, type ThreadsConfig, type WidgetConfig } from "@/db/schema";
+import { agents, channels, clients, type ApiConfig, type EmailConfig, type InstagramConfig, type TelegramConfig, type ThreadsConfig, type WidgetConfig, WIDGET_LANGS } from "@/db/schema";
 import { EmailError, GMAIL, pollNow, verifyEmail } from "@/lib/channels/email";
 import { createAuthorizeUrl } from "@/lib/channels/meta/connect";
 import { requireUser } from "@/lib/auth";
@@ -113,6 +113,14 @@ const widgetSchema = z.object({
     .transform((s) => s.replace(/^@/, "")),
 });
 
+/** Кнопки-подсказки: по одной в строке, до 4, каждая до 40 символов. */
+const quickList = (v: FormDataEntryValue | null) =>
+  String(v ?? "")
+    .split("\n")
+    .map((s) => s.trim().slice(0, 40))
+    .filter(Boolean)
+    .slice(0, 4);
+
 export async function updateWidget(
   channelId: string,
   _prev: ChannelResult | undefined,
@@ -121,7 +129,15 @@ export async function updateWidget(
   await requireUser();
   const parsed = widgetSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: "invalid" };
-  await db.update(channels).set({ config: parsed.data }).where(eq(channels.id, channelId));
+  // Тексты на языках посетителя: l_<язык>_title / _subtitle / _greeting / _quick
+  const locales: NonNullable<WidgetConfig["locales"]> = {};
+  for (const lang of WIDGET_LANGS) {
+    const v = (k: string) => String(formData.get(`l_${lang}_${k}`) ?? "").trim();
+    const loc = { title: v("title").slice(0, 80), subtitle: v("subtitle").slice(0, 120), greeting: v("greeting").slice(0, 1000), quick: quickList(formData.get(`l_${lang}_quick`)) };
+    if (loc.title || loc.subtitle || loc.greeting || loc.quick.length) locales[lang] = loc;
+  }
+  const config: WidgetConfig = { ...parsed.data, quick: quickList(formData.get("quick")), locales };
+  await db.update(channels).set({ config }).where(eq(channels.id, channelId));
   refresh();
   return { ok: true };
 }

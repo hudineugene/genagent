@@ -76,12 +76,14 @@ export async function dashboardData() {
         channelType: conversations.channelType,
       })
       .from(conversations)
-      .where(and(eq(conversations.needsAttention, true), ne(conversations.status, "closed")))
+      // тестовые разговоры — не в счёт
+      .where(and(eq(conversations.needsAttention, true), ne(conversations.status, "closed"), eq(conversations.isTest, false)))
       .orderBy(conversations.lastMessageAt),
     db
       .select({ role: messages.role, text: messages.text, status: messages.status, conversationId: messages.conversationId })
       .from(messages)
-      .where(gt(messages.createdAt, day)),
+      .innerJoin(conversations, eq(conversations.id, messages.conversationId))
+      .where(and(gt(messages.createdAt, day), eq(conversations.isTest, false))),
     db
       .select({
         agentId: usageLog.agentId,
@@ -101,7 +103,7 @@ export async function dashboardData() {
     db
       .select({ clientId: conversations.clientId, n: sql<number>`count(*)` })
       .from(conversations)
-      .where(gt(conversations.lastMessageAt, week))
+      .where(and(gt(conversations.lastMessageAt, week), eq(conversations.isTest, false)))
       .groupBy(conversations.clientId),
     db
       .select({ id: channels.id, name: channels.name, clientId: channels.clientId })

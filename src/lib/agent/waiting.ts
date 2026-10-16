@@ -56,7 +56,8 @@ export async function runWaitingReminders(now = Date.now()) {
   const waiting = await db
     .select({ id: conversations.id })
     .from(conversations)
-    .where(and(eq(conversations.needsAttention, true), ne(conversations.status, "closed")));
+    // тестовые разговоры — менеджерам не напоминаем
+    .where(and(eq(conversations.needsAttention, true), ne(conversations.status, "closed"), eq(conversations.isTest, false)));
   const ids = waiting.map((w) => w.id);
   // Кто больше не ждёт — его отметки убираем
   await db.delete(settings).where(and(like(settings.key, "waiting:%"), ids.length ? notInArray(settings.key, ids.map(STATE)) : undefined));

@@ -18,7 +18,7 @@ import {
   updateTelegramChannel,
   updateWidget,
 } from "@/app/actions/channels";
-import type { ChannelType, WidgetConfig } from "@/db/schema";
+import { WIDGET_LANGS, type ChannelType, type WidgetConfig } from "@/db/schema";
 import { useI18n } from "@/lib/i18n/client";
 import { Badge, Button, Card, Field, Input, Spinner, Textarea, cx } from "@/components/ui";
 import { InfoHint } from "@/components/hint";
@@ -332,7 +332,31 @@ function WidgetCard({ c, publicUrl }: { c: ChannelItem; publicUrl: string | null
           <Field label={t.channels.widgetTelegram} hint={t.channels.widgetTelegramHint}>
             <Input name="telegramBot" defaultValue={w.telegramBot ?? ""} maxLength={33} placeholder="@yourbot" />
           </Field>
+          <Field label={t.channels.widgetQuick} hint={t.channels.widgetQuickHint}>
+            <Textarea name="quick" rows={2} defaultValue={(w.quick ?? []).join("\n")} placeholder={t.channels.widgetQuickPlaceholder} />
+          </Field>
         </div>
+        <details className="rounded-xl border border-border px-4 py-3">
+          <summary className="cursor-pointer text-sm font-medium select-none">
+            {t.channels.widgetLocales}
+            <span className="ml-2 text-xs font-normal text-muted">{t.channels.widgetLocalesHint}</span>
+          </summary>
+          <div className="mt-3 space-y-4">
+            {WIDGET_LANGS.map((lang) => {
+              const loc = w.locales?.[lang] ?? {};
+              return (
+                <div key={lang} className="grid grid-cols-1 gap-2 sm:grid-cols-[3rem_1fr_1fr]">
+                  <span className="pt-2 text-xs font-semibold text-muted uppercase">{lang}</span>
+                  <Input name={`l_${lang}_title`} defaultValue={loc.title ?? ""} maxLength={80} placeholder={t.channels.title} />
+                  <Input name={`l_${lang}_subtitle`} defaultValue={loc.subtitle ?? ""} maxLength={120} placeholder={t.channels.subtitleLabel} />
+                  <span className="hidden sm:block" />
+                  <Textarea name={`l_${lang}_greeting`} rows={2} defaultValue={loc.greeting ?? ""} maxLength={1000} placeholder={t.channels.widgetGreeting} />
+                  <Textarea name={`l_${lang}_quick`} rows={2} defaultValue={(loc.quick ?? []).join("\n")} placeholder={t.channels.widgetQuick} />
+                </div>
+              );
+            })}
+          </div>
+        </details>
         <div className="flex flex-wrap items-end justify-between gap-4">
           <fieldset>
             <legend className="mb-2 text-sm font-medium">{t.channels.color}</legend>

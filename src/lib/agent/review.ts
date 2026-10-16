@@ -69,7 +69,8 @@ type Conv = { id: string; lines: string[]; flags: Set<string> };
 
 /** Переписки агента за период — компактно, с пометками 👎 / передан / недоволен / ответил сотрудник. */
 async function transcripts(agentId: string, since: number) {
-  const convs = await db.select({ id: conversations.id }).from(conversations).where(eq(conversations.agentId, agentId));
+  // тестовые разговоры — не в счёт
+  const convs = await db.select({ id: conversations.id }).from(conversations).where(and(eq(conversations.agentId, agentId), eq(conversations.isTest, false)));
   if (!convs.length) return [];
   const rows = await db
     .select({ conversationId: messages.conversationId, role: messages.role, text: messages.text, status: messages.status, meta: messages.meta })

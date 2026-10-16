@@ -22,11 +22,12 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
   from.setDate(from.getDate() - (days - 1));
   const clientId = sp.client || null;
 
-  const convWhere: SQL[] = [gte(conversations.createdAt, from)];
+  // тестовые разговоры — не в счёт (расходы считаем все: деньги потрачены реально)
+  const convWhere: SQL[] = [gte(conversations.createdAt, from), eq(conversations.isTest, false)];
   if (clientId) convWhere.push(eq(conversations.clientId, clientId));
   const usageWhere: SQL[] = [gte(usageLog.createdAt, from)];
   if (clientId) usageWhere.push(eq(usageLog.clientId, clientId));
-  const msgWhere: SQL[] = [gte(messages.createdAt, from)];
+  const msgWhere: SQL[] = [gte(messages.createdAt, from), eq(conversations.isTest, false)];
   if (clientId) msgWhere.push(eq(conversations.clientId, clientId));
 
   const day = (col: unknown) => sql<string>`date(${col} / 1000, 'unixepoch', 'localtime')`;
@@ -82,9 +83,9 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
           name: agents.name,
           clientName: clients.name,
           config: agents.config,
-          conversations: sql<number>`(select count(*) from conversations c where c.agent_id = ${agents.id} and c.created_at >= ${from.getTime()})`,
-          replies: sql<number>`(select count(*) from messages m join conversations c on c.id = m.conversation_id where c.agent_id = ${agents.id} and m.role = 'assistant' and m.status = 'sent' and m.created_at >= ${from.getTime()})`,
-          handoffs: sql<number>`(select count(*) from messages m join conversations c on c.id = m.conversation_id where c.agent_id = ${agents.id} and m.role = 'system' and m.text = 'handoff' and m.created_at >= ${from.getTime()})`,
+          conversations: sql<number>`(select count(*) from conversations c where c.agent_id = ${agents.id} and c.is_test = 0 and c.created_at >= ${from.getTime()})`,
+          replies: sql<number>`(select count(*) from messages m join conversations c on c.id = m.conversation_id where c.agent_id = ${agents.id} and c.is_test = 0 and m.role = 'assistant' and m.status = 'sent' and m.created_at >= ${from.getTime()})`,
+          handoffs: sql<number>`(select count(*) from messages m join conversations c on c.id = m.conversation_id where c.agent_id = ${agents.id} and c.is_test = 0 and m.role = 'system' and m.text = 'handoff' and m.created_at >= ${from.getTime()})`,
         })
         .from(agents)
         .innerJoin(clients, eq(clients.id, agents.clientId))

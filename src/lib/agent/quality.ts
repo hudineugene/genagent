@@ -40,7 +40,8 @@ async function exchanges(agentId: string, from: Date, to: Date): Promise<Exchang
   const convs = await db
     .select({ id: conversations.id })
     .from(conversations)
-    .where(and(eq(conversations.agentId, agentId), eq(conversations.kind, "dm"), gt(conversations.lastMessageAt, from)));
+    // тестовые разговоры — не проверяем
+    .where(and(eq(conversations.agentId, agentId), eq(conversations.kind, "dm"), eq(conversations.isTest, false), gt(conversations.lastMessageAt, from)));
   if (!convs.length) return [];
   const rows = await db
     .select({ id: messages.id, conversationId: messages.conversationId, role: messages.role, text: messages.text, meta: messages.meta, createdAt: messages.createdAt })
@@ -195,6 +196,11 @@ export function startQualityCheck() {
     await setSetting("qaLastDay", now.day);
     try {
       const results = await runQualityCheck();
+      // Свежие образцы стиля — по итогам проверки и оценок
+      const { refreshExamples } = await import("./examples");
+      for (const a of await db.select({ id: agents.id }).from(agents).where(eq(agents.status, "active"))) {
+        await refreshExamples(a.id).catch((e) => console.error("examples refresh failed", a.id, e));
+      }
       if (!results.length) return;
       const { notifyTestsReport, getNotifySettings } = await import("@/lib/notify/telegram");
       const s = await getNotifySettings();

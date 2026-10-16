@@ -3,19 +3,23 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 type Msg = { id: string; role: "user" | "agent"; text: string; pending?: boolean };
-type Config = { title: string; subtitle: string; color: string; greeting: string; icon: string; telegramBot?: string };
+type Config = { title: string; subtitle: string; color: string; greeting: string; icon: string; telegramBot?: string; quick?: string[] };
 
 // Язык окна: как у страницы сайта (?lang=), иначе — язык браузера посетителя.
 const TEXTS = {
   ru: { placeholder: "Напишите сообщение…", online: "онлайн", typing: "печатает…", operator: "Менеджер на связи", error: "Не удалось отправить. Попробуйте ещё раз.", close: "Закрыть", unavailable: "Чат временно недоступен", telegram: "Продолжить в Telegram" },
   uk: { placeholder: "Напишіть повідомлення…", online: "онлайн", typing: "друкує…", operator: "Менеджер на зв'язку", error: "Не вдалося надіслати. Спробуйте ще раз.", close: "Закрити", unavailable: "Чат тимчасово недоступний", telegram: "Продовжити в Telegram" },
   en: { placeholder: "Type a message…", online: "online", typing: "typing…", operator: "A manager has joined", error: "Couldn't send. Please try again.", close: "Close", unavailable: "Chat is temporarily unavailable", telegram: "Continue in Telegram" },
+  es: { placeholder: "Escribe un mensaje…", online: "en línea", typing: "escribiendo…", operator: "Un gestor se ha unido", error: "No se pudo enviar. Inténtalo de nuevo.", close: "Cerrar", unavailable: "El chat no está disponible por ahora", telegram: "Continuar en Telegram" },
 };
 
-function pickLang(): keyof typeof TEXTS {
+type Lang = keyof typeof TEXTS;
+
+// Язык окна: ?lang= от страницы сайта, иначе язык браузера; незнакомый — английский
+function pickLang(): Lang {
   const fromPage = typeof location !== "undefined" ? new URLSearchParams(location.search).get("lang") : null;
   const l = (fromPage || (typeof navigator !== "undefined" ? navigator.language : "ru")).toLowerCase();
-  return l.startsWith("uk") ? "uk" : l.startsWith("en") ? "en" : "ru";
+  return l.startsWith("uk") ? "uk" : l.startsWith("ru") ? "ru" : l.startsWith("es") ? "es" : "en";
 }
 
 const noopSubscribe = () => () => {};
@@ -37,7 +41,10 @@ function visitorId(channelId: string) {
 
 export function WidgetChat({ channelId }: { channelId: string }) {
   // На сервере языка браузера нет — там русский, в браузере подставится язык посетителя.
-  const t = TEXTS[useSyncExternalStore(noopSubscribe, pickLang, () => "ru" as const)];
+  const lang = useSyncExternalStore(noopSubscribe, pickLang, () => "ru" as const);
+  const t = TEXTS[lang];
+  // Что посетитель смотрит на сайте: страница и контекст от сайта (widget.js → postMessage)
+  const page = useRef<{ page?: { url?: string; title?: string }; context?: string }>({});
   const [config, setConfig] = useState<Config | null>(null);
   const [failed, setFailed] = useState(false);
   const [msgs, setMsgs] = useState<Msg[]>([]);
@@ -53,7 +60,7 @@ export function WidgetChat({ channelId }: { channelId: string }) {
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch(`/api/widget/${channelId}?visitor=${visitor.current}`, { cache: "no-store" });
+      const res = await fetch(`/api/widget/${channelId}?visitor=${visitor.current}&lang=${lang}`, { cache: "no-store" });
       if (!res.ok) throw new Error(String(res.status));
       const data = await res.json();
       setConfig(data.config);
@@ -66,7 +73,7 @@ export function WidgetChat({ channelId }: { channelId: string }) {
     } catch {
       if (!loaded.current) setFailed(true);
     }
-  }, [channelId]);
+  }, [channelId, lang]);
 
   useEffect(() => {
     visitor.current = visitorId(channelId);
@@ -81,10 +88,10 @@ export function WidgetChat({ channelId }: { channelId: string }) {
     endRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
   }, [msgs.length, typing]);
 
-  const send = async () => {
-    const text = input.trim();
+  const send = async (preset?: string) => {
+    const text = (preset ?? input).trim();
     if (!text) return;
-    setInput("");
+    if (!preset) setInput("");
     setError(false);
     const tmp: Msg = { id: `tmp-${Date.now()}`, role: "user", text, pending: true };
     setMsgs((m) => [...m, tmp]);
@@ -93,18 +100,39 @@ export function WidgetChat({ channelId }: { channelId: string }) {
       const res = await fetch(`/api/widget/${channelId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ visitor: visitor.current, text }),
+        body: JSON.stringify({ visitor: visitor.current, text, lang, ...page.current }),
       });
       if (!res.ok) throw new Error(String(res.status));
       setMsgs((m) => m.filter((x) => x.id !== tmp.id));
       await load();
     } catch {
       setMsgs((m) => m.filter((x) => x.id !== tmp.id));
-      setInput(text);
+      if (!preset) setInput(text);
       setError(true);
       setTyping(false);
     }
   };
+
+  // Сообщения от страницы сайта: контекст и вопрос «спросить об этом объекте»
+  const sendRef = useRef(send);
+  useEffect(() => {
+    sendRef.current = send;
+  });
+  useEffect(() => {
+    const onMessage = (e: MessageEvent) => {
+      if (e.source !== window.parent || !e.data || typeof e.data !== "object") return;
+      if (e.data.type === "genagent:context") {
+        page.current = {
+          page: { url: String(e.data.page?.url ?? "").slice(0, 500), title: String(e.data.page?.title ?? "").slice(0, 200) },
+          context: String(e.data.context ?? "").slice(0, 1000),
+        };
+      }
+      if (e.data.type === "genagent:ask" && typeof e.data.text === "string") void sendRef.current(e.data.text.slice(0, 4000));
+    };
+    window.addEventListener("message", onMessage);
+    window.parent?.postMessage({ type: "genagent:ready" }, "*");
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
 
   const talked = msgs.some((m) => m.role === "user" && !m.pending);
   useEffect(() => {
@@ -167,6 +195,21 @@ export function WidgetChat({ channelId }: { channelId: string }) {
                 />
               ))}
             </div>
+          </div>
+        )}
+        {!talked && !typing && (config?.quick?.length ?? 0) > 0 && (
+          <div className="flex flex-wrap justify-end gap-1.5 pt-1">
+            {config!.quick!.map((q) => (
+              <button
+                key={q}
+                type="button"
+                onClick={() => void send(q)}
+                className="rounded-full border bg-white px-3 py-1.5 text-sm transition hover:opacity-80"
+                style={{ borderColor: color, color }}
+              >
+                {q}
+              </button>
+            ))}
           </div>
         )}
         <div ref={endRef} />

@@ -166,7 +166,14 @@ export type WidgetConfig = {
   position: "right" | "left";
   /** Бот клиента в Telegram (username без @): в окне чата — «Продолжить в Telegram» с переносом разговора */
   telegramBot?: string;
+  /** Кнопки-подсказки до первого сообщения («Подобрать виллу», «Записаться на просмотр») */
+  quick?: string[];
+  /** Тексты на языке посетителя (сайт на нескольких языках): заголовок, подзаголовок, приветствие, подсказки */
+  locales?: Partial<Record<WidgetLang, WidgetLocale>>;
 };
+export const WIDGET_LANGS = ["ru", "uk", "en", "es"] as const;
+export type WidgetLang = (typeof WIDGET_LANGS)[number];
+export type WidgetLocale = { title?: string; subtitle?: string; greeting?: string; quick?: string[] };
 /** Аккаунт Instagram (вход через Instagram): директ и/или комментарии. */
 export type InstagramConfig = {
   igUserId: string;
@@ -275,6 +282,8 @@ export const conversations = sqliteTable(
     mode: text("mode", { enum: ["ai", "human"] }).notNull().default("ai"),
     status: text("status", { enum: ["open", "closed"] }).notNull().default("open"),
     needsAttention: integer("needs_attention", { mode: "boolean" }).notNull().default(false),
+    /** Тестовый разговор (свой или сотрудника): не в аналитике, памяти, обучении и проверках */
+    isTest: integer("is_test", { mode: "boolean" }).notNull().default(false),
     unread: integer("unread").notNull().default(0),
     lastMessageText: text("last_message_text").notNull().default(""),
     lastMessageAt: integer("last_message_at", { mode: "timestamp_ms" })

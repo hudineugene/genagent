@@ -1,7 +1,12 @@
 /**
  * Скрипт для вставки на сайт клиента:
- * <script src="https://АДРЕС/widget.js" data-channel="ID_КАНАЛА" async></script>
+ * <script src="https://АДРЕС/widget.js" data-channel="ID_КАНАЛА" data-lang="es" data-context="Объект: Villa Sol, 550 000 €" async></script>
  * Рисует кнопку чата; окно чата открывается в iframe с нашего адреса (стили сайта ему не мешают).
+ * Окну передаются адрес и заголовок страницы и data-context — агент знает, что посетитель смотрит.
+ * Команды для сайта (например, кнопка «Спросить об этом объекте» на карточке):
+ *   GenAgent.open() / GenAgent.close()
+ *   GenAgent.setContext("Объект: Villa Sol (V-012), 550 000 €, Финестрат")  — или объект { "Объект": "…", "Цена": "…" }
+ *   GenAgent.ask("Есть ли скидка на эту виллу?")  — открыть окно и задать вопрос от имени посетителя
  */
 const SCRIPT = `(function () {
   var s = document.currentScript;
@@ -10,6 +15,27 @@ const SCRIPT = `(function () {
   var channel = s.getAttribute("data-channel");
   var base = new URL(s.src).origin;
   if (!channel) return;
+  // Язык окна — как у страницы сайта (data-lang или <html lang>)
+  var lang = (s.getAttribute("data-lang") || document.documentElement.lang || "").slice(0, 2).toLowerCase();
+  var ctx = s.getAttribute("data-context") || "";
+  var queue = [];
+  function asText(x) {
+    if (!x) return "";
+    if (typeof x === "string") return x;
+    return Object.keys(x).map(function (k) { return k + ": " + x[k]; }).join("\\n");
+  }
+  // До загрузки окна команды сайта копятся и уходят, когда окно готово
+  var api = window.GenAgent = window.GenAgent || {};
+  api.setContext = function (x) { ctx = asText(x).slice(0, 1000); post({ type: "genagent:context" }); };
+  api.open = function () { queue.push(["open"]); };
+  api.close = function () { queue.push(["close"]); };
+  api.ask = function (text) { queue.push(["ask", String(text || "")]); };
+  var frame = null, ready = false;
+  function post(msg) {
+    if (!frame || !ready) return;
+    if (msg.type === "genagent:context") { msg.page = { url: location.href, title: document.title }; msg.context = ctx; msg.lang = lang; }
+    frame.contentWindow.postMessage(msg, base);
+  }
 
   fetch(base + "/api/widget/" + channel).then(function (r) { return r.ok ? r.json() : null; }).then(function (data) {
     if (!data || !data.config) return;
@@ -25,7 +51,7 @@ const SCRIPT = `(function () {
     btn.onmouseenter = function () { btn.style.transform = "scale(1.06)"; };
     btn.onmouseleave = function () { btn.style.transform = "none"; };
 
-    var frame = null, open = false;
+    var open = false;
     function layout() {
       if (!frame) return;
       var mobile = window.innerWidth < 500;
@@ -38,8 +64,6 @@ const SCRIPT = `(function () {
       open = v === undefined ? !open : v;
       if (open && !frame) {
         frame = document.createElement("iframe");
-        // Язык окна — как у страницы сайта (data-lang или <html lang>).
-        var lang = (s.getAttribute("data-lang") || document.documentElement.lang || "").slice(0, 2).toLowerCase();
         frame.src = base + "/w/" + channel + (lang ? "?lang=" + encodeURIComponent(lang) : "");
         frame.title = cfg.title || "Chat";
         frame.allow = "clipboard-write";
@@ -51,8 +75,27 @@ const SCRIPT = `(function () {
     btn.onclick = function () { toggle(); };
     window.addEventListener("resize", layout);
     window.addEventListener("message", function (e) {
-      if (e.origin === base && e.data && e.data.type === "genagent:close") toggle(false);
+      if (e.origin !== base || !e.data) return;
+      if (e.data.type === "genagent:close") toggle(false);
+      // Окно загрузилось — передаём страницу и контекст, выполняем отложенный вопрос
+      if (e.data.type === "genagent:ready") {
+        ready = true;
+        post({ type: "genagent:context" });
+        var asks = pendingAsk; pendingAsk = [];
+        asks.forEach(function (t) { post({ type: "genagent:ask", text: t }); });
+      }
     });
+    var pendingAsk = [];
+    api.open = function () { toggle(true); };
+    api.close = function () { toggle(false); };
+    api.ask = function (text) {
+      text = String(text || "").trim();
+      if (!text) return;
+      toggle(true);
+      if (ready) post({ type: "genagent:ask", text: text }); else pendingAsk.push(text);
+    };
+    queue.forEach(function (q) { q[0] === "ask" ? api.ask(q[1]) : q[0] === "open" ? api.open() : api.close(); });
+    queue = [];
     document.body.appendChild(btn);
   }).catch(function () {});
 })();

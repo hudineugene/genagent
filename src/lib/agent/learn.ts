@@ -34,7 +34,17 @@ export async function runLearning(): Promise<string[]> {
   const fresh = await db
     .select({ id: messages.id, conversationId: messages.conversationId, text: messages.text, createdAt: messages.createdAt })
     .from(messages)
-    .where(and(eq(messages.role, "operator"), eq(messages.status, "sent"), gt(messages.createdAt, new Date(cursor)), lt(messages.createdAt, new Date(until))))
+    .innerJoin(conversations, eq(conversations.id, messages.conversationId))
+    // тестовые разговоры — не учимся на них
+    .where(
+      and(
+        eq(messages.role, "operator"),
+        eq(messages.status, "sent"),
+        eq(conversations.isTest, false),
+        gt(messages.createdAt, new Date(cursor)),
+        lt(messages.createdAt, new Date(until)),
+      ),
+    )
     .orderBy(asc(messages.createdAt))
     .limit(200);
   // По разговору — последний ответ сотрудника в окне; разговоры без существенного ответа пропускаем

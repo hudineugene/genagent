@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, gt, inArray } from "drizzle-orm";
+import { and, eq, gt, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { agentEvents, agents, clients, conversations, messages } from "@/db/schema";
 
@@ -38,11 +38,18 @@ export async function agentFunnels(sinceMs: number): Promise<AgentFunnel[]> {
       .selectDistinct({ externalId: conversations.externalId, channelId: conversations.channelId })
       .from(messages)
       .innerJoin(conversations, eq(conversations.id, messages.conversationId))
-      .where(and(eq(conversations.agentId, a.id), eq(messages.role, "assistant"), gt(messages.createdAt, since)));
+      .where(and(eq(conversations.agentId, a.id), eq(conversations.isTest, false), eq(messages.role, "assistant"), gt(messages.createdAt, since)));
     const events = await db
       .select()
       .from(agentEvents)
-      .where(and(eq(agentEvents.agentId, a.id), gt(agentEvents.createdAt, since)));
+      .where(
+        and(
+          eq(agentEvents.agentId, a.id),
+          gt(agentEvents.createdAt, since),
+          // тестовые разговоры — не в счёт (события без разговора остаются)
+          sql`(${agentEvents.conversationId} is null or ${agentEvents.conversationId} not in (select id from conversations where is_test = 1))`,
+        ),
+      );
     if (!talkedRows.length && !events.length) continue;
 
     const steps = new Map<string, FunnelStep>();
@@ -107,7 +114,7 @@ export async function recentDislikes(agentIds: string[], limit = 10) {
     .select({ id: messages.id, text: messages.text, meta: messages.meta, conversationId: messages.conversationId, createdAt: messages.createdAt, agentId: conversations.agentId })
     .from(messages)
     .innerJoin(conversations, eq(conversations.id, messages.conversationId))
-    .where(and(inArray(conversations.agentId, agentIds), eq(messages.role, "assistant")));
+    .where(and(inArray(conversations.agentId, agentIds), eq(conversations.isTest, false), eq(messages.role, "assistant")));
   return rows
     .filter((r) => r.meta?.rating === "down")
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())

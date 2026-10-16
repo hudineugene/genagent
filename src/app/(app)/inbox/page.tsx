@@ -16,9 +16,10 @@ import { InboxPoller } from "./poller";
 import { InboxToolbar } from "./toolbar";
 import { InfoColumn } from "./info-panel";
 import { ForgetMemory } from "./forget-memory";
+import { TestToggle } from "./test-toggle";
 
-type Filter = "all" | "attention" | "human" | "closed";
-const FILTERS = ["all", "attention", "human", "closed"] as const;
+type Filter = "all" | "attention" | "human" | "closed" | "test";
+const FILTERS = ["all", "attention", "human", "closed", "test"] as const;
 
 export default async function InboxPage({
   searchParams,
@@ -45,11 +46,14 @@ export default async function InboxPage({
       )!,
     );
   }
+  // Тестовые разговоры (свои, сотрудников) — только на вкладке «Тест»
+  const real = eq(conversations.isTest, false);
   const byFilter: Record<Filter, SQL[]> = {
-    all: [ne(conversations.status, "closed")],
-    attention: [eq(conversations.needsAttention, true), ne(conversations.status, "closed")],
-    human: [eq(conversations.mode, "human"), ne(conversations.status, "closed")],
-    closed: [eq(conversations.status, "closed")],
+    all: [real, ne(conversations.status, "closed")],
+    attention: [real, eq(conversations.needsAttention, true), ne(conversations.status, "closed")],
+    human: [real, eq(conversations.mode, "human"), ne(conversations.status, "closed")],
+    closed: [real, eq(conversations.status, "closed")],
+    test: [eq(conversations.isTest, true)],
   };
 
   const [rows, clientList, [counts], waitingTop] = await Promise.all([
@@ -78,10 +82,11 @@ export default async function InboxPage({
     db.select({ id: clients.id, name: clients.name }).from(clients).orderBy(asc(clients.name)),
     db
       .select({
-        all: sql<number>`coalesce(sum(case when ${conversations.status} != 'closed' then 1 end), 0)`,
-        attention: sql<number>`coalesce(sum(case when ${conversations.needsAttention} = 1 and ${conversations.status} != 'closed' then 1 end), 0)`,
-        human: sql<number>`coalesce(sum(case when ${conversations.mode} = 'human' and ${conversations.status} != 'closed' then 1 end), 0)`,
-        closed: sql<number>`coalesce(sum(case when ${conversations.status} = 'closed' then 1 end), 0)`,
+        all: sql<number>`coalesce(sum(case when ${conversations.isTest} = 0 and ${conversations.status} != 'closed' then 1 end), 0)`,
+        attention: sql<number>`coalesce(sum(case when ${conversations.isTest} = 0 and ${conversations.needsAttention} = 1 and ${conversations.status} != 'closed' then 1 end), 0)`,
+        human: sql<number>`coalesce(sum(case when ${conversations.isTest} = 0 and ${conversations.mode} = 'human' and ${conversations.status} != 'closed' then 1 end), 0)`,
+        closed: sql<number>`coalesce(sum(case when ${conversations.isTest} = 0 and ${conversations.status} = 'closed' then 1 end), 0)`,
+        test: sql<number>`coalesce(sum(case when ${conversations.isTest} = 1 then 1 end), 0)`,
       })
       .from(conversations)
       .where(base.length ? and(...base) : undefined),
@@ -100,7 +105,7 @@ export default async function InboxPage({
           })
           .from(conversations)
           .innerJoin(clients, eq(clients.id, conversations.clientId))
-          .where(and(eq(conversations.needsAttention, true), ne(conversations.status, "closed"), ...(sp.client ? [eq(conversations.clientId, sp.client)] : [])))
+          .where(and(eq(conversations.isTest, false), eq(conversations.needsAttention, true), ne(conversations.status, "closed"), ...(sp.client ? [eq(conversations.clientId, sp.client)] : [])))
           .orderBy(asc(conversations.lastMessageAt))
           .limit(5),
   ]);
@@ -211,6 +216,7 @@ type Info = {
   cost: number;
   linked: boolean;
   language: string | null;
+  isTest: boolean;
 };
 
 async function loadThread(id: string): Promise<{ data: ThreadData; info: Info } | null> {
@@ -277,6 +283,7 @@ async function loadThread(id: string): Promise<{ data: ThreadData; info: Info } 
       cost: msgs.reduce((sum, m) => sum + (m.meta?.cost ?? 0), 0),
       linked: Boolean(c.context?.linkedFrom) || msgs.some((m) => m.meta?.fromSite),
       language: c.context?.language ?? null,
+      isTest: c.isTest,
     },
   };
 }
@@ -382,6 +389,7 @@ function ConversationInfo({ info, data, t, locale }: { info: Info; data: ThreadD
           </ul>
         </div>
       )}
+      <TestToggle conversationId={data.id} isTest={info.isTest} labels={{ mark: t.inbox.markTest, unmark: t.inbox.unmarkTest, hint: t.inbox.markTestHint }} />
       <div className="space-y-1.5 border-t border-border pt-4">
         <InfoLink href={`/agents/${data.agentId}`} icon={<Bot className="size-4" />}>
           {t.inbox.infoOpenAgent}

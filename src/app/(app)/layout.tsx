@@ -32,7 +32,7 @@ async function Shell({ children }: { children: ReactNode }) {
     db
       .select({ attention: count() })
       .from(conversations)
-      .where(and(eq(conversations.needsAttention, true), ne(conversations.status, "closed"))),
+      .where(and(eq(conversations.isTest, false), eq(conversations.needsAttention, true), ne(conversations.status, "closed"))),
   ]);
   return (
     <I18nProvider locale={locale}>

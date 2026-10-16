@@ -46,6 +46,7 @@ export async function runFollowUps({ dryRun = false }: { dryRun?: boolean } = {}
           eq(conversations.channelId, ch.id),
           eq(conversations.kind, "dm"),
           eq(conversations.mode, "ai"),
+          eq(conversations.isTest, false), // тестовым разговорам не напоминаем
           gt(conversations.lastMessageAt, new Date(now - MAX_AGE_MS)),
           lt(conversations.lastMessageAt, new Date(now - MIN_AGE_MS)),
         ),

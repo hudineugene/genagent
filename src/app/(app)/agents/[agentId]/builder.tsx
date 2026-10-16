@@ -1,7 +1,9 @@
 "use client";
+import { hideExampleAction, refreshExamplesAction } from "@/app/actions/examples";
+import { InfoHint } from "@/components/hint";
 
 import Link from "next/link";
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, useTransition, type ReactNode } from "react";
 import { BookOpen, Brain, CalendarDays, ChevronDown, Cpu, MessageSquareText, ScrollText, Sparkles, UserRound } from "lucide-react";
 import { SKILLS } from "@/lib/agent/skills";
 import { compileSystemPrompt, type ClientContext } from "@/lib/agent/compile";
@@ -32,12 +34,16 @@ export function Builder({
   client,
   sources,
   googleEmail,
+  agentId,
+  examples = [],
 }: {
   config: AgentConfig;
   onChange: (c: AgentConfig) => void;
   client: ClientContext & { id: string };
   sources: BuilderSource[];
   googleEmail: string | null;
+  agentId?: string;
+  examples?: ExampleItem[];
 }) {
   const { t, locale } = useI18n();
   const set = <K extends keyof AgentConfig>(key: K, value: AgentConfig[K]) => onChange({ ...config, [key]: value });
@@ -283,6 +289,7 @@ export function Builder({
           {t.builder.useBrandVoice}
           {!client.brandVoice && <span className="text-xs text-muted">(—)</span>}
         </label>
+        {agentId && <ExamplesList agentId={agentId} items={examples} />}
       </Section>
 
       <Section icon={<BookOpen />} id="knowledge" title={t.builder.sections.knowledge} badge={usedSources.length || undefined}>
@@ -389,6 +396,54 @@ export function Builder({
 }
 
 /** Разделы настройки по порядку — для меню разделов над формой. */
+export type ExampleItem = { id: string; question: string; answer: string; liked: boolean };
+
+/** Удачные ответы — образец стиля для агента (обновляются каждое утро; любой можно убрать). */
+function ExamplesList({ agentId, items }: { agentId: string; items: ExampleItem[] }) {
+  const { t } = useI18n();
+  const [pending, start] = useTransition();
+  return (
+    <div className="space-y-2 border-t border-border pt-4">
+      <div className="flex items-center gap-1 text-sm font-medium">
+        {t.builder.examplesTitle}
+        <InfoHint>{t.builder.examplesHint}</InfoHint>
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => start(async () => void (await refreshExamplesAction(agentId)))}
+          className="ml-auto text-xs font-normal text-accent hover:underline disabled:opacity-50"
+        >
+          {t.builder.examplesRefresh}
+        </button>
+      </div>
+      {items.length === 0 ? (
+        <p className="text-xs text-muted">{t.builder.examplesEmpty}</p>
+      ) : (
+        <ul className="space-y-2">
+          {items.map((e) => (
+            <li key={e.id} className="group relative rounded-xl bg-surface-2/60 px-3 py-2 text-xs">
+              <div className="truncate text-muted">
+                {e.liked ? "👍 " : "✓ "}
+                {e.question}
+              </div>
+              <div className="mt-0.5 line-clamp-2">{e.answer}</div>
+              <button
+                type="button"
+                disabled={pending}
+                title={t.builder.examplesHide}
+                onClick={() => start(async () => void (await hideExampleAction(agentId, e.id)))}
+                className="absolute top-1.5 right-2 hidden text-muted hover:text-danger group-hover:block"
+              >
+                ×
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export const BUILDER_SECTIONS = ["basics", "model", "skills", "style", "knowledge", "rules", "calendar", "prompt"] as const;
 
 function Section({

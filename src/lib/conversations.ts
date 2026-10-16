@@ -67,6 +67,8 @@ export async function upsertConversation(
     }
     return { conversation: existing, created: false };
   }
+  const { getTestAccounts, isTestAccount } = await import("@/lib/test-accounts");
+  const isTest = isTestAccount(await getTestAccounts(), externalId, contact.handle);
   const [created] = await db
     .insert(conversations)
     .values({
@@ -77,6 +79,7 @@ export async function upsertConversation(
       externalId,
       contactName: contact.name ?? "",
       contactHandle: contact.handle ?? "",
+      isTest,
     })
     .returning();
   return { conversation: created, created: true };
@@ -212,7 +215,9 @@ export async function respond(conversationId: string): Promise<void> {
         ? emailNote(client.name, conversation.contactName)
         : conversation.kind === "comment"
           ? commentNote(channel.type === "api" ? "telegram" : channel.type, conversation.context?.postText)
-          : channel.type === "api"
+          : channel.type === "widget"
+            ? widgetNote(conversation.context?.language, conversation.context?.botContext)
+            : channel.type === "api"
             ? apiNote(conversation.context?.language, conversation.context?.botContext, (channel.config as ApiConfig).botNote, botActivity(history), ordersNote(conversation.context?.orders), handoffEtaNote(conversation.context?.team, await measuredReplyMinutes(channel.id)))
             : undefined,
       ),
@@ -395,6 +400,19 @@ export function botActivity(history: { role: string; text: string; meta?: Messag
 function withMemory(memory: ClientMemory | undefined, note: string | undefined) {
   const parts = [note, memoryNote(memory)].filter(Boolean);
   return parts.length ? parts.join("\n\n") : undefined;
+}
+
+/** Окно чата на сайте: язык страницы и что посетитель сейчас смотрит. */
+function widgetNote(language?: string, page?: string) {
+  const parts: string[] = [
+    "# Канал: чат на сайте компании\nТы отвечаешь в окне чата на сайте. Пиши простым текстом без markdown, коротко. Если посетитель готов к следующему шагу (просмотр, звонок, заказ) — попроси имя и удобный способ связи (телефон, WhatsApp или Telegram).",
+  ];
+  if (language) {
+    const name = LANGUAGE_NAMES[language] ?? language;
+    parts.push(`# Язык ответа\nСайт открыт на языке: ${name}. Отвечай на этом языке, если посетитель сам не пишет на другом — тогда отвечай на языке посетителя.`);
+  }
+  if (page) parts.push(`# Что посетитель сейчас смотрит на сайте\n${page}\nУчитывай это: если вопрос про «этот объект» или «эту цену» — речь о нём.`);
+  return parts.join("\n\n");
 }
 
 /** Свой бот: язык ответа задаёт бот (язык, выбранный клиентом в боте) — он важнее настройки агента. */

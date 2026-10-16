@@ -217,6 +217,22 @@ export async function saveDailyDigestAction(patch: { enabled: boolean; hour: num
   return { ok: true };
 }
 
+// ---------- утренняя сводка лидов ----------
+
+export async function saveLeadsAction(patch: { enabled: boolean; hour: number }): Promise<IntegrationsResult> {
+  await requireAdmin();
+  const data = z.object({ enabled: z.boolean(), hour: z.number().int().min(0).max(23) }).parse(patch);
+  const { saveLeadsSettings } = await import("@/lib/agent/leads");
+  await saveLeadsSettings(data);
+  return { ok: true };
+}
+
+export async function sendLeadsNow(): Promise<IntegrationsResult> {
+  await requireAdmin();
+  const { sendLeadsDigest } = await import("@/lib/agent/leads");
+  return (await sendLeadsDigest()) ? { ok: true } : { error: "empty" };
+}
+
 /** Напоминания, если клиент ждёт человека (lib/agent/waiting). */
 export async function saveWaitingAction(patch: { enabled: boolean; firstMin: number; secondMin: number; fromHour: number; toHour: number }): Promise<IntegrationsResult> {
   await requireAdmin();

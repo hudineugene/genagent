@@ -49,7 +49,8 @@ export async function runMemory({ dryRun = false }: { dryRun?: boolean } = {}): 
     .select({ conversation: conversations, agentConfig: agents.config, agentStatus: agents.status })
     .from(conversations)
     .innerJoin(agents, eq(agents.id, conversations.agentId))
-    .where(and(eq(conversations.kind, "dm"), gt(conversations.lastMessageAt, new Date(now - LOOKBACK_MS)), lt(conversations.lastMessageAt, new Date(now - QUIET_MS))))
+    // тестовые разговоры — не запоминаем
+    .where(and(eq(conversations.kind, "dm"), eq(conversations.isTest, false), gt(conversations.lastMessageAt, new Date(now - LOOKBACK_MS)), lt(conversations.lastMessageAt, new Date(now - QUIET_MS))))
     .orderBy(desc(conversations.lastMessageAt))
     .limit(300);
   let done = 0;

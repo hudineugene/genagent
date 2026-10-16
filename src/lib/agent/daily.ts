@@ -77,11 +77,12 @@ export async function dailyDigestHtml(sinceMs = Date.now() - DAY_MS, adminUrl?: 
     })
     .from(messages)
     .innerJoin(conversations, eq(conversations.id, messages.conversationId))
-    .where(gt(messages.createdAt, since));
+    // тестовые разговоры — не в счёт
+    .where(and(gt(messages.createdAt, since), eq(conversations.isTest, false)));
   const waitingRows = await db
     .select({ agentId: conversations.agentId, id: conversations.id, name: conversations.contactName, handle: conversations.contactHandle })
     .from(conversations)
-    .where(eq(conversations.needsAttention, true));
+    .where(and(eq(conversations.needsAttention, true), eq(conversations.isTest, false)));
   const gaps = await db.select({ agentId: knowledgeGaps.agentId }).from(knowledgeGaps).where(and(gt(knowledgeGaps.createdAt, since), eq(knowledgeGaps.status, "open")));
 
   const titles = new Map(funnels.map((f) => [f.agentId, f.title]));

@@ -5,6 +5,8 @@ import { requireAdmin } from "@/lib/auth";
 import { getT } from "@/lib/i18n/server";
 import { PageHeader } from "@/components/ui";
 import { TeamManager } from "./team-manager";
+import { TestAccounts } from "./test-accounts";
+import { getTestAccounts } from "@/lib/test-accounts";
 
 export default async function TeamPage() {
   const { t } = await getT();
@@ -18,6 +20,7 @@ export default async function TeamPage() {
     <div className="mx-auto max-w-4xl">
       <PageHeader title={t.team.title} />
       <TeamManager members={members} meId={me.id} />
+      <TestAccounts initial={(await getTestAccounts()).join("\n")} />
     </div>
   );
 }

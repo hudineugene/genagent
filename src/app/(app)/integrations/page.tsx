@@ -17,6 +17,7 @@ import { getNotifySettings } from "@/lib/notify/telegram";
 import { getOffsiteSettings } from "@/lib/offsite-backup";
 import { getWeeklyTests, weeklyCoverage } from "@/lib/tests/weekly";
 import { getDailyDigest } from "@/lib/agent/daily";
+import { getLeadsSettings } from "@/lib/agent/leads";
 
 const TABS = ["notify", "reports", "backup", "social", "google"] as const;
 type Tab = (typeof TABS)[number];
@@ -27,7 +28,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
   await requireAdmin();
   const tab: Tab = TABS.find((x) => x === sp.tab) ?? "notify";
   const s = t.integrations;
-  const [meta, google, notify, offsite, weekly, coverage, daily, waiting] = await Promise.all([
+  const [meta, google, notify, offsite, weekly, coverage, daily, waiting, leads] = await Promise.all([
     getMetaSettings(),
     getGoogleSettings(),
     getNotifySettings(),
@@ -36,6 +37,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
     weeklyCoverage(),
     getDailyDigest(),
     getWaitingSettings(),
+    getLeadsSettings(),
   ]);
   const base = publicUrl();
   const subscribers = notify?.token ? notify.subscribers : [];
@@ -110,6 +112,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
                 </Section>
                 <Section>
                   <DailyDigestSection daily={{ enabled: daily.enabled, hour: daily.hour }} />
+                  <DailyDigestSection kind="leads" daily={{ enabled: leads.enabled, hour: leads.hour }} />
                 </Section>
                 <Section>
                   <WeeklyTestsSection

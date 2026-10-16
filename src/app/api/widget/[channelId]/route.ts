@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { agents, channels, conversations, type WidgetConfig } from "@/db/schema";
+import { agents, channels, conversations, type WidgetConfig, WIDGET_LANGS } from "@/db/schema";
 import { agentConfigSchema } from "@/lib/agent/types";
 import { addMessage, isTyping, listMessages, scheduleReply, upsertConversation } from "@/lib/conversations";
 
@@ -29,11 +29,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ channelI
   const row = await loadChannel(channelId);
   if (!row) return Response.json({ error: "not_found" }, { status: 404, headers: CORS });
 
-  const cfg = row.channel.config as WidgetConfig;
-  const agentCfg = agentConfigSchema.safeParse(row.agent.config).data;
-  const config = { ...cfg, greeting: agentCfg?.greeting ?? "", icon: agentCfg?.icon ?? "💬" };
-
   const url = new URL(req.url);
+  const config = widgetView(row.channel.config as WidgetConfig, agentConfigSchema.safeParse(row.agent.config).data, url.searchParams.get("lang"));
+
   const visitor = visitorSchema.safeParse(url.searchParams.get("visitor"));
   if (!visitor.success) return Response.json({ config, messages: [], typing: false }, { headers: CORS });
 
@@ -62,7 +60,41 @@ function rateLimited(key: string) {
   return recent.length > 20;
 }
 
-const postSchema = z.object({ visitor: visitorSchema, text: z.string().trim().min(1).max(4000) });
+const postSchema = z.object({
+  visitor: visitorSchema,
+  text: z.string().trim().min(1).max(4000),
+  /** Язык страницы сайта (ru, uk, en, es…) — агент отвечает на нём */
+  lang: z.string().trim().toLowerCase().regex(/^[a-z]{2}$/).optional(),
+  /** Какую страницу посетитель смотрит сейчас */
+  page: z.object({ url: z.string().max(500).optional(), title: z.string().max(200).optional() }).optional(),
+  /** Что сайт передал о странице: объект, цена, район (window.GenAgent.setContext или data-context) */
+  context: z.string().max(1000).optional(),
+});
+
+/** Тексты окна на языке посетителя (если заданы), иначе — основные. */
+function widgetView(cfg: WidgetConfig, agentCfg: { greeting?: string; icon?: string } | undefined, langRaw: string | null) {
+  const lang = WIDGET_LANGS.find((l) => l === (langRaw ?? "").slice(0, 2).toLowerCase());
+  const loc = lang ? cfg.locales?.[lang] : undefined;
+  return {
+    title: loc?.title || cfg.title,
+    subtitle: loc?.subtitle || cfg.subtitle,
+    color: cfg.color,
+    position: cfg.position,
+    telegramBot: cfg.telegramBot,
+    greeting: loc?.greeting || agentCfg?.greeting || "",
+    icon: agentCfg?.icon ?? "💬",
+    quick: loc?.quick?.length ? loc.quick : (cfg.quick ?? []),
+  };
+}
+
+/** Что посетитель смотрит: страница и данные от сайта — агенту в контекст. */
+function pageContext(page?: { url?: string; title?: string }, context?: string) {
+  const lines = [
+    page?.title || page?.url ? `Страница: ${[page.title, page.url].filter(Boolean).join(" — ")}` : "",
+    context?.trim() ? context.trim() : "",
+  ].filter(Boolean);
+  return lines.length ? lines.join("\n").slice(0, 1500) : undefined;
+}
 
 export async function POST(req: Request, { params }: { params: Promise<{ channelId: string }> }) {
   const { channelId } = await params;
@@ -79,10 +111,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ channel
     name: "",
     handle: "",
   });
+  const { lang, page, context } = parsed.data;
   if (created) {
-    // Приветствие видно посетителю до первого сообщения — сохраняем его в истории диалога.
-    const greeting = agentConfigSchema.safeParse(row.agent.config).data?.greeting?.trim();
+    // Приветствие видно посетителю до первого сообщения — сохраняем его в истории диалога (на языке страницы).
+    const greeting = widgetView(row.channel.config as WidgetConfig, agentConfigSchema.safeParse(row.agent.config).data, lang ?? null).greeting.trim();
     if (greeting) await addMessage(conversation.id, "assistant", greeting);
+  }
+  // Язык и страница — в контекст разговора: агент ответит на языке сайта и знает, что посетитель смотрит
+  const botContext = pageContext(page, context);
+  if (lang || botContext) {
+    await db
+      .update(conversations)
+      .set({ context: { ...conversation.context, ...(lang ? { language: lang } : {}), ...(botContext ? { botContext } : {}) } })
+      .where(eq(conversations.id, conversation.id));
   }
   const m = await addMessage(conversation.id, "user", parsed.data.text);
   scheduleReply(conversation.id);

@@ -5,6 +5,7 @@ import { loadKnowledge } from "@/lib/kb/store";
 import type { AgentTool, ChatMessage } from "@/lib/llm";
 import { utcToZoned } from "@/lib/google/calendar";
 import { calendarTools, type ToolContext } from "./tools";
+import { examplesNote, getExamples } from "./examples";
 
 export const HANDOFF_MARKER = "[[HANDOFF]]";
 
@@ -39,7 +40,9 @@ export async function prepareChat(
     kb.mode === "full" ? { kind: "full", docs: kb.docs } : kb.mode === "search" ? { kind: "search", docs: kb.pinned } : undefined,
     config.calendar.enabled ? utcToZoned(new Date(), config.calendar.timezone) : undefined,
   );
-  const fullSystem = channelNote ? `${system}\n\n${channelNote}` : system;
+  // Удачные ответы этого агента — образец стиля (обновляются раз в сутки)
+  const examples = tools.agentId ? examplesNote(await getExamples(tools.agentId).catch(() => [])) : undefined;
+  const fullSystem = [system, examples, channelNote].filter(Boolean).join("\n\n");
   const agentTools = config.calendar.enabled ? calendarTools(config.calendar, { ...tools, clientId: client.id }) : undefined;
 
   const last = messages[messages.length - 1];
