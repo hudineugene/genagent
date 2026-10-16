@@ -16,6 +16,8 @@ import { isSticker } from "@/lib/sticker";
  * Что приходит: клиент передан менеджеру (с выжимкой), черновик ждёт одобрения (с кнопками), сбои каналов и агентов.
  */
 export type NotifySubscriber = { chatId: string; name: string; since: number };
+/** Владелец бизнеса клиента: получает только вопросы своего агента без ответа и отвечает на них (в базу знаний). */
+export type NotifyOwner = NotifySubscriber & { clientId: string };
 export type NotifySettings = {
   token: string;
   botUsername: string;
@@ -24,6 +26,10 @@ export type NotifySettings = {
   /** Адрес админки для ссылок «Открыть диалог» (Tailscale) */
   adminUrl: string;
   subscribers: NotifySubscriber[];
+  /** Владельцы клиентов — отдельно от сотрудников студии: общие рассылки им не уходят */
+  owners?: NotifyOwner[];
+  /** Секрет ссылки владельца для каждого клиента (t.me/<бот>?start=c_<код>) */
+  clientCodes?: Record<string, string>;
 };
 
 const KEY = "notify";
@@ -401,6 +407,104 @@ export function startNotifyPolling() {
 
 // Сотрудник нажал «Ответить»: следующее его сообщение уйдёт этому клиенту (15 минут или пока не ответит).
 const REPLY_TTL_MS = 15 * 60 * 1000;
+// Ответ на вопрос без ответа: кнопка «✍️ Ответить» → следующее сообщение (или «Ответить» на подсказку) уходит в базу знаний
+const pendingAnswer = new Map<string, { gapId: string; at: number }>();
+const promptToGap = new Map<string, string>();
+
+async function answerGap(s: NotifySettings, chatId: string, gapId: string, text: string, isStudio: boolean) {
+  const [row] = await db
+    .select({ gap: knowledgeGaps, agent: agents, client: clients })
+    .from(knowledgeGaps)
+    .innerJoin(agents, eq(agents.id, knowledgeGaps.agentId))
+    .innerJoin(clients, eq(clients.id, knowledgeGaps.clientId))
+    .where(eq(knowledgeGaps.id, gapId));
+  const owner = (s.owners ?? []).find((x) => x.chatId === chatId && x.clientId === row?.gap.clientId);
+  if (!row || (!isStudio && !owner)) {
+    pendingAnswer.delete(chatId);
+    await send(s, chatId, "Вопрос не найден.");
+    return;
+  }
+  const r = await addAnswerToKb(gapId, text);
+  pendingAnswer.delete(chatId);
+  if (r.error) {
+    await send(s, chatId, r.error === "already" ? "На этот вопрос уже ответили." : r.error === "answer_short" ? "Слишком короткий ответ — напишите подробнее (нажмите «✍️ Ответить» ещё раз)." : `Не получилось: ${esc(r.error)}`);
+    return;
+  }
+  await send(s, chatId, "✅ Спасибо! Ответ добавлен в базу знаний — помощник теперь отвечает на этот вопрос сам.");
+  // Студия видит, что ответил владелец (может поправить в базе знаний)
+  if (owner && !isStudio) {
+    await broadcast(
+      `📚 <b>Владелец ответил на вопрос агента</b>\n<b>${esc(row.client.name)}</b> · ${esc(row.agent.name)} · ${esc(owner.name)}\n\n❓ ${esc(row.gap.question.slice(0, 400))}\n💬 ${esc(text.slice(0, 1500))}`,
+      s.adminUrl ? { inline_keyboard: [[{ text: "Открыть вопросы", url: `${s.adminUrl}/agents/${row.agent.id}/gaps` }]] } : undefined,
+    );
+  }
+}
+
+/** Ссылка подписки владельца клиента (код создаётся при первом запросе). null — бот уведомлений не настроен. */
+export async function ownerLink(clientId: string, renew = false): Promise<string | null> {
+  const s = await getNotifySettings();
+  if (!s?.token || !s.botUsername) return null;
+  let code = s.clientCodes?.[clientId];
+  if (!code || renew) {
+    code = newLinkCode();
+    await setSetting(KEY, { ...s, clientCodes: { ...s.clientCodes, [clientId]: code } });
+  }
+  return `https://t.me/${s.botUsername}?start=c_${code}`;
+}
+
+export async function clientOwners(clientId: string): Promise<NotifyOwner[]> {
+  return ((await getNotifySettings())?.owners ?? []).filter((x) => x.clientId === clientId);
+}
+
+export async function removeOwner(clientId: string, chatId: string) {
+  const s = await getNotifySettings();
+  if (!s) return;
+  await setSetting(KEY, { ...s, owners: (s.owners ?? []).filter((x) => !(x.clientId === clientId && x.chatId === chatId)) });
+}
+
+const OWNER_GAPS = 7;
+
+/** Вопросы без ответа — владельцам клиента (или одному владельцу): заголовок и по сообщению на вопрос с кнопками.
+ *  Возвращает число отправленных вопросов. */
+export async function sendGapsToOwners(clientId: string, opts: { chatId?: string } = {}): Promise<number> {
+  const s = await getNotifySettings();
+  if (!s?.token) return 0;
+  const owners = (s.owners ?? []).filter((x) => x.clientId === clientId && (!opts.chatId || x.chatId === opts.chatId));
+  if (!owners.length) return 0;
+  const gaps = await db
+    .select({ gap: knowledgeGaps, agent: agents.name })
+    .from(knowledgeGaps)
+    .innerJoin(agents, eq(agents.id, knowledgeGaps.agentId))
+    .where(and(eq(knowledgeGaps.clientId, clientId), eq(knowledgeGaps.status, "open")))
+    .orderBy(desc(knowledgeGaps.count), desc(knowledgeGaps.lastSeenAt))
+    .limit(OWNER_GAPS);
+  if (!gaps.length) return 0;
+  const [c] = await db.select({ name: clients.name }).from(clients).where(eq(clients.id, clientId));
+  for (const o of owners) {
+    try {
+      await send(
+        s,
+        o.chatId,
+        `📚 <b>Вопросы клиентов без ответа</b>\n${esc(c?.name ?? "")}\n\nНа эти вопросы ИИ-помощник не нашёл ответа в своих знаниях. Ответьте на важные (кнопка «✍️ Ответить» под вопросом) — и помощник начнёт отвечать на них сам. Неактуальные можно пропустить.`,
+      );
+      for (const { gap } of gaps) {
+        const draft = gap.suggestion ? `\n\n💡 <b>Ответ сотрудника, который можно сохранить:</b>\n<i>${esc(gap.suggestion.slice(0, 600))}</i>` : "";
+        await send(s, o.chatId, `❓ ${esc(gap.question.slice(0, 500))}\n<i>спрашивали: ${gap.count} раз</i>${draft}`, {
+          inline_keyboard: [
+            [
+              { text: "✍️ Ответить", callback_data: `ga:${gap.id}` },
+              ...(gap.suggestion ? [{ text: "✅ Сохранить этот ответ", callback_data: `kb:${gap.id}` }] : []),
+            ],
+            [{ text: "Не актуально", callback_data: `kx:${gap.id}` }],
+          ],
+        });
+      }
+    } catch (e) {
+      console.error("owner gaps send failed", o.chatId, e instanceof Error ? e.message : e);
+    }
+  }
+  return gaps.length;
+}
 const pendingReply = new Map<string, { conversationId: string; at: number }>();
 // Подсказка «Напишите ответ…» → разговор: ответ можно дать и через «Ответить» на эту подсказку в Telegram.
 const promptToConversation = new Map<string, string>();
@@ -421,24 +525,53 @@ async function handleUpdate(u: Update) {
   if (u.message?.text && u.message.chat.type === "private") {
     const chatId = String(u.message.chat.id);
     const [command, arg] = u.message.text.trim().split(/\s+/, 2);
+    const ownerClient = arg?.startsWith("c_") ? Object.entries(s.clientCodes ?? {}).find(([, c]) => c === arg.slice(2))?.[0] : undefined;
+    const isStudio = s.subscribers.some((x) => x.chatId === chatId);
+    const isOwner = (s.owners ?? []).some((x) => x.chatId === chatId);
+    if (command === "/start" && ownerClient) {
+      const name = [u.message.from?.first_name, u.message.from?.last_name].filter(Boolean).join(" ") || u.message.from?.username || chatId;
+      const owners = [...(s.owners ?? []).filter((x) => !(x.chatId === chatId && x.clientId === ownerClient)), { chatId, name, since: Date.now(), clientId: ownerClient }];
+      await setSetting(KEY, { ...s, owners });
+      const [c] = await db.select({ name: clients.name }).from(clients).where(eq(clients.id, ownerClient));
+      await send(
+        s,
+        chatId,
+        `✅ Готово! Раз в неделю сюда будут приходить вопросы клиентов «${esc(c?.name ?? "")}», на которые ИИ-помощник не знал ответа. Ответьте на важные — и помощник начнёт отвечать на них сам.\n\nОтписаться — /stop`,
+      );
+      await sendGapsToOwners(ownerClient, { chatId }).catch(() => 0);
+      return;
+    }
     if (command === "/start") {
       if (arg && arg === s.linkCode) {
         const name = [u.message.from?.first_name, u.message.from?.last_name].filter(Boolean).join(" ") || u.message.from?.username || chatId;
         const subscribers = [...s.subscribers.filter((x) => x.chatId !== chatId), { chatId, name, since: Date.now() }];
         await setSetting(KEY, { ...s, subscribers });
         await send(s, chatId, "✅ Подписка на уведомления GenAgent оформлена. Отписаться — /stop");
-      } else if (s.subscribers.some((x) => x.chatId === chatId)) {
+      } else if (isStudio || isOwner) {
         await send(s, chatId, "Вы уже подписаны. Отписаться — /stop");
       } else {
         await send(s, chatId, "Чтобы получать уведомления, откройте ссылку подписки из раздела «Интеграции» в GenAgent.");
       }
     } else if (command === "/stop") {
-      await setSetting(KEY, { ...s, subscribers: s.subscribers.filter((x) => x.chatId !== chatId) });
+      await setSetting(KEY, { ...s, subscribers: s.subscribers.filter((x) => x.chatId !== chatId), owners: (s.owners ?? []).filter((x) => x.chatId !== chatId) });
       await send(s, chatId, "Вы отписались от уведомлений.");
     } else if (command === "/cancel") {
       pendingReply.delete(chatId);
+      pendingAnswer.delete(chatId);
       await send(s, chatId, "Ответ отменён.");
-    } else if (s.subscribers.some((x) => x.chatId === chatId) && !command.startsWith("/")) {
+    } else if ((isStudio || isOwner) && !command.startsWith("/")) {
+      // Ответ на вопрос без ответа (кнопка «✍️ Ответить» под вопросом или «Ответить» на подсказку) — в базу знаний
+      const viaGap = u.message.reply_to_message && promptToGap.get(`${chatId}:${u.message.reply_to_message.message_id}`);
+      const pa = pendingAnswer.get(chatId);
+      const gapId = viaGap || (pa && Date.now() - pa.at < REPLY_TTL_MS ? pa.gapId : null);
+      if (gapId) {
+        await answerGap(s, chatId, gapId, u.message.text, isStudio);
+        return;
+      }
+      if (!isStudio) {
+        await send(s, chatId, "Чтобы ответить на вопрос, нажмите «✍️ Ответить» под ним.");
+        return;
+      }
       // Ответ клиенту: «Ответить» на подсказку или первое сообщение после кнопки «Ответить»
       const viaReply = u.message.reply_to_message && promptToConversation.get(`${chatId}:${u.message.reply_to_message.message_id}`);
       const pending = pendingReply.get(chatId);
@@ -464,10 +597,33 @@ async function handleUpdate(u: Update) {
   if (!q?.data || !q.message) return;
   const chatId = String(q.message.chat.id);
   const answer = (text: string) => callTelegram(s.token, "answerCallbackQuery", { callback_query_id: q.id, text }).catch(() => {});
-  // Нажимать кнопки могут только подписчики (ссылка подписки — секрет студии).
-  if (!s.subscribers.some((x) => x.chatId === chatId)) return answer("Нет доступа");
+  // Нажимать кнопки могут только подписчики (ссылка подписки — секрет студии) и владельцы — лишь у вопросов своего клиента.
+  const isStudio = s.subscribers.some((x) => x.chatId === chatId);
+  const ownClients = (s.owners ?? []).filter((x) => x.chatId === chatId).map((x) => x.clientId);
+  if (!isStudio && !ownClients.length) return answer("Нет доступа");
   const [action, messageId] = q.data.split(":");
   if (!/^[0-9a-f-]{36}$/.test(messageId ?? "")) return answer("Неизвестная кнопка");
+  if (!isStudio && !["ga", "kx", "kb"].includes(action)) return answer("Нет доступа");
+  if (action === "ga" || action === "kx" || action === "kb") {
+    const [gap] = await db.select().from(knowledgeGaps).where(eq(knowledgeGaps.id, messageId));
+    if (gap && !isStudio && !ownClients.includes(gap.clientId)) return answer("Нет доступа");
+  }
+  if (action === "ga") {
+    const [gap] = await db.select().from(knowledgeGaps).where(eq(knowledgeGaps.id, messageId));
+    if (!gap || gap.status !== "open") return answer("Уже обработано");
+    pendingAnswer.set(chatId, { gapId: messageId, at: Date.now() });
+    pendingReply.delete(chatId);
+    await answer("Напишите ответ");
+    const prompt = await send(
+      s,
+      chatId,
+      `✍️ Напишите ответ на вопрос «${esc(gap.question.slice(0, 300))}» одним сообщением — так, как ответили бы клиенту. Он попадёт в базу знаний помощника. Отмена — /cancel`,
+      { force_reply: true, input_field_placeholder: "Ответ на вопрос" },
+    );
+    promptToGap.set(`${chatId}:${prompt.message_id}`, messageId);
+    if (promptToGap.size > 500) promptToGap.delete(promptToGap.keys().next().value as string);
+    return;
+  }
   if (action === "rp") {
     const row = await conversationInfo(messageId);
     if (!row) return answer("Разговор не найден");

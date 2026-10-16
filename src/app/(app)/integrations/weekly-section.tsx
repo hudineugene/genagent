@@ -2,17 +2,18 @@
 
 import { useState, useTransition } from "react";
 import { Check, FlaskConical, Play } from "lucide-react";
-import { runWeeklyTestsNow, saveWeeklyTestsAction } from "@/app/actions/integrations";
+import { runWeeklyTestsNow, saveAutoTestsAction, saveWeeklyTestsAction } from "@/app/actions/integrations";
 import { useI18n } from "@/lib/i18n/client";
 import { Button, Field, Select, Spinner } from "@/components/ui";
 
-export type WeeklyView = { enabled: boolean; weekday: number; hour: number; lastRunAt: number | null; lastSummary: string | null; scenarios: number; agents: number };
+export type WeeklyView = { autoEnabled: boolean; enabled: boolean; weekday: number; hour: number; lastRunAt: number | null; lastSummary: string | null; scenarios: number; agents: number };
 
 /** Еженедельная проверка агентов автотестами с отчётом в Telegram. */
 export function WeeklyTestsSection({ weekly }: { weekly: WeeklyView }) {
   const { t, locale } = useI18n();
   const s = t.integrations;
   const [enabled, setEnabled] = useState(weekly.enabled);
+  const [auto, setAuto] = useState(weekly.autoEnabled);
   const [weekday, setWeekday] = useState(weekly.weekday);
   const [hour, setHour] = useState(weekly.hour);
   const [saved, setSaved] = useState(false);
@@ -109,6 +110,26 @@ export function WeeklyTestsSection({ weekly }: { weekly: WeeklyView }) {
           </Button>
         </span>
       </div>
+      <label className="flex cursor-pointer items-start gap-2.5 border-t border-border pt-3 text-sm">
+        <input
+          type="checkbox"
+          checked={auto}
+          disabled={pending}
+          onChange={(e) => {
+            const on = e.target.checked;
+            setAuto(on);
+            start(async () => {
+              await saveAutoTestsAction(on);
+              setSaved(true);
+            });
+          }}
+          className="mt-0.5 size-4 accent-[var(--accent)]"
+        />
+        <span>
+          {s.autoTestsEnabled}
+          <span className="block text-xs text-muted">{s.autoTestsHint}</span>
+        </span>
+      </label>
     </div>
   );
 }

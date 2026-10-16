@@ -16,6 +16,7 @@ import { getWaitingSettings } from "@/lib/agent/waiting";
 import { getNotifySettings } from "@/lib/notify/telegram";
 import { getOffsiteSettings } from "@/lib/offsite-backup";
 import { getWeeklyTests, weeklyCoverage } from "@/lib/tests/weekly";
+import { getAutoTests } from "@/lib/tests/auto";
 import { getDailyDigest } from "@/lib/agent/daily";
 import { getLeadsSettings } from "@/lib/agent/leads";
 
@@ -28,7 +29,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
   await requireAdmin();
   const tab: Tab = TABS.find((x) => x === sp.tab) ?? "notify";
   const s = t.integrations;
-  const [meta, google, notify, offsite, weekly, coverage, daily, waiting, leads] = await Promise.all([
+  const [meta, google, notify, offsite, weekly, coverage, daily, waiting, leads, autoTests] = await Promise.all([
     getMetaSettings(),
     getGoogleSettings(),
     getNotifySettings(),
@@ -38,6 +39,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
     getDailyDigest(),
     getWaitingSettings(),
     getLeadsSettings(),
+    getAutoTests(),
   ]);
   const base = publicUrl();
   const subscribers = notify?.token ? notify.subscribers : [];
@@ -117,6 +119,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
                 <Section>
                   <WeeklyTestsSection
                     weekly={{
+                      autoEnabled: autoTests.enabled,
                       enabled: weekly.enabled,
                       weekday: weekly.weekday,
                       hour: weekly.hour,

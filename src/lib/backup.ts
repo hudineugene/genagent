@@ -3,12 +3,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { db } from "@/db";
 
-const KEEP = 7;
+const KEEP = 14;
 const EVERY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Резервные копии базы раз в сутки в BACKUP_DIR (на сервере): согласованный снимок через VACUUM INTO,
- * хранятся последние 7. YABOT Панель видит эту папку как «копии данных» бота.
+ * хранятся последние 14. YABOT Панель видит эту папку как «копии данных» бота.
  * Свежая копия дополнительно уходит в Telegram зашифрованной (offsite-backup.ts), если это включено.
  */
 /** Последняя копия на сервере — для кнопки «Отправить сейчас». */
@@ -36,7 +36,8 @@ export function startBackups(dir: string) {
     }
   };
   run();
-  setInterval(run, 60 * 60 * 1000).unref();
+  // Проверяем каждые 10 минут: копия появляется не позже чем через сутки и 10 минут после предыдущей
+  setInterval(run, 10 * 60 * 1000).unref();
 }
 
 function list(dir: string) {

@@ -209,6 +209,14 @@ export async function saveWeeklyTestsAction(patch: { enabled: boolean; weekday: 
   return { ok: true };
 }
 
+/** Проверка агентов после изменений (инструкции, общие правила, сценарии). */
+export async function saveAutoTestsAction(enabled: boolean): Promise<IntegrationsResult> {
+  await requireAdmin();
+  const { saveAutoTests } = await import("@/lib/tests/auto");
+  await saveAutoTests({ enabled: z.boolean().parse(enabled) });
+  return { ok: true };
+}
+
 // ---------- ежедневная сводка ----------
 
 export async function saveDailyDigestAction(patch: { enabled: boolean; hour: number }): Promise<IntegrationsResult> {

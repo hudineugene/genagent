@@ -1,15 +1,17 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { count, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq } from "drizzle-orm";
 import { BarChart3, BookOpen, Bot, Plus, Settings } from "lucide-react";
 import { db } from "@/db";
-import { agents, clients, kbSources } from "@/db/schema";
+import { agents, clients, kbSources, knowledgeGaps } from "@/db/schema";
 import { getT } from "@/lib/i18n/server";
 import { findModel } from "@/lib/models";
 import type { Dict, Locale } from "@/lib/i18n";
 import { BackLink } from "@/components/back-link";
 import { Badge, Card, ClientAvatar, EmptyState, PageHeader, buttonClass, cx } from "@/components/ui";
 import { KnowledgeBase } from "./knowledge-base";
+import { OwnersCard } from "./owners";
+import { clientOwners, getNotifySettings } from "@/lib/notify/telegram";
 import { embeddingProgress, embeddingStatus } from "@/lib/kb/embeddings";
 import { previousMonth } from "@/lib/agent/report";
 
@@ -114,7 +116,12 @@ async function KnowledgeTab({ clientId }: { clientId: string }) {
 }
 
 async function AgentsTab({ clientId, t, locale }: { clientId: string; t: Dict; locale: Locale }) {
-  const list = await db.select().from(agents).where(eq(agents.clientId, clientId)).orderBy(desc(agents.updatedAt));
+  const [list, notify, owners, [{ openGaps }]] = await Promise.all([
+    db.select().from(agents).where(eq(agents.clientId, clientId)).orderBy(desc(agents.updatedAt)),
+    getNotifySettings(),
+    clientOwners(clientId),
+    db.select({ openGaps: count() }).from(knowledgeGaps).where(and(eq(knowledgeGaps.clientId, clientId), eq(knowledgeGaps.status, "open"))),
+  ]);
   const fmt = new Intl.DateTimeFormat(locale === "uk" ? "uk-UA" : "ru-RU", { dateStyle: "medium" });
 
   if (list.length === 0) {
@@ -133,6 +140,7 @@ async function AgentsTab({ clientId, t, locale }: { clientId: string; t: Dict; l
   }
 
   return (
+    <>
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {list.map((a) => (
         <Link key={a.id} href={`/agents/${a.id}`} className="group">
@@ -160,6 +168,13 @@ async function AgentsTab({ clientId, t, locale }: { clientId: string; t: Dict; l
         </Link>
       ))}
     </div>
+    <OwnersCard
+      clientId={clientId}
+      botReady={Boolean(notify?.token && notify.botUsername)}
+      owners={owners.map((o) => ({ chatId: o.chatId, name: o.name, since: o.since }))}
+      openGaps={openGaps}
+    />
+    </>
   );
 }
 
