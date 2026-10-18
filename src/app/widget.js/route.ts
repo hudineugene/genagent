@@ -7,6 +7,8 @@
  *   GenAgent.open() / GenAgent.close()
  *   GenAgent.setContext("Объект: Villa Sol (V-012), 550 000 €, Финестрат")  — или объект { "Объект": "…", "Цена": "…" }
  *   GenAgent.ask("Есть ли скидка на эту виллу?")  — открыть окно и задать вопрос от имени посетителя
+ * Для стилей сайта: кнопка #genagent-launcher (aria-expanded="true", когда окно открыто), окно #genagent-frame,
+ * облачко-приглашение #genagent-teaser.
  */
 const SCRIPT = `(function () {
   var s = document.currentScript;
@@ -43,7 +45,10 @@ const SCRIPT = `(function () {
     var side = cfg.position === "left" ? "left" : "right";
 
     var btn = document.createElement("button");
+    // Постоянные метки для стилей сайта: #genagent-launcher, [aria-expanded="true"] — окно открыто
+    btn.id = "genagent-launcher";
     btn.setAttribute("aria-label", cfg.title || "Chat");
+    btn.setAttribute("aria-expanded", "false");
     btn.style.cssText = "position:fixed;bottom:20px;" + side + ":20px;width:60px;height:60px;border-radius:50%;border:0;cursor:pointer;z-index:2147483646;box-shadow:0 8px 24px rgba(0,0,0,.2);display:flex;align-items:center;justify-content:center;transition:transform .2s;background:" + cfg.color;
     var chatIcon = '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
     var closeIcon = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
@@ -64,12 +69,14 @@ const SCRIPT = `(function () {
       open = v === undefined ? !open : v;
       if (open && !frame) {
         frame = document.createElement("iframe");
+        frame.id = "genagent-frame";
         frame.src = base + "/w/" + channel + (lang ? "?lang=" + encodeURIComponent(lang) : "");
         frame.title = cfg.title || "Chat";
         frame.allow = "clipboard-write";
         document.body.appendChild(frame);
       }
       btn.innerHTML = open ? closeIcon : chatIcon;
+      btn.setAttribute("aria-expanded", open ? "true" : "false");
       layout();
     }
     btn.onclick = function () { hideTeaser(); toggle(); };
@@ -82,6 +89,7 @@ const SCRIPT = `(function () {
       setTimeout(function () {
         if (open || seen()) return;
         teaser = document.createElement("div");
+        teaser.id = "genagent-teaser";
         teaser.setAttribute("role", "button");
         teaser.style.cssText = "position:fixed;bottom:92px;" + side + ":20px;max-width:min(280px,calc(100vw - 40px));padding:12px 34px 12px 14px;background:#fff;color:#111;border-radius:14px;box-shadow:0 8px 28px rgba(0,0,0,.18);font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;cursor:pointer;z-index:2147483646;";
         teaser.textContent = cfg.teaser;
