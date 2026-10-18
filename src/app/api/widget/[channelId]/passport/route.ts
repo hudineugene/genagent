@@ -48,9 +48,11 @@ const bodySchema = z.object({
   about: text(500).default(""),
   traits: z.array(text(40).min(1)).max(4).default([]),
   traitOwn: text(100).default(""),
-  audience: z.array(text(40).min(1)).max(4).default([]),
+  audience: z.array(text(40).min(1)).max(8).default([]),
   audienceOwn: text(200).default(""),
-  places: z.array(text(40).min(1)).max(6).default([]),
+  places: z.array(text(40).min(1)).max(8).default([]),
+  /** Остальные вопросы анкеты сайта — «вопрос: ответ»; анкету можно менять на сайте, не трогая этот код */
+  answers: z.array(z.object({ q: text(200).min(1), a: text(700).min(1) })).max(20).default([]),
 });
 
 type Passport = {
@@ -122,7 +124,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ channel
     (b.traits.length || b.traitOwn) && `${uk ? "Характер" : "Personality"}: ${[...b.traits, b.traitOwn].filter(Boolean).join(", ")}`,
     (b.audience.length || b.audienceOwn) && `${uk ? "Аудиторія" : "Audience"}: ${[...b.audience, b.audienceOwn].filter(Boolean).join(", ")}`,
     b.places.length && `${uk ? "Де житиме персонаж" : "Where the character will live"}: ${b.places.join(", ")}`,
-  ].filter(Boolean).join("\n");
+    ...b.answers.map((x) => `${x.q}: ${x.a}`),
+  ].filter(Boolean).join("\n").slice(0, 8000);
 
   const started = Date.now();
   let passport: Passport;
@@ -133,6 +136,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ channel
         "По брифу посетителя сайта составь «паспорт персонажа» — маскота его бренда. Это вдохновляющий черновик, а не финальный дизайн.",
         "Пиши живо, конкретно и с юмором, под этот бренд и аудиторию — без общих слов вроде «уникальный» и «инновационный».",
         "Не обещай сроков и цен, не упоминай конкурентов и чужие торговые марки, ничего не говори о самой студии.",
+        "Опирайся на ВСЕ ответы брифа: миссию, ценности, эмоции, тип и стиль героя, тон, примеры. Связывай их в цельный образ, а не перечисляй.",
+        "Если указано, каким герой НЕ должен быть, — строго соблюдай. Если указан тип или стиль героя — следуй ему; «не знаю» — предложи сам.",
         "Если в брифе есть что-то оскорбительное или неуместное — сделай доброго нейтрального героя для бренда.",
         "Цвета — гармоничная палитра для героя (HEX и короткое поэтичное название).",
         uk ? "Все тексты — на украинском языке." : "All texts in English.",
