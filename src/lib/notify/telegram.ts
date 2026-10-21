@@ -380,6 +380,25 @@ export async function notifyTestsReport(html: string, url?: string) {
   }
 }
 
+/** Заявка из формы на сайте студии (api/widget/[channelId]/lead): кто, как связаться, что нужно, с какой страницы. */
+export async function notifySiteLead(lead: { name: string; contact: string; need: string; page: string }, conversationId?: string) {
+  try {
+    const s = await getNotifySettings();
+    await broadcast(
+      [
+        "📝 <b>Заявка с сайта</b>",
+        `Имя: <b>${esc(lead.name)}</b>`,
+        `Связь: <b>${esc(lead.contact)}</b>`,
+        lead.need && `\n${esc(lead.need)}`,
+        lead.page && `\n<i>Страница: ${esc(lead.page)}</i>`,
+      ].filter(Boolean).join("\n"),
+      conversationId ? openLink(s, conversationId) : undefined,
+    );
+  } catch (e) {
+    console.error("notify site lead failed", e);
+  }
+}
+
 /** Проверочное сообщение из «Интеграций». */
 export async function notifyTest() {
   await broadcast("✅ Уведомления GenAgent работают. Сюда будут приходить передачи клиентов менеджеру, черновики на одобрение и сбои.");
