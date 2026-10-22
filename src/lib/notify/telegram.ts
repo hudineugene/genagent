@@ -354,6 +354,28 @@ export async function notifyGaps(agentId: string, count: number) {
   }
 }
 
+/** Сверка нашла, что один и тот же факт в данных агента записан по-разному (например, две цены объекта). */
+export async function notifyConflicts(agentId: string, conflicts: { item: string; values: string[]; where: string }[]) {
+  try {
+    const [row] = await db
+      .select({ agent: agents, client: clients })
+      .from(agents)
+      .innerJoin(clients, eq(clients.id, agents.clientId))
+      .where(eq(agents.id, agentId));
+    if (!row) return;
+    const s = await getNotifySettings();
+    const list = conflicts
+      .map((c) => `• <b>${esc(c.item)}</b>: ${c.values.map((v) => esc(v)).join(" ↔ ")}${c.where ? `\n  <i>${esc(c.where)}</i>` : ""}`)
+      .join("\n");
+    await broadcast(
+      `🔀 <b>Расхождение в данных агента</b>\n<b>${esc(row.client.name)}</b> · ${esc(row.agent.name)}\n\nОдно и то же записано по-разному — агент может назвать клиенту любое из значений. Исправьте устаревшее:\n${list}`,
+      s?.adminUrl ? { inline_keyboard: [[{ text: "Открыть агента", url: `${s.adminUrl}/agents/${agentId}` }]] } : undefined,
+    );
+  } catch (e) {
+    console.error("notify conflicts failed", e);
+  }
+}
+
 /** Менеджер ответил клиенту так, что ответ пригодится и другим: предложить добавить его в базу знаний. */
 export async function notifyLearned(gapId: string) {
   try {

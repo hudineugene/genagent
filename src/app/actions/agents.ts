@@ -77,6 +77,8 @@ export async function saveAgent(id: string, input: z.input<typeof saveSchema>) {
   await db
     .insert(agentVersions)
     .values({ agentId: id, version: a.version, name: data.name, config: data.config, createdBy: user.id });
+  // Ключевые факты или правила могли разойтись с базой знаний — сверить (с паузой)
+  void import("@/lib/agent/consistency").then((m) => m.scheduleConsistency(id));
   return { version: a.version };
 }
 

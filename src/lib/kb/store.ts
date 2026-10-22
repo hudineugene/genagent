@@ -40,6 +40,8 @@ export function indexSource(sourceId: string, clientId: string, title: string, t
     throw e;
   }
   kickEmbeddingWorker(); // «отпечатки» для смыслового поиска считаются в фоне
+  // База изменилась — сверить данные агентов клиента (с паузой; одинаковое содержимое повторно не проверяется)
+  void import("@/lib/agent/consistency").then((m) => m.scheduleConsistencyForClient(clientId, sourceId)).catch(() => {});
   return { chunks: chunks.length, chars: content.length };
 }
 
