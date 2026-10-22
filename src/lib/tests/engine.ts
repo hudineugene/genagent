@@ -67,7 +67,9 @@ function anthropicKey() {
   return key;
 }
 
-type Transcript = { role: "user" | "assistant"; content: string }[];
+/** timing у ответа агента: сколько клиент ждал (черновик, проверка, переписывание), мс */
+type Timing = { replyMs: number; checkMs?: number; rewriteMs?: number; rewritten?: boolean; skipped?: boolean; problems?: string[] };
+type Transcript = { role: "user" | "assistant"; content: string; timing?: Timing }[];
 
 /**
  * Справка для генератора и судьи — всё, что агент знает: описание компании (из карточки клиента),
@@ -247,17 +249,20 @@ async function agentReply(config: AgentConfig, client: ClientContext & { id: str
         }).catch(() => null)) ?? 0;
     }
   }
+  let timing: Timing = { replyMs: Date.now() - started };
   if (config.answerCheck && text.trim()) {
     const { checkAndFix } = await import("@/lib/agent/answer-check");
     const r = await checkAndFix({ config, system, messages, draft: text, ctx: { source: "test", agentId, clientId: client.id } });
     text = r.text;
     cost += r.cost;
+    // Замечания проверки — чтобы видеть, что она исправляет: настоящие ошибки или мелочи
+    if (r.check) timing = { ...timing, checkMs: r.check.ms, rewriteMs: r.check.rewriteMs, rewritten: r.check.rewritten, skipped: r.check.skipped, ...(r.check.problems.length ? { problems: r.check.problems } : {}) };
   }
   const { text: clean, handoff, actions } = extractHandoff(text);
   if (handoff) notes.push("[передал диалог менеджеру]");
   // Действия для своего бота (например, кнопка «проверить препарат в аптеке») — судье видны как пометка.
   for (const a of actions) notes.push(`[действие для бота: ${a.type} — ${a.value}]`);
-  return { text: [clean, ...notes].filter(Boolean).join("\n\n"), cost, seen };
+  return { text: [clean, ...notes].filter(Boolean).join("\n\n"), cost, seen, timing };
 }
 
 /** Следующая реплика клиента в режиме симуляции (или null — клиент закончил). */
@@ -373,7 +378,7 @@ async function execute(runId: string, agentId: string, scenarios: TestScenario[]
               const r = await agentReply(config, client, agentId, t);
               cost += r.cost;
               seen.add(r.seen);
-              t.push({ role: "assistant", content: r.text });
+              t.push({ role: "assistant", content: r.text, timing: r.timing });
             }
           } else {
             for (let i = 0; i < Math.min(s.maxTurns, 6); i++) {
@@ -384,7 +389,7 @@ async function execute(runId: string, agentId: string, scenarios: TestScenario[]
               const r = await agentReply(config, client, agentId, t);
               cost += r.cost;
               seen.add(r.seen);
-              t.push({ role: "assistant", content: r.text });
+              t.push({ role: "assistant", content: r.text, timing: r.timing });
             }
           }
           const j = await judge(config, [brief, ...seen].join("\n\n"), s, t, agentId, client.id);

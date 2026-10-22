@@ -94,8 +94,17 @@ import { agents, channels, conversations, messages } from "@/db/schema";
   // 4) Сбой проверки — уходит исходный ответ
   await setCheck(true);
   verdict = "fail";
-  agentReplies.push("Исходный ответ при сбое проверки.");
+  agentReplies.push("Исходный ответ при сбое проверки: 5 вилл.");
+  const before4 = checks;
   const r4 = await ask("check-4", "Вопрос");
+  const after4 = checks;
+
+  // 5) Простой ответ (коротко, без цифр и названий) — без проверки
+  verdict = { ok: false, problems: ["не должно вызываться"] };
+  agentReplies.push("Здравствуйте! Чем могу помочь?");
+  const before5 = checks;
+  const r5 = await ask("check-5", "Привет");
+  const after5 = checks;
 
   for (const c of await db.select().from(conversations).where(eq(conversations.channelId, ch.id))) {
     await db.delete(messages).where(eq(messages.conversationId, c.id));
@@ -111,7 +120,8 @@ import { agents, channels, conversations, messages } from "@/db/schema";
     "в сообщении — отметка «исправлен проверкой»": Boolean(saved1?.meta?.check?.rewritten) && saved1!.text.includes("Вторичного жилья"),
     "хороший ответ — без изменений, одна проверка": r2.reply === "Виллы Sierra Verde: в продаже №1, №3 и №5." && after2 === before2 + 1,
     "выключено — проверки нет": r3.reply === "Ответ без проверки." && after3 === before3,
-    "сбой проверки — уходит исходный ответ": r4.reply === "Исходный ответ при сбое проверки.",
+    "сбой проверки — уходит исходный ответ": r4.reply === "Исходный ответ при сбое проверки: 5 вилл." && after4 > before4,
+    "простой ответ — без проверки": r5.reply === "Здравствуйте! Чем могу помочь?" && after5 === before5,
   };
   console.log(result);
   process.exit(Object.values(result).every(Boolean) ? 0 : 1);

@@ -424,7 +424,7 @@ export type MessageMeta = {
   /** Проверяемые факты ответа (цены, телефоны, ссылки), которых нет в базе знаний и переписке */
   unverified?: string[];
   /** Проверка ответа перед отправкой: что нашла и переписан ли ответ */
-  check?: { ok: boolean; problems: string[]; rewritten?: boolean };
+  check?: { ok: boolean; problems: string[]; rewritten?: boolean; ms?: number; rewriteMs?: number; skipped?: boolean };
   /** Сообщение перенесено из разговора на сайте (виджет), когда клиент перешёл в бота */
   fromSite?: boolean;
   /** Оценка ответа клиентом в боте (👍/👎) */
