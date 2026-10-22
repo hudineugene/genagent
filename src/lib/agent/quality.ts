@@ -19,7 +19,7 @@ const TZ = "Europe/Kyiv";
 const RUN_HOUR = 8;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PER_AGENT = 15;
-const KB_CHARS = 20000;
+const KB_CHARS = 40000;
 
 export type QaIssue = { severity: "low" | "high"; kind: string; note: string; better: string };
 export type QaAgentResult = { agentId: string; title: string; checked: number; issues: { conversationId: string; issue: QaIssue }[] };
@@ -81,13 +81,27 @@ export async function checkAgent(agentId: string, from: Date, to: Date): Promise
   const title = `${row.client} · ${row.agent.name}`;
   if (!list.length) return { agentId, title, checked: 0, issues: [] };
   const cfg = row.agent.config as { kbSourceIds?: string[] | null; rules?: string; handoff?: string; replyLanguage?: string };
-  const kb = await loadKnowledge(row.agent.clientId, cfg.kbSourceIds, list.map((e) => e.question)).catch(() => ({ mode: "none" as const }));
-  const kbText =
-    kb.mode === "full"
-      ? kb.docs.map((d) => `## ${d.title}\n${d.content}`).join("\n\n")
-      : kb.mode === "search"
-        ? [...(kb.pinned ?? []).map((d) => `## ${d.title}\n${d.content}`), kb.context ?? ""].filter(Boolean).join("\n\n")
-        : "";
+  // База знаний для проверки: поиск по каждой паре «вопрос + ответ» — так находятся фрагменты, на которые опирался
+  // консультант (поиск по одному списку вопросов видел только последний, и проверка считала выдумкой то, что в базе есть)
+  const blocks: string[] = [];
+  const seenText = new Set<string>();
+  for (const e of list) {
+    const kb = await loadKnowledge(row.agent.clientId, cfg.kbSourceIds, [`${e.question}\n${e.answer}`]).catch(() => ({ mode: "none" as const }));
+    const parts =
+      kb.mode === "full"
+        ? kb.docs.map((d) => `## ${d.title}\n${d.content}`)
+        : kb.mode === "search"
+          ? [...(kb.pinned ?? []).map((d) => `## ${d.title}\n${d.content}`), kb.context ?? ""]
+          : [];
+    for (const p of parts) {
+      if (p && !seenText.has(p)) {
+        seenText.add(p);
+        blocks.push(p);
+      }
+    }
+    if (kb.mode === "full") break; // вся база уже целиком
+  }
+  const kbText = blocks.join("\n\n");
   const started = Date.now();
   const { data, usage, model } = await generateJson<{ issues: (QaIssue & { index: number })[] }>(key, MODEL, {
     system: [

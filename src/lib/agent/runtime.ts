@@ -18,7 +18,7 @@ export type KbInfo = { mode: "full" | "search"; sources: { title: string; url: s
  */
 /** Версия того, как ответ собирается вне инструкции (пометки к сообщению клиента и т.п.). Меняется — автотесты
  *  агентов прогоняются заново (lib/tests/auto.ts). Повышайте при правках логики подготовки запроса к модели. */
-export const RUNTIME_REV = "2026-10-16.1";
+export const RUNTIME_REV = "2026-10-22.1";
 
 const REPEAT_NOTE =
   "[Клиент повторил своё прошлое сообщение слово в слово (или нажал ту же кнопку). Не повторяй и не пересказывай прежний ответ. Одной-двумя фразами спроси, что осталось непонятным, и предложи конкретный следующий шаг.]";
@@ -40,6 +40,8 @@ export async function prepareChat(
   tools: Omit<ToolContext, "clientId"> = { mode: "dry" },
   /** Особенности канала (например, формат письма) — в конец системного промпта. */
   channelNote?: string,
+  /** recentRepeat: false — одинаковые сообщения клиента разделены долгим перерывом (это новый запрос, а не повтор) */
+  opts: { recentRepeat?: boolean } = {},
 ): Promise<{ system: string; messages: ChatMessage[]; kb: KbInfo; tools?: AgentTool[] }> {
   // Модель требует, чтобы диалог начинался с клиента: приветствие агента отбрасываем.
   const start = history.findIndex((m) => m.role === "user");
@@ -63,7 +65,7 @@ export async function prepareChat(
 
   const last = messages[messages.length - 1];
   // Клиент прислал то же, что и прошлым сообщением (часто — та же кнопка): прямая пометка, иначе модель повторяет ответ
-  const repeated = last?.role === "user" && isRepeat(messages);
+  const repeated = last?.role === "user" && opts.recentRepeat !== false && isRepeat(messages);
   if (repeated) last.content = `${REPEAT_NOTE}\n\n${last.content}`;
   if (kb.mode === "search" && kb.context && last?.role === "user") {
     last.content = `<knowledge>\n${kb.context}\n</knowledge>\n\n${last.content}`;

@@ -14,6 +14,8 @@ import { isRepeat, prepareChat } from "@/lib/agent/runtime";
   const config = agentConfigSchema.parse(row.agent.config);
   const same = await prepareChat(config, row.client, [u("🇪🇸 Как купить"), a("Этапы: NIE, счёт, юрист…"), u("🇪🇸 Как купить")]);
   const other = await prepareChat(config, row.client, [u("Как купить?"), a("Этапы…"), u("А налоги?")]);
+  // Та же кнопка через несколько дней — новый запрос, не повтор
+  const later = await prepareChat(config, row.client, [u("🏘 Объекты"), a("Вот объекты…"), u("🏘 Объекты")], { mode: "dry" }, undefined, { recentRepeat: false });
   const checks: Record<string, boolean> = {
     "та же кнопка — повтор": isRepeat([u("🇪🇸 Как купить"), a("…"), u("🇪🇸 Как купить")]),
     "тот же текст другим регистром и знаками — повтор": isRepeat([u("Як замовити стікерпак?"), a("…"), u("як замовити стікерпак")]),
@@ -21,6 +23,7 @@ import { isRepeat, prepareChat } from "@/lib/agent/runtime";
     "первое сообщение — не повтор": !isRepeat([u("Привет")]),
     "агент получает пометку о повторе": String(same.messages.at(-1)?.content).includes("Клиент повторил своё прошлое сообщение"),
     "без повтора пометки нет": !String(other.messages.at(-1)?.content).includes("Клиент повторил"),
+    "та же кнопка через долгий перерыв — новый запрос": !String(later.messages.at(-1)?.content).includes("Клиент повторил"),
   };
   console.log(checks);
   process.exit(Object.values(checks).every(Boolean) ? 0 : 1);

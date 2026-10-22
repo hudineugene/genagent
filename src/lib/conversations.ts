@@ -237,6 +237,7 @@ export async function respond(conversationId: string): Promise<void> {
         channel.type === "api" && (channel.config as ApiConfig).ratingInvite && !conversation.context?.ratingAskedAt ? RATING_NOTE : undefined,
         ].filter(Boolean).join("\n\n") || undefined,
       ),
+      { recentRepeat: recentRepeat(history) },
     );
 
     if (channel.type === "telegram" && conversation.kind !== "comment") {
@@ -464,6 +465,15 @@ function openHandoff(history: HistoryRow[]): (HistoryRow & { id: string }) | nul
 function managerJustReplied(history: HistoryRow[]) {
   const op = history.findLast((m) => m.role === "operator");
   return Boolean(op && Date.now() - op.createdAt.getTime() < MANAGER_QUIET_MS);
+}
+
+/** Повтор — только если клиент прислал то же самое вскоре после прошлого раза: через полчаса и позже (например,
+ *  снова нажал кнопку меню на другой день) это новый запрос, на него отвечаем заново. */
+const REPEAT_WINDOW_MS = 30 * 60 * 1000;
+function recentRepeat(history: HistoryRow[]) {
+  const users = history.filter((m) => m.role === "user");
+  const [prev, last] = users.slice(-2);
+  return Boolean(prev && last && last.createdAt.getTime() - prev.createdAt.getTime() <= REPEAT_WINDOW_MS);
 }
 
 function recheckLater(conversationId: string, history: HistoryRow[]) {
