@@ -78,6 +78,8 @@ export const agentConfigSchema = z.object({
   voice: z.string().max(20).default("marin"),
   /** Утренняя проверка качества ответов (более сильная модель, раз в сутки) */
   qualityCheck: z.boolean().default(true),
+  /** Проверка ответа перед отправкой (вторая модель; при проблеме — один раз переписать) */
+  answerCheck: z.boolean().optional(),
   calendar: calendarConfigSchema.prefault({}),
 });
 

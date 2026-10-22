@@ -423,6 +423,8 @@ export type MessageMeta = {
   qa?: { ok?: boolean; severity?: "low" | "high"; kind?: string; note?: string; better?: string; at: number };
   /** Проверяемые факты ответа (цены, телефоны, ссылки), которых нет в базе знаний и переписке */
   unverified?: string[];
+  /** Проверка ответа перед отправкой: что нашла и переписан ли ответ */
+  check?: { ok: boolean; problems: string[]; rewritten?: boolean };
   /** Сообщение перенесено из разговора на сайте (виджет), когда клиент перешёл в бота */
   fromSite?: boolean;
   /** Оценка ответа клиентом в боте (👍/👎) */

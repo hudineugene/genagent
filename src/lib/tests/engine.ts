@@ -233,6 +233,12 @@ async function agentReply(config: AgentConfig, client: ClientContext & { id: str
         }).catch(() => null)) ?? 0;
     }
   }
+  if (config.answerCheck && text.trim()) {
+    const { checkAndFix } = await import("@/lib/agent/answer-check");
+    const r = await checkAndFix({ config, system, messages, draft: text, ctx: { source: "test", agentId, clientId: client.id } });
+    text = r.text;
+    cost += r.cost;
+  }
   const { text: clean, handoff, actions } = extractHandoff(text);
   if (handoff) notes.push("[передал диалог менеджеру]");
   // Действия для своего бота (например, кнопка «проверить препарат в аптеке») — судье видны как пометка.

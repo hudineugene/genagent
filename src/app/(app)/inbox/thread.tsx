@@ -337,6 +337,11 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
                 {m.role === "operator" && <Hand className="size-3" />}
                 {m.role === "bot" && <MessageSquare className="size-3" />}
                 {m.status === "rejected" && `${t.inbox.rejected} · `}
+                {m.meta?.check?.rewritten && (
+                  <span className="text-success" title={`${t.inbox.checkFixedHint}\n${m.meta.check.problems.map((p) => `• ${p}`).join("\n")}`}>
+                    ✓ {t.inbox.checkFixed} ·{" "}
+                  </span>
+                )}
                 {m.role === "assistant" ? t.inbox.agent : m.role === "operator" ? (m.author ?? t.inbox.you) : m.role === "bot" ? t.inbox.bot : ""}
                 {ours && " · "}
                 {time.format(new Date(m.createdAt))}

@@ -221,6 +221,13 @@ export function Builder({
             onChange={(v) => set("factGuard", v)}
           />
         </Field>
+        <Field label={t.builder.answerCheck} hint={t.builder.answerCheckHint}>
+          <Segmented
+            value={config.answerCheck ? "on" : "off"}
+            options={(["off", "on"] as const).map((v) => ({ value: v, label: t.builder.answerCheckModes[v] }))}
+            onChange={(v) => set("answerCheck", v === "on")}
+          />
+        </Field>
       </Section>
 
       <Section icon={<Sparkles />} id="skills" title={t.builder.sections.skills} badge={config.skills.length || undefined}>

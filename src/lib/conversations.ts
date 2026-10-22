@@ -280,6 +280,15 @@ export async function respond(conversationId: string): Promise<void> {
       }
     }
 
+    // Проверка ответа перед отправкой (если включена у агента): не на тот вопрос, факты не из базы, переспросил —
+    // агент один раз переписывает ответ. Ответы с вызовом инструментов (запись в календарь) не трогаем.
+    if (config.answerCheck && text.trim() && !used.length && conversation.kind === "dm") {
+      const { checkAndFix } = await import("@/lib/agent/answer-check");
+      const r = await checkAndFix({ config, system, messages: prepared, draft: text, ctx: { source: "channel", agentId: agent.id, clientId: client.id, conversationId } });
+      text = r.text;
+      if (r.check) meta = { ...meta, check: r.check, cost: (meta.cost ?? 0) + r.cost };
+    }
+
     // Запись уже создана в календаре — отмечаем это в переписке, что бы ни было дальше с ответом.
     if (booked) await addMessage(conversationId, "system", "booking_created");
 

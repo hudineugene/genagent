@@ -98,6 +98,7 @@ export function VersionsPanel({
       voice: b.voice,
       qualityCheck: b.qualityCheck,
       factGuard: b.factGuard,
+      answerCheck: b.answerCheck,
       calendar: b.sections.calendar,
     };
     return map[f];
