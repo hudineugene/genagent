@@ -14,6 +14,8 @@ import { smtpTransport } from "./email-send";
 const POLL_EVERY_MS = 60_000;
 const MAX_PER_TICK = 20;
 const MAX_BODY_CHARS = 8000;
+/** Нет связи с сервером почты: тревога — только если опрос не проходит ~5 минут подряд; разовые таймауты — в журнал. */
+const UNREACHABLE_ALERT_AFTER = 5;
 
 export const GMAIL = { imapHost: "imap.gmail.com", imapPort: 993, smtpHost: "smtp.gmail.com", smtpPort: 465 };
 
@@ -57,8 +59,13 @@ export async function verifyEmail(cfg: EmailConfig) {
 
 // ---------- входящие ----------
 
-const g = globalThis as unknown as { __emailPoller?: ReturnType<typeof setInterval>; __emailLast?: Map<string, number> };
+const g = globalThis as unknown as {
+  __emailPoller?: ReturnType<typeof setInterval>;
+  __emailLast?: Map<string, number>;
+  __emailFails?: Map<string, number>;
+};
 const last = (g.__emailLast ??= new Map());
+const fails = (g.__emailFails ??= new Map()); // неудачных опросов подряд по каналу
 let running = false;
 
 export function startEmailPolling() {
@@ -78,12 +85,22 @@ async function tick() {
       last.set(ch.id, Date.now());
       try {
         await pollMailbox(ch);
-        if (ch.error) await db.update(channels).set({ error: null }).where(eq(channels.id, ch.id));
+        fails.delete(ch.id);
+        if (ch.error) {
+          await db.update(channels).set({ error: null }).where(eq(channels.id, ch.id));
+          // О сбое сообщали — сообщаем и о восстановлении
+          if (ch.error.startsWith("email_"))
+            void import("@/lib/notify/telegram").then((n) => n.notifyRecovered(`channel:${ch.id}:${ch.error}`, ch.id, "почта снова работает"));
+        }
       } catch (e) {
         console.error("email poll failed", ch.id, e);
         const code = isAuthError(e) ? "email_auth_failed" : "email_unreachable";
+        const n = (fails.get(ch.id) ?? 0) + 1;
+        fails.set(ch.id, n);
+        // Пароль не приняли — само не пройдёт, сообщаем сразу; обрыв сети — только если затянулся
+        if (code === "email_unreachable" && n < UNREACHABLE_ALERT_AFTER) continue;
         await db.update(channels).set({ error: code }).where(eq(channels.id, ch.id));
-        if (ch.error !== code) void import("@/lib/notify/telegram").then((n) => n.notifyProblem(`channel:${ch.id}:${code}`, code, { channelId: ch.id }));
+        if (ch.error !== code) void import("@/lib/notify/telegram").then((t) => t.notifyProblem(`channel:${ch.id}:${code}`, code, { channelId: ch.id }));
       }
     }
   } finally {

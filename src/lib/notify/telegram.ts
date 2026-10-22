@@ -302,18 +302,33 @@ export async function notifyProblem(key: string, code: string, context: { conver
     if (context.conversationId) {
       const row = await conversationInfo(context.conversationId);
       if (row) where = `${header(row)} · ${esc(row.agent.name)}`;
-    } else if (context.channelId) {
-      const [row] = await db
-        .select({ channel: channels, client: clients })
-        .from(channels)
-        .innerJoin(clients, eq(clients.id, channels.clientId))
-        .where(eq(channels.id, context.channelId));
-      if (row) where = `<b>${esc(row.client.name)}</b> · ${esc(CHANNEL_LABEL[row.channel.type] ?? row.channel.type)} ${esc(row.channel.name)}`;
-    }
+    } else if (context.channelId) where = await channelWhere(context.channelId);
     const text = PROBLEM_TEXT[code.split(":")[0]] ?? `ошибка: ${code.slice(0, 200)}`;
     await broadcast(`⚠️ <b>Сбой</b>\n${where}\n\n${esc(text)}`, context.conversationId ? openLink(s, context.conversationId) : undefined);
   } catch (e) {
     console.error("notify problem failed", e);
+  }
+}
+
+async function channelWhere(channelId: string) {
+  const [row] = await db
+    .select({ channel: channels, client: clients })
+    .from(channels)
+    .innerJoin(clients, eq(clients.id, channels.clientId))
+    .where(eq(channels.id, channelId));
+  return row ? `<b>${esc(row.client.name)}</b> · ${esc(CHANNEL_LABEL[row.channel.type] ?? row.channel.type)} ${esc(row.channel.name)}` : "";
+}
+
+/** Сбой канала прошёл — сообщить, чтобы не казалось, что он ещё висит; следующий сбой снова придёт сразу, без суточной паузы. */
+export async function notifyRecovered(key: string, channelId: string, text: string) {
+  try {
+    problems.delete(key);
+    await broadcast(`✅ <b>Снова работает</b>
+${await channelWhere(channelId)}
+
+${esc(text)}`);
+  } catch (e) {
+    console.error("notify recovered failed", e);
   }
 }
 
