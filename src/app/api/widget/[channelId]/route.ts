@@ -43,7 +43,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ channelI
 
   const msgs = (await listMessages(conv.id, { afterId: url.searchParams.get("after") ?? undefined }))
     .filter((m) => m.role !== "system" && m.role !== "bot")
-    .map((m) => ({ id: m.id, role: m.role === "user" ? "user" : "agent", text: m.text, at: m.createdAt }));
+    .map((m) => {
+      // Подсказки следующего шага от агента ([[ACTION suggest: …]]) — кнопками под ответом
+      const suggest = m.role === "assistant" ? (m.meta?.actions ?? []).filter((a) => a.type === "suggest").map((a) => a.value.slice(0, 60)).slice(0, 3) : [];
+      return { id: m.id, role: m.role === "user" ? "user" : "agent", text: m.text, at: m.createdAt, ...(suggest.length ? { suggest } : {}) };
+    });
   return Response.json(
     { config, messages: msgs, typing: isTyping(conv.id), operator: conv.mode === "human" },
     { headers: CORS },

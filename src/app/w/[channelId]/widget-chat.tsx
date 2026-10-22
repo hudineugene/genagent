@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
-type Msg = { id: string; role: "user" | "agent"; text: string; pending?: boolean };
+type Msg = { id: string; role: "user" | "agent"; text: string; pending?: boolean; suggest?: string[] };
 type Config = { title: string; subtitle: string; color: string; greeting: string; icon: string; telegramBot?: string; quick?: string[] };
 
 // Язык окна: как у страницы сайта (?lang=), иначе — язык браузера посетителя.
@@ -146,6 +146,9 @@ export function WidgetChat({ channelId }: { channelId: string }) {
   const color = config?.color ?? "#5b5bf0";
   const shown: Msg[] =
     msgs.length === 0 && config?.greeting ? [{ id: "greeting", role: "agent", text: config.greeting }] : msgs;
+  // Подсказки следующего шага — только под последним ответом агента, пока посетитель не написал дальше
+  const last = shown.at(-1);
+  const suggest = !typing && !operator && last?.role === "agent" ? (last.suggest ?? []) : [];
 
   return (
     <div className="flex h-dvh flex-col bg-white text-[#141824]" style={{ colorScheme: "light" }}>
@@ -197,9 +200,9 @@ export function WidgetChat({ channelId }: { channelId: string }) {
             </div>
           </div>
         )}
-        {!talked && !typing && (config?.quick?.length ?? 0) > 0 && (
+        {((!talked && !typing && (config?.quick?.length ?? 0) > 0) || suggest.length > 0) && (
           <div className="flex flex-wrap justify-end gap-1.5 pt-1">
-            {config!.quick!.map((q) => (
+            {(talked ? suggest : (config?.quick ?? [])).map((q) => (
               <button
                 key={q}
                 type="button"
