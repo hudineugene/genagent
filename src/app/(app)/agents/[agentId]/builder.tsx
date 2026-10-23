@@ -4,7 +4,7 @@ import { InfoHint } from "@/components/hint";
 
 import Link from "next/link";
 import { useMemo, useState, useTransition, type ReactNode } from "react";
-import { BookOpen, Brain, CalendarDays, ChevronDown, Cpu, MessageSquareText, ScrollText, Sparkles, UserRound } from "lucide-react";
+import { BookOpen, Brain, CalendarDays, ChevronDown, Cpu, MessageSquareText, ScrollText, Sparkles, UserRound, Wrench } from "lucide-react";
 import { SKILLS } from "@/lib/agent/skills";
 import { compileSystemPrompt, type ClientContext } from "@/lib/agent/compile";
 import { EFFORTS, REPLY_LANGUAGES, TONES, type AgentConfig } from "@/lib/agent/types";
@@ -28,6 +28,9 @@ export type BuilderSource = {
   chars: number;
 };
 
+/** Свой инструмент клиента — для выбора в агенте */
+export type BuilderTool = { id: string; title: string; name: string; enabled: boolean; readOnly: boolean };
+
 export function Builder({
   config,
   onChange,
@@ -36,6 +39,7 @@ export function Builder({
   googleEmail,
   agentId,
   examples = [],
+  tools = [],
 }: {
   config: AgentConfig;
   onChange: (c: AgentConfig) => void;
@@ -44,6 +48,7 @@ export function Builder({
   googleEmail: string | null;
   agentId?: string;
   examples?: ExampleItem[];
+  tools?: BuilderTool[];
 }) {
   const { t, locale } = useI18n();
   const set = <K extends keyof AgentConfig>(key: K, value: AgentConfig[K]) => onChange({ ...config, [key]: value });
@@ -228,6 +233,13 @@ export function Builder({
             onChange={(v) => set("answerCheck", v === "on")}
           />
         </Field>
+        <Field label={t.builder.operatorReview} hint={t.builder.operatorReviewHint}>
+          <Segmented
+            value={config.operatorReview ? "on" : "off"}
+            options={(["off", "on"] as const).map((v) => ({ value: v, label: t.builder.operatorReviewModes[v] }))}
+            onChange={(v) => set("operatorReview", v === "on")}
+          />
+        </Field>
       </Section>
 
       <Section icon={<Sparkles />} id="skills" title={t.builder.sections.skills} badge={config.skills.length || undefined}>
@@ -400,6 +412,41 @@ export function Builder({
         <CalendarFields value={config.calendar} onChange={(v) => set("calendar", v)} googleEmail={googleEmail} />
       </Section>
 
+      <Section icon={<Wrench />} id="tools" title={t.builder.sections.tools} badge={(config.toolIds ?? []).length + (config.webSearch ? 1 : 0) || undefined}>
+        <label className="flex cursor-pointer items-start gap-2.5 text-sm">
+          <input type="checkbox" checked={Boolean(config.webSearch)} onChange={(e) => set("webSearch", e.target.checked)} className="mt-0.5 size-4 accent-[var(--accent)]" />
+          <span>
+            {t.builder.webSearch}
+            <span className="block text-xs text-muted">{t.builder.webSearchHint}</span>
+          </span>
+        </label>
+        <p className="text-xs text-muted">{t.builder.toolsHint}</p>
+        {tools.length === 0 ? (
+          <p className="text-sm text-muted">{t.builder.toolsEmpty}</p>
+        ) : (
+          <div className="space-y-1.5">
+            {tools.map((x) => {
+              const on = (config.toolIds ?? []).includes(x.id);
+              return (
+                <label key={x.id} className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm hover:bg-surface-2">
+                  <input
+                    type="checkbox"
+                    checked={on}
+                    onChange={() => set("toolIds", on ? (config.toolIds ?? []).filter((i) => i !== x.id) : [...(config.toolIds ?? []), x.id])}
+                    className="size-4 accent-[var(--accent)]"
+                  />
+                  <span className={cx("min-w-0 flex-1 truncate", !x.enabled && "text-muted line-through")}>{x.title}</span>
+                  <code className="shrink-0 font-mono text-xs text-muted">{x.name}</code>
+                </label>
+              );
+            })}
+          </div>
+        )}
+        <Link href={`/clients/${client.id}?tab=tools`} className="text-sm text-accent hover:underline">
+          {t.builder.toolsManage}
+        </Link>
+      </Section>
+
       <Section icon={<Brain />} id="prompt" title={t.builder.sections.prompt} collapsible defaultOpen={false}>
         <p className="text-xs text-muted">{t.builder.promptHint}</p>
         <pre className="max-h-[480px] overflow-auto whitespace-pre-wrap rounded-xl bg-surface-2 p-4 font-mono text-xs leading-relaxed">
@@ -459,7 +506,7 @@ function ExamplesList({ agentId, items }: { agentId: string; items: ExampleItem[
   );
 }
 
-export const BUILDER_SECTIONS = ["basics", "model", "skills", "style", "knowledge", "rules", "calendar", "prompt"] as const;
+export const BUILDER_SECTIONS = ["basics", "model", "skills", "style", "knowledge", "rules", "calendar", "tools", "prompt"] as const;
 
 function Section({
   id,

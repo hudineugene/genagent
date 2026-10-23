@@ -1,15 +1,20 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, count, desc, eq } from "drizzle-orm";
-import { BarChart3, BookOpen, Bot, Plus, Settings } from "lucide-react";
+import { BarChart3, BookOpen, Bot, Megaphone, Plus, Settings, Wrench } from "lucide-react";
 import { db } from "@/db";
-import { agents, clients, kbSources, knowledgeGaps } from "@/db/schema";
+import { agents, campaigns, clientIntegrations, clientTools, clients, kbSources, knowledgeGaps } from "@/db/schema";
 import { getT } from "@/lib/i18n/server";
 import { findModel } from "@/lib/models";
 import type { Dict, Locale } from "@/lib/i18n";
 import { BackLink } from "@/components/back-link";
 import { Badge, Card, ClientAvatar, EmptyState, PageHeader, buttonClass, cx } from "@/components/ui";
 import { KnowledgeBase } from "./knowledge-base";
+import { ToolsManager } from "./tools";
+import { IntegrationsOut } from "./integrations-out";
+import { CampaignsManager } from "./campaigns";
+import { campaignStats } from "@/lib/campaigns/engine";
+import { getGoogleSettings } from "@/lib/google/calendar";
 import { OwnersCard } from "./owners";
 import { clientOwners, getNotifySettings } from "@/lib/notify/telegram";
 import { embeddingProgress, embeddingStatus } from "@/lib/kb/embeddings";
@@ -27,15 +32,19 @@ export default async function ClientPage({
   const [client] = await db.select().from(clients).where(eq(clients.id, clientId));
   if (!client) notFound();
 
-  const active = tab === "kb" ? "kb" : "agents";
-  const [[{ agentsCount }], [{ kbCount }]] = await Promise.all([
+  const active = tab === "kb" ? "kb" : tab === "tools" ? "tools" : tab === "campaigns" ? "campaigns" : "agents";
+  const [[{ agentsCount }], [{ kbCount }], [{ toolsCount }], [{ campaignsCount }]] = await Promise.all([
     db.select({ agentsCount: count() }).from(agents).where(eq(agents.clientId, clientId)),
     db.select({ kbCount: count() }).from(kbSources).where(eq(kbSources.clientId, clientId)),
+    db.select({ toolsCount: count() }).from(clientTools).where(eq(clientTools.clientId, clientId)),
+    db.select({ campaignsCount: count() }).from(campaigns).where(eq(campaigns.clientId, clientId)),
   ]);
 
   const tabs = [
     { key: "agents", href: `/clients/${client.id}`, label: t.client.agents, icon: Bot, n: agentsCount },
     { key: "kb", href: `/clients/${client.id}?tab=kb`, label: t.kb.tab, icon: BookOpen, n: kbCount },
+    { key: "tools", href: `/clients/${client.id}?tab=tools`, label: t.tools.tab, icon: Wrench, n: toolsCount },
+    { key: "campaigns", href: `/clients/${client.id}?tab=campaigns`, label: t.campaigns.tab, icon: Megaphone, n: campaignsCount },
   ];
 
   return (
@@ -84,10 +93,81 @@ export default async function ClientPage({
 
       {active === "kb" ? (
         <KnowledgeTab clientId={client.id} />
+      ) : active === "tools" ? (
+        <ToolsTab clientId={client.id} />
+      ) : active === "campaigns" ? (
+        <CampaignsTab clientId={client.id} />
       ) : (
         <AgentsTab clientId={client.id} t={t} locale={locale} />
       )}
     </div>
+  );
+}
+
+async function CampaignsTab({ clientId }: { clientId: string }) {
+  const [rows, list] = await Promise.all([
+    db.select().from(campaigns).where(eq(campaigns.clientId, clientId)).orderBy(desc(campaigns.createdAt)),
+    db.select({ id: agents.id, name: agents.name }).from(agents).where(eq(agents.clientId, clientId)),
+  ]);
+  const items = await Promise.all(
+    rows.map(async (r) => ({
+      id: r.id,
+      kind: r.kind,
+      name: r.name,
+      status: r.status,
+      enabled: r.enabled,
+      segment: r.segment,
+      steps: r.steps,
+      trigger: r.trigger,
+      scheduleAt: r.scheduleAt?.getTime() ?? null,
+      options: r.options,
+      stats: await campaignStats(r.id),
+    })),
+  );
+  return <CampaignsManager clientId={clientId} rows={items} agents={list} />;
+}
+
+async function ToolsTab({ clientId }: { clientId: string }) {
+  const [rows, list, outs, google] = await Promise.all([
+    db.select().from(clientTools).where(eq(clientTools.clientId, clientId)).orderBy(desc(clientTools.createdAt)),
+    db.select({ name: agents.name, config: agents.config }).from(agents).where(eq(agents.clientId, clientId)),
+    db.select().from(clientIntegrations).where(eq(clientIntegrations.clientId, clientId)).orderBy(desc(clientIntegrations.createdAt)),
+    getGoogleSettings(),
+  ]);
+  const tools = rows.map((r) => ({
+    id: r.id,
+    kind: r.kind,
+    sheet: r.sheet,
+    title: r.title,
+    name: r.name,
+    description: r.description,
+    method: r.method,
+    url: r.url,
+    headers: r.headers,
+    params: r.params,
+    readOnly: r.readOnly,
+    enabled: r.enabled,
+    lastStatus: r.lastStatus,
+    lastUsedAt: r.lastUsedAt,
+    usedBy: list.filter((a) => a.config.toolIds?.includes(r.id)).map((a) => a.name),
+  }));
+  const googleEmail = google?.clientEmail ?? null;
+  const integrations = outs.map((r) => ({
+    id: r.id,
+    kind: r.kind,
+    name: r.name,
+    url: r.config.url,
+    sheet: "sheet" in r.config ? r.config.sheet : "",
+    secret: "secret" in r.config ? r.config.secret : "",
+    events: r.events,
+    enabled: r.enabled,
+    lastStatus: r.lastStatus,
+    lastAt: r.lastAt,
+  }));
+  return (
+    <ToolsManager clientId={clientId} tools={tools} googleEmail={googleEmail}>
+      <IntegrationsOut clientId={clientId} rows={integrations} googleEmail={googleEmail} />
+    </ToolsManager>
   );
 }
 

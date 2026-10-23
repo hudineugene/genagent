@@ -73,6 +73,156 @@ export const agentVersions = sqliteTable(
 
 // База знаний клиента: источники (файл, сайт, текст) и их фрагменты для поиска.
 // Полнотекстовый индекс kb_chunks_fts (FTS5) создаётся отдельной миграцией — drizzle не описывает виртуальные таблицы.
+/** Параметр своего инструмента: что агент передаёт при вызове. */
+export type ToolParam = { name: string; type: "string" | "number" | "boolean"; description: string; required: boolean };
+
+/**
+ * Свой инструмент клиента: внешняя система по HTTP (CRM, склад, статус заказа, калькулятор…), которую агент вызывает
+ * сам. Заводится в админке без программиста; секреты (ключи в заголовках) хранятся здесь, а не в версиях агента.
+ */
+export const clientTools = sqliteTable(
+  "client_tools",
+  {
+    id: id(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    /** http — запрос к API; sheet — поиск строк в Google Таблице (url — ссылка на таблицу, sheet — лист) */
+    kind: text("kind", { enum: ["http", "sheet"] }).notNull().default("http"),
+    sheet: text("sheet"),
+    /** Имя для модели: латиница, snake_case */
+    name: text("name").notNull(),
+    /** Название для людей */
+    title: text("title").notNull(),
+    /** Когда и зачем вызывать — это читает агент */
+    description: text("description").notNull().default(""),
+    method: text("method", { enum: ["GET", "POST", "PUT", "PATCH", "DELETE"] }).notNull().default("GET"),
+    /** Адрес; {параметр} подставляется из вызова */
+    url: text("url").notNull(),
+    headers: text("headers", { mode: "json" }).$type<Record<string, string>>().notNull().default({}),
+    params: text("params", { mode: "json" }).$type<ToolParam[]>().notNull().default([]),
+    /** Только чтение: в тест-чате и автотестах вызывается по-настоящему; иначе там лишь показывается, что было бы отправлено */
+    readOnly: integer("read_only", { mode: "boolean" }).notNull().default(true),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    /** Итог последнего вызова: «200», «timeout», «error: …» */
+    lastStatus: text("last_status"),
+    lastUsedAt: integer("last_used_at", { mode: "timestamp_ms" }),
+    createdAt: createdAt(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [index("client_tools_client_idx").on(t.clientId)],
+);
+export type ClientTool = typeof clientTools.$inferSelect;
+
+export { INTEGRATION_EVENTS, type IntegrationEventType } from "@/lib/integrations/types";
+import type { IntegrationEventType } from "@/lib/integrations/types";
+
+export type IntegrationConfig =
+  /** Google Таблица: ссылка, лист */
+  | { url: string; sheet: string }
+  /** Вебхук: адрес и секрет для подписи (X-GenAgent-Signature: sha256=…) */
+  | { url: string; secret: string };
+
+/**
+ * Отправка данных клиента во внешние системы: заявки, передачи менеджеру, записи, оценки и события бота —
+ * строками в Google Таблицу или запросом на вебхук (любая CRM, Make, Zapier, n8n…).
+ */
+export const clientIntegrations = sqliteTable(
+  "client_integrations",
+  {
+    id: id(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: ["sheet", "webhook"] }).notNull(),
+    name: text("name").notNull(),
+    config: text("config", { mode: "json" }).$type<IntegrationConfig>().notNull(),
+    events: text("events", { mode: "json" }).$type<IntegrationEventType[]>().notNull().default([]),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    lastStatus: text("last_status"),
+    lastAt: integer("last_at", { mode: "timestamp_ms" }),
+    createdAt: createdAt(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [index("client_integrations_client_idx").on(t.clientId)],
+);
+export type ClientIntegration = typeof clientIntegrations.$inferSelect;
+
+/** Кому слать: фильтр по разговорам клиента (тестовые и отписавшиеся исключаются всегда) */
+export type CampaignSegment = {
+  agentIds?: string[];
+  channelTypes?: string[];
+  temperature?: ("hot" | "warm" | "cold")[];
+  /** Слово в данных карточки клиента или в имени (например, «Riviera») */
+  contains?: string;
+  /** Последнее сообщение клиента не раньше/не позже N дней назад */
+  activeWithinDays?: number;
+  inactiveForDays?: number;
+  hadHandoff?: boolean;
+};
+/** Шаг: пауза (для цепочки — от события или прошлого шага), текст или задание ИИ */
+export type CampaignStep = { delayHours: number; mode: "text" | "ai"; text: string };
+export type CampaignOptions = { quietHours: boolean; optOutHint: boolean };
+
+/**
+ * Рассылки и цепочки сообщений: клиент получает сообщение первым. Рассылка — один раз по сегменту (сразу или по
+ * расписанию); цепочка — серия шагов по событию (замолчал, передан менеджеру, записался, стал горячим) и
+ * останавливается, когда клиент ответил или написал «стоп». Создаются выключенными.
+ */
+export const campaigns = sqliteTable(
+  "campaigns",
+  {
+    id: id(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: ["broadcast", "sequence"] }).notNull(),
+    name: text("name").notNull(),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(false),
+    /** С какого момента цепочка набирает участников (события раньше — не в счёт) */
+    enabledAt: integer("enabled_at", { mode: "timestamp_ms" }),
+    segment: text("segment", { mode: "json" }).$type<CampaignSegment>().notNull().default({}),
+    steps: text("steps", { mode: "json" }).$type<CampaignStep[]>().notNull().default([]),
+    trigger: text("trigger", { enum: ["idle", "handoff", "booking", "hot"] }),
+    scheduleAt: integer("schedule_at", { mode: "timestamp_ms" }),
+    status: text("status", { enum: ["draft", "scheduled", "sending", "done", "active", "paused"] }).notNull().default("draft"),
+    options: text("options", { mode: "json" }).$type<CampaignOptions>().notNull().default({ quietHours: true, optOutHint: true }),
+    createdAt: createdAt(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [index("campaigns_client_idx").on(t.clientId)],
+);
+export type Campaign = typeof campaigns.$inferSelect;
+
+export const campaignRuns = sqliteTable(
+  "campaign_runs",
+  {
+    id: id(),
+    campaignId: text("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    conversationId: text("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    /** Номер следующего шага */
+    step: integer("step").notNull().default(0),
+    status: text("status", { enum: ["pending", "sent", "skipped", "failed", "stopped", "done"] }).notNull().default("pending"),
+    dueAt: integer("due_at", { mode: "timestamp_ms" }).notNull(),
+    enrolledAt: integer("enrolled_at", { mode: "timestamp_ms" }).notNull(),
+    sentAt: integer("sent_at", { mode: "timestamp_ms" }),
+    messageId: text("message_id"),
+    error: text("error"),
+  },
+  (t) => [uniqueIndex("campaign_runs_unique").on(t.campaignId, t.conversationId), index("campaign_runs_due_idx").on(t.status, t.dueAt)],
+);
+export type CampaignRun = typeof campaignRuns.$inferSelect;
+
 export const kbSources = sqliteTable(
   "kb_sources",
   {
@@ -354,6 +504,10 @@ export type LeadCard = {
 };
 
 export type ConversationContext = {
+  /** Клиент написал «стоп» — рассылки и цепочки ему не отправляются */
+  optOut?: boolean;
+  /** Строка заявки этого разговора в Google Таблице (id интеграции → номер строки) */
+  sheetRows?: Record<string, number>;
   postId?: string;
   postUrl?: string;
   postText?: string;
@@ -393,6 +547,10 @@ export type ConversationContext = {
 };
 
 export type MessageMeta = {
+  /** Сообщение рассылки или цепочки: какая и какой шаг */
+  campaign?: { id: string; name: string; step: number };
+  /** Оценка ответа сотрудника (контроль качества): 1–10, замечания, улучшенный вариант */
+  operatorReview?: { score: number; problems: string[]; better: string };
   model?: string;
   inputTokens?: number;
   outputTokens?: number;

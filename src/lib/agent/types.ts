@@ -56,6 +56,10 @@ export const agentConfigSchema = z.object({
   knowledge: z.string().max(50000).default(""),
   /** Источники базы знаний клиента, которыми пользуется агент; null — все. */
   kbSourceIds: z.array(z.string()).nullable().default(null),
+  /** Свои инструменты клиента (client_tools), которые может вызывать агент */
+  toolIds: z.array(z.string()).max(30).optional(),
+  /** Поиск в интернете (если включён в «Внешних сервисах») */
+  webSearch: z.boolean().optional(),
   rules: z.string().max(5000).default(""),
   handoff: z.string().max(2000).default(""),
   /** Поля карточки лида через запятую (пусто — общие: что ищет, бюджет, сроки, контакт) */
@@ -80,6 +84,8 @@ export const agentConfigSchema = z.object({
   qualityCheck: z.boolean().default(true),
   /** Проверка ответа перед отправкой (вторая модель; при проблеме — один раз переписать) */
   answerCheck: z.boolean().optional(),
+  /** Контроль качества ответов сотрудников (оценка после отправки) */
+  operatorReview: z.boolean().optional(),
   calendar: calendarConfigSchema.prefault({}),
 });
 

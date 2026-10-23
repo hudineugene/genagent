@@ -16,6 +16,10 @@ export async function register() {
     console.log(`Создан первый администратор: ${email}`);
   }
 
+  // Ключи внешних сервисов, заданные в админке (OpenAI, Google Maps), — в окружение процесса
+  const { applyServiceKeys } = await import("./lib/services");
+  await applyServiceKeys().catch((e) => console.error("apply service keys failed", e));
+
   const { markInterrupted } = await import("./lib/kb/store");
   await markInterrupted();
   // Смысловой поиск: досчитать «отпечатки» для старых фрагментов и заранее загрузить модель (если база знаний не пуста).
@@ -51,6 +55,8 @@ export async function register() {
   startDailyDigest();
   const { startWeeklyReview } = await import("./lib/agent/review");
   startWeeklyReview();
+  const { startCampaigns } = await import("./lib/campaigns/engine");
+  startCampaigns();
   const { startMonthlyReports } = await import("./lib/agent/report");
   startMonthlyReports();
   const { startWatch } = await import("./lib/agent/watch");

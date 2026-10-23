@@ -274,3 +274,28 @@ export async function runWeeklyTestsNow(): Promise<IntegrationsResult> {
   void runWeeklyTests().catch((e) => console.error("weekly tests (manual) failed", e));
   return { ok: true };
 }
+
+/** Внешние сервисы (lib/services): поиск в интернете, ключи OpenAI и Google Maps. Ключ «» — удалить. */
+export async function saveServicesAction(patch: {
+  webSearch?: { enabled: boolean; maxUses: number };
+  openaiKey?: string;
+  googleMapsKey?: string;
+}): Promise<IntegrationsResult> {
+  await requireAdmin();
+  const data = z
+    .object({
+      webSearch: z.object({ enabled: z.boolean(), maxUses: z.number().int().min(1).max(10) }).optional(),
+      openaiKey: z.string().trim().max(300).optional(),
+      googleMapsKey: z.string().trim().max(300).optional(),
+    })
+    .safeParse(patch);
+  if (!data.success) return { error: "invalid" };
+  const { saveServices } = await import("@/lib/services");
+  const next: Parameters<typeof saveServices>[0] = {};
+  if (data.data.webSearch) next.webSearch = data.data.webSearch;
+  if (data.data.openaiKey !== undefined) next.openaiKey = data.data.openaiKey || undefined;
+  if (data.data.googleMapsKey !== undefined) next.googleMapsKey = data.data.googleMapsKey || undefined;
+  await saveServices(next);
+  refresh();
+  return {};
+}

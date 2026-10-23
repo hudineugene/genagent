@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { Bell, BellOff, CalendarDays, DatabaseBackup, FileBarChart2, Share2 } from "lucide-react";
+import { Bell, BellOff, CalendarDays, DatabaseBackup, FileBarChart2, Plug, Share2 } from "lucide-react";
 import { requireAdmin } from "@/lib/auth";
 import { getT } from "@/lib/i18n/server";
 import { getMetaSettings, metaUrls, publicUrl } from "@/lib/settings";
@@ -12,6 +12,8 @@ import { BackupSection } from "./backup-section";
 import { DailyDigestSection } from "./daily-section";
 import { WeeklyTestsSection } from "./weekly-section";
 import { WaitingSection } from "./waiting-section";
+import { ServicesSection } from "./services-section";
+import { getServices, serverKeys } from "@/lib/services";
 import { getWaitingSettings } from "@/lib/agent/waiting";
 import { getNotifySettings } from "@/lib/notify/telegram";
 import { getOffsiteSettings } from "@/lib/offsite-backup";
@@ -20,7 +22,7 @@ import { getAutoTests } from "@/lib/tests/auto";
 import { getDailyDigest } from "@/lib/agent/daily";
 import { getLeadsSettings } from "@/lib/agent/leads";
 
-const TABS = ["notify", "reports", "backup", "social", "google"] as const;
+const TABS = ["notify", "reports", "backup", "social", "google", "services"] as const;
 type Tab = (typeof TABS)[number];
 
 /** Интеграции по вкладкам: у каждой отметка «подключено»; отчёты и копия базы — после бота уведомлений. */
@@ -29,7 +31,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
   await requireAdmin();
   const tab: Tab = TABS.find((x) => x === sp.tab) ?? "notify";
   const s = t.integrations;
-  const [meta, google, notify, offsite, weekly, coverage, daily, waiting, leads, autoTests] = await Promise.all([
+  const [meta, google, notify, offsite, weekly, coverage, daily, waiting, leads, autoTests, services] = await Promise.all([
     getMetaSettings(),
     getGoogleSettings(),
     getNotifySettings(),
@@ -40,7 +42,9 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
     getWaitingSettings(),
     getLeadsSettings(),
     getAutoTests(),
+    getServices(),
   ]);
+  const srv = serverKeys();
   const base = publicUrl();
   const subscribers = notify?.token ? notify.subscribers : [];
   const notifyReady = subscribers.length > 0;
@@ -51,6 +55,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
     backup: notifyReady && Boolean(offsite?.enabled),
     social: Boolean(meta.instagram || meta.threads),
     google: Boolean(google?.clientEmail),
+    services: services.webSearch.enabled || Boolean(services.openaiKey || srv.openai || services.googleMapsKey || srv.maps),
   };
   const icons: Record<Tab, ReactNode> = {
     notify: <Bell className="size-4" />,
@@ -58,6 +63,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
     backup: <DatabaseBackup className="size-4" />,
     social: <Share2 className="size-4" />,
     google: <CalendarDays className="size-4" />,
+    services: <Plug className="size-4" />,
   };
 
   const needNotify = (
@@ -167,6 +173,16 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
           )}
 
           {tab === "google" && <GoogleCard email={google?.clientEmail ?? null} />}
+
+          {tab === "services" && (
+            <ServicesSection
+              services={{
+                webSearch: services.webSearch,
+                openai: srv.openai ? "server" : services.openaiKey ? "set" : "none",
+                maps: srv.maps ? "server" : services.googleMapsKey ? "set" : "none",
+              }}
+            />
+          )}
         </div>
       </div>
     </div>

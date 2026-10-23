@@ -22,12 +22,16 @@ export type ChatRequest = {
   maxTokens?: number;
   signal?: AbortSignal;
   tools?: AgentTool[];
+  /** Поиск в интернете (серверный инструмент Anthropic): сколько поисков на один ответ */
+  webSearch?: { maxUses: number };
 };
 
 export type ChatUsage = {
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens?: number;
+  /** Поисков в интернете за ответ (оплачиваются отдельно) */
+  webSearches?: number;
 };
 
 export type ChatStreamEvent =

@@ -80,6 +80,12 @@ export async function updateLead(conversationId: string): Promise<LeadCard | nul
   // Свежий контекст: пока модель думала, могли дописаться язык, память, заказы
   const [cur] = await db.select({ context: conversations.context }).from(conversations).where(eq(conversations.id, c.id));
   await db.update(conversations).set({ context: { ...cur?.context, lead } }).where(eq(conversations.id, c.id));
+  // Карточка изменилась — во внешние системы клиента (Google Таблица, вебхук); одинаковую повторно не шлём
+  const prev = cur?.context?.lead;
+  const sig = (l?: LeadCard) => (l ? JSON.stringify([l.temperature, l.fields]) : "");
+  if (sig(prev) !== sig(lead)) {
+    void import("@/lib/integrations/events").then((m) => m.emitEvent("lead", { clientId: c.clientId, agentId: c.agentId, conversationId: c.id, lead }));
+  }
   if (lead.temperature === "hot") await hotAlert(c.id).catch((e) => console.error("hot lead alert failed", c.id, e));
   return lead;
 }

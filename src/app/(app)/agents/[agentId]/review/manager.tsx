@@ -51,6 +51,43 @@ export function ReviewManager({ agentId, review }: { agentId: string; review: Ag
               </span>
             </div>
             {review.summary && <p className="text-sm">{review.summary}</p>}
+            {review.mood && (
+              <div className="rounded-xl bg-surface-2/60 p-3 text-sm">
+                <div className="font-medium">
+                  😊 {t.review.mood}: {review.mood.score}/10
+                </div>
+                {review.stats && (
+                  <p className="mt-1 text-xs text-muted">
+                    {t.review.statsLine
+                      .replace("{up}", String(review.stats.ratingsUp))
+                      .replace("{down}", String(review.stats.ratingsDown))
+                      .replace("{handoffs}", String(review.stats.handoffs))
+                      .replace("{upset}", String(review.stats.upset))}
+                  </p>
+                )}
+                {review.mood.complaints.length > 0 && (
+                  <>
+                    <div className="mt-2 text-xs font-medium text-muted">{t.review.complaints}</div>
+                    <ul className="mt-1 list-disc space-y-0.5 pl-5">
+                      {review.mood.complaints.map((c) => (
+                        <li key={c.complaint}>
+                          {c.complaint} — {t.review.times.replace("{n}", String(c.count))}
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+                {review.stats?.operatorAvg != null && (
+                  <p className="mt-2 text-xs">
+                    🧑‍💼{" "}
+                    {t.review.operators
+                      .replace("{avg}", String(review.stats.operatorAvg))
+                      .replace("{low}", String(review.stats.operatorLow))
+                      .replace("{n}", String(review.stats.operatorReplies))}
+                  </p>
+                )}
+              </div>
+            )}
             {review.unmet.length > 0 && (
               <div className="space-y-2">
                 <div className="flex items-center gap-1.5 text-sm font-medium">

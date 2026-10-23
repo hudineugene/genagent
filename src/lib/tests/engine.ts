@@ -222,7 +222,7 @@ async function loadAgent(agentId: string) {
 
 /** Ответ агента на текущий диалог — тем же путём, что в каналах. */
 async function agentReply(config: AgentConfig, client: ClientContext & { id: string }, agentId: string, t: Transcript) {
-  const { system, messages, tools } = await prepareChat(config, client, t as ChatMessage[], { mode: "dry" });
+  const { system, messages, tools, webSearch } = await prepareChat(config, client, t as ChatMessage[], { mode: "dry" });
   // Что агент видел при ответе (инструкция с документами, найденные фрагменты, дата и время) — судья сверяет факты с этим
   const last = messages.at(-1);
   const seen = [
@@ -233,7 +233,7 @@ async function agentReply(config: AgentConfig, client: ClientContext & { id: str
   let cost = 0;
   const notes: string[] = [];
   const started = Date.now();
-  for await (const ev of streamChat({ model: config.model, effort: config.effort, system, messages, tools })) {
+  for await (const ev of streamChat({ model: config.model, effort: config.effort, system, messages, tools, webSearch })) {
     if (ev.type === "text") text += ev.text;
     else if (ev.type === "tool") {
       if (ev.name === "book_appointment" && !ev.error && ev.result.startsWith("Booked:")) notes.push("[создал запись в календаре]");

@@ -39,6 +39,9 @@ const FIELDS: Field[] = [
   "qualityCheck",
   "factGuard",
   "calendar",
+  "toolIds",
+  "webSearch",
+  "operatorReview",
 ];
 
 export function VersionsPanel({
@@ -100,6 +103,9 @@ export function VersionsPanel({
       factGuard: b.factGuard,
       answerCheck: b.answerCheck,
       calendar: b.sections.calendar,
+      toolIds: b.sections.tools,
+      webSearch: b.webSearch,
+      operatorReview: b.operatorReview,
     };
     return map[f];
   };
@@ -121,8 +127,14 @@ export function VersionsPanel({
         return t.builder.factGuardModes[c.factGuard ?? "flag"];
       case "useBrandVoice":
         return c.useBrandVoice ? t.versions.on : t.versions.off;
+      case "webSearch":
+        return c.webSearch ? t.versions.on : t.versions.off;
+      case "operatorReview":
+        return c.operatorReview ? t.versions.on : t.versions.off;
       case "skills":
         return c.skills.map((k) => SKILL_MAP.get(k)?.name[locale] ?? k).join(", ") || "—";
+      case "toolIds":
+        return String((c.toolIds ?? []).length || "—");
       case "kbSourceIds":
         return c.kbSourceIds == null
           ? t.versions.allSources

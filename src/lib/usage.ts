@@ -9,12 +9,15 @@ import type { ChatUsage } from "@/lib/llm/types";
  * Стоимость вызова в USD. Токены, прочитанные из кэша промпта, стоят 10% обычной цены входа.
  * null — цена модели неизвестна (модели вне каталога).
  */
-export function computeCost(model: string, usage: Pick<ChatUsage, "inputTokens" | "outputTokens" | "cacheReadTokens">) {
+/** Поиск в интернете Anthropic: $10 за 1000 поисков */
+const WEB_SEARCH_USD = 0.01;
+
+export function computeCost(model: string, usage: Pick<ChatUsage, "inputTokens" | "outputTokens" | "cacheReadTokens" | "webSearches">) {
   const price = findModel(model)?.price;
   if (!price) return null;
   const cached = usage.cacheReadTokens ?? 0;
   const fresh = Math.max(0, usage.inputTokens - cached);
-  return (fresh * price.input + cached * price.input * 0.1 + usage.outputTokens * price.output) / 1e6;
+  return (fresh * price.input + cached * price.input * 0.1 + usage.outputTokens * price.output) / 1e6 + (usage.webSearches ?? 0) * WEB_SEARCH_USD;
 }
 
 export async function logUsage(entry: {

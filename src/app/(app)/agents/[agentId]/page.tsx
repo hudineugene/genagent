@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { agents, clients, kbSources } from "@/db/schema";
+import { agents, clientTools, clients, kbSources } from "@/db/schema";
 import { agentConfigSchema } from "@/lib/agent/types";
 import { getGoogleSettings } from "@/lib/google/calendar";
 import { AgentStudio } from "./studio";
@@ -27,6 +27,12 @@ export default async function AgentPage({ params }: { params: Promise<{ agentId:
     .where(eq(kbSources.clientId, client.id))
     .orderBy(asc(kbSources.createdAt));
 
+  const tools = await db
+    .select({ id: clientTools.id, title: clientTools.title, name: clientTools.name, enabled: clientTools.enabled, readOnly: clientTools.readOnly })
+    .from(clientTools)
+    .where(eq(clientTools.clientId, client.id))
+    .orderBy(asc(clientTools.createdAt));
+
   // Старые конфигурации дополняем полями по умолчанию (например, kbSourceIds).
   const parsed = agentConfigSchema.safeParse(agent.config);
   const config = parsed.success ? parsed.data : agent.config;
@@ -49,6 +55,7 @@ export default async function AgentPage({ params }: { params: Promise<{ agentId:
         sources={sources}
         googleEmail={(await getGoogleSettings())?.clientEmail ?? null}
         examples={await getExamples(agent.id)}
+        tools={tools}
       />
     </div>
   );

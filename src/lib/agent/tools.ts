@@ -226,6 +226,14 @@ export function calendarTools(cal: CalendarConfig, ctx: ToolContext): AgentTool[
           phone: input.phone,
           comment: input.comment?.trim() ?? "",
         });
+        void import("@/lib/integrations/events").then((m) =>
+          m.emitEvent("booking", {
+            clientId: ctx.clientId,
+            agentId: ctx.agentId,
+            conversationId: ctx.conversationId,
+            booking: { start: input.start, service: serviceName ?? "", name: input.name, phone: input.phone, comment: input.comment?.trim() ?? "" },
+          }),
+        );
       }
       return confirmed;
     },

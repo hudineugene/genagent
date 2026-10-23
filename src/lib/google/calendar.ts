@@ -26,16 +26,18 @@ export async function getGoogleSettings() {
   return getSetting<GoogleSettings>("google");
 }
 
-let cached: { email: string; token: string; exp: number } | null = null;
+const cached = new Map<string, { email: string; token: string; exp: number }>();
 
-async function accessToken(): Promise<string> {
+/** Токен сервисного аккаунта студии для нужной области доступа (календарь, таблицы…). */
+export async function googleToken(scope: string): Promise<string> {
   const s = await getGoogleSettings();
   if (!s) throw new CalendarError("google_not_configured");
-  if (cached && cached.email === s.clientEmail && cached.exp - 60_000 > Date.now()) return cached.token;
+  const hit = cached.get(scope);
+  if (hit && hit.email === s.clientEmail && hit.exp - 60_000 > Date.now()) return hit.token;
 
   const now = Math.floor(Date.now() / 1000);
   const b64 = (o: object) => Buffer.from(JSON.stringify(o)).toString("base64url");
-  const unsigned = `${b64({ alg: "RS256", typ: "JWT" })}.${b64({ iss: s.clientEmail, scope: SCOPE, aud: TOKEN_URL(), iat: now, exp: now + 3600 })}`;
+  const unsigned = `${b64({ alg: "RS256", typ: "JWT" })}.${b64({ iss: s.clientEmail, scope, aud: TOKEN_URL(), iat: now, exp: now + 3600 })}`;
   const signature = createSign("RSA-SHA256").update(unsigned).sign(s.privateKey).toString("base64url");
 
   const res = await fetch(TOKEN_URL(), {
@@ -46,9 +48,11 @@ async function accessToken(): Promise<string> {
   });
   const data = (await res.json().catch(() => ({}))) as { access_token?: string; expires_in?: number; error_description?: string };
   if (!res.ok || !data.access_token) throw new CalendarError("google_auth_failed", data.error_description);
-  cached = { email: s.clientEmail, token: data.access_token, exp: Date.now() + (data.expires_in ?? 3600) * 1000 };
+  cached.set(scope, { email: s.clientEmail, token: data.access_token, exp: Date.now() + (data.expires_in ?? 3600) * 1000 });
   return data.access_token;
 }
+
+const accessToken = () => googleToken(SCOPE);
 
 async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API()}${path}`, {

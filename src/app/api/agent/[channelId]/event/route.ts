@@ -70,5 +70,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ channel
     value: value ?? null,
     assisted,
   });
+  // Во внешние системы клиента: оценка или событие бота (заявка, просмотр, сделка, заказ…)
+  void import("@/lib/integrations/events").then((m) =>
+    type === "rating_up" || type === "rating_down"
+      ? m.emitEvent("rating", { clientId: channel.clientId, agentId: channel.agentId, conversationId: conversation?.id, rating: type === "rating_up" ? "up" : "down" })
+      : m.emitEvent("bot_event", { clientId: channel.clientId, agentId: channel.agentId, conversationId: conversation?.id, botEvent: { type, label: label ?? "", value: value ?? null } }),
+  );
   return Response.json({ ok: true, assisted });
 }

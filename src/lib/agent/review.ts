@@ -43,7 +43,13 @@ export type AgentReview = {
   unmet: { demand: string; count: number; detail: string }[];
   ideas: string[];
   proposals: ReviewProposal[];
+  /** Настроение клиентов за неделю (1–10) и частые жалобы */
+  mood?: { score: number; complaints: { complaint: string; count: number }[] };
+  /** Цифры недели: оценки, передачи, недовольные, ответы сотрудников */
+  stats?: WeekStats;
 };
+
+export type WeekStats = { ratingsUp: number; ratingsDown: number; handoffs: number; upset: number; operatorReplies: number; operatorAvg: number | null; operatorLow: number };
 
 const key = (agentId: string) => `agentReview:${agentId}`;
 
@@ -67,11 +73,13 @@ async function pushReviewHistory(agentId: string, review: AgentReview) {
 
 type Conv = { id: string; lines: string[]; flags: Set<string> };
 
-/** Переписки агента за период — компактно, с пометками 👎 / передан / недоволен / ответил сотрудник. */
-async function transcripts(agentId: string, since: number) {
+/** Переписки агента за период — компактно, с пометками 👎 / передан / недоволен / ответил сотрудник — и цифры недели. */
+async function transcripts(agentId: string, since: number): Promise<{ list: Conv[]; stats: WeekStats }> {
+  const stats: WeekStats = { ratingsUp: 0, ratingsDown: 0, handoffs: 0, upset: 0, operatorReplies: 0, operatorAvg: null, operatorLow: 0 };
   // тестовые разговоры — не в счёт
   const convs = await db.select({ id: conversations.id }).from(conversations).where(and(eq(conversations.agentId, agentId), eq(conversations.isTest, false)));
-  if (!convs.length) return [];
+  if (!convs.length) return { list: [], stats };
+  const scores: number[] = [];
   const rows = await db
     .select({ conversationId: messages.conversationId, role: messages.role, text: messages.text, status: messages.status, meta: messages.meta })
     .from(messages)
@@ -87,15 +95,29 @@ async function transcripts(agentId: string, since: number) {
       const unverified = m.meta?.unverified?.length ? ` [⚠️ нет в базе знаний: ${m.meta.unverified.join(", ")}]` : "";
       c.lines.push(`А: ${text}${m.meta?.rating === "down" ? " [👎]" : ""}${unverified}`);
       if (m.meta?.rating === "down") c.flags.add("👎");
+      if (m.meta?.rating === "down") stats.ratingsDown++;
+      if (m.meta?.rating === "up") stats.ratingsUp++;
       if (unverified) c.flags.add("данные не из базы");
     } else if (m.role === "operator") {
-      c.lines.push(`С: ${text}`);
+      const r = m.meta?.operatorReview;
+      c.lines.push(`С: ${text}${r ? ` [оценка ${r.score}/10${r.problems.length ? `: ${r.problems.join("; ").slice(0, 200)}` : ""}]` : ""}`);
       c.flags.add("ответил сотрудник");
+      stats.operatorReplies++;
+      if (r) {
+        scores.push(r.score);
+        if (r.score < 6) {
+          stats.operatorLow++;
+          c.flags.add("слабый ответ сотрудника");
+        }
+      }
     } else if (m.role === "system" && m.text === "handoff") {
       c.flags.add(m.meta?.upset ? "недоволен" : "передан людям");
+      stats.handoffs++;
+      if (m.meta?.upset) stats.upset++;
     }
   }
-  return [...byConv.values()].filter((c) => c.lines.some((l) => l.startsWith("К:")));
+  if (scores.length) stats.operatorAvg = Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10;
+  return { list: [...byConv.values()].filter((c) => c.lines.some((l) => l.startsWith("К:"))), stats };
 }
 
 type ModelOut = {
@@ -103,6 +125,8 @@ type ModelOut = {
   topics: { topic: string; count: number }[];
   unmet: { demand: string; count: number; detail: string }[];
   ideas: string[];
+  mood: number;
+  complaints: { complaint: string; count: number }[];
   proposals: { title: string; why: string; field: "rules" | "handoff"; action: "append" | "replace"; find: string; text: string; conversations: number[] }[];
 };
 
@@ -115,7 +139,7 @@ export async function reviewAgent(agentId: string, sinceMs = Date.now() - WEEK_M
     .innerJoin(clients, eq(clients.id, agents.clientId))
     .where(eq(agents.id, agentId));
   if (!apiKey || !row) return null;
-  const list = await transcripts(agentId, sinceMs);
+  const { list, stats } = await transcripts(agentId, sinceMs);
   if (list.length < MIN_CONVERSATIONS) return null;
 
   // Сначала разговоры с проблемами — они важнее для правок; общий объём ограничен.
@@ -144,6 +168,8 @@ export async function reviewAgent(agentId: string, sinceMs = Date.now() - WEEK_M
       "• topics — до 8 тем, о которых спрашивали, с числом разговоров;",
       "• unmet — до 6 запросов, которые компания не закрыла: клиенты хотели то, чего нет в предложении (товара, услуги, района, цены, времени), или агент не смог дать ответ; count — сколько разговоров, detail — конкретика (что именно искали, цифры);",
       "• ideas — до 3 практичных идей для бизнеса из этих запросов (что добавить, что изменить). Не выдумывай того, чего нет в переписках.",
+      "• mood — общее настроение клиентов за неделю от 1 (злые, разочарованы) до 10 (довольны), по тону сообщений, оценкам 👍/👎 и недовольству;",
+      "• complaints — до 5 частых жалоб или поводов для недовольства (на агента, сотрудников, сроки, цены, сервис) с числом разговоров; нет жалоб — пустой список.",
       "2) proposals — до 3 правок правил агента, только если в переписках есть явная проблема его поведения (а не нехватка информации — это не правка правил): отвечает длинно или не по делу, предлагает то, что не нужно, не передаёт людям когда надо или передаёт без нужды, повторяется, не уточняет важное, ошибается в тоне.",
       "Для правки: title — коротко суть; why — что видно в переписках; field — rules (правила) или handoff (когда передавать людям); action — append (добавить строку в конец) или replace (заменить фрагмент); find — для replace точный фрагмент текущего текста этого поля, иначе пустая строка; text — новая строка правила (коротко, в повелительном наклонении, на языке текущих правил); conversations — номера разговоров-примеров.",
       "Не предлагай правки, противоречащие текущим правилам без явной причины. Нет явной проблемы — пустой список.",
@@ -152,7 +178,7 @@ export async function reviewAgent(agentId: string, sinceMs = Date.now() - WEEK_M
     schema: {
       type: "object",
       additionalProperties: false,
-      required: ["summary", "topics", "unmet", "ideas", "proposals"],
+      required: ["summary", "topics", "unmet", "ideas", "mood", "complaints", "proposals"],
       properties: {
         summary: { type: "string" },
         topics: {
@@ -169,6 +195,11 @@ export async function reviewAgent(agentId: string, sinceMs = Date.now() - WEEK_M
           },
         },
         ideas: { type: "array", items: { type: "string" } },
+        mood: { type: "integer" },
+        complaints: {
+          type: "array",
+          items: { type: "object", additionalProperties: false, required: ["complaint", "count"], properties: { complaint: { type: "string" }, count: { type: "integer" } } },
+        },
         proposals: {
           type: "array",
           items: {
@@ -200,6 +231,8 @@ export async function reviewAgent(agentId: string, sinceMs = Date.now() - WEEK_M
     topics: data.topics.slice(0, 8).map((t) => ({ topic: t.topic.slice(0, 200), count: t.count })),
     unmet: data.unmet.slice(0, 6).map((u) => ({ demand: u.demand.slice(0, 200), count: u.count, detail: u.detail.slice(0, 500) })),
     ideas: data.ideas.slice(0, 3).map((i) => i.slice(0, 500)),
+    mood: { score: Math.max(1, Math.min(10, Math.round(data.mood || 5))), complaints: (data.complaints ?? []).slice(0, 5).map((c) => ({ complaint: c.complaint.slice(0, 200), count: c.count })) },
+    stats,
     proposals: data.proposals
       .slice(0, 3)
       .filter((p) => p.text.trim() && (p.action === "append" || (p.find.trim() && (config[p.field] ?? "").includes(p.find.trim()))))
@@ -242,6 +275,12 @@ export function reviewReportHtml(items: { agentId: string; title: string; review
   for (const { agentId, title, review: r } of items) {
     lines.push(`<b>${esc(title)}</b> · разговоров: ${r.conversations}`);
     if (r.summary) lines.push(esc(r.summary));
+    if (r.mood) {
+      const s = r.stats;
+      lines.push(`😊 Настроение клиентов: ${r.mood.score}/10${s ? ` · 👍 ${s.ratingsUp} · 👎 ${s.ratingsDown} · недовольных ${s.upset}` : ""}`);
+      for (const c of r.mood.complaints.slice(0, 3)) lines.push(`• жалоба: ${esc(c.complaint)} — ${c.count}`);
+    }
+    if (r.stats?.operatorAvg != null) lines.push(`🧑‍💼 Ответы сотрудников: средняя оценка ${r.stats.operatorAvg}/10, слабых ${r.stats.operatorLow} из ${r.stats.operatorReplies}`);
     if (r.unmet.length) {
       lines.push("Не закрыли:");
       for (const u of r.unmet.slice(0, 4)) lines.push(`• ${esc(u.demand)} — ${u.count}${u.detail ? `: ${esc(u.detail.slice(0, 160))}` : ""}`);

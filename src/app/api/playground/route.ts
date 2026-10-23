@@ -34,7 +34,7 @@ export async function POST(req: Request) {
   const [client] = await db.select().from(clients).where(eq(clients.id, clientId));
   if (!client) return new Response("Client not found", { status: 404 });
 
-  const { system, messages: history, kb: kbInfo, tools } = await prepareChat(config, client, messages, { mode: "dry" });
+  const { system, messages: history, kb: kbInfo, tools, webSearch } = await prepareChat(config, client, messages, { mode: "dry" });
   if (!history.length) return Response.json({ error: "no_user_message" }, { status: 400 });
   const encoder = new TextEncoder();
 
@@ -50,6 +50,7 @@ export async function POST(req: Request) {
           messages: history,
           signal: req.signal,
           tools,
+          webSearch,
         })) {
           if (ev.type === "text") send({ t: "text", v: ev.text });
           else if (ev.type === "tool") send({ t: "tool", name: ev.name, input: ev.input, result: ev.result, error: ev.error });

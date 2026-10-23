@@ -5,6 +5,8 @@ import { loadKnowledge } from "@/lib/kb/store";
 import type { AgentTool, ChatMessage } from "@/lib/llm";
 import { utcToZoned } from "@/lib/google/calendar";
 import { calendarTools, type ToolContext } from "./tools";
+import { loadAgentTools } from "./custom-tools";
+import { webSearchFor } from "@/lib/services";
 import { examplesNote, getExamples } from "./examples";
 
 export const HANDOFF_MARKER = "[[HANDOFF]]";
@@ -42,7 +44,7 @@ export async function prepareChat(
   channelNote?: string,
   /** recentRepeat: false — одинаковые сообщения клиента разделены долгим перерывом (это новый запрос, а не повтор) */
   opts: { recentRepeat?: boolean } = {},
-): Promise<{ system: string; messages: ChatMessage[]; kb: KbInfo; tools?: AgentTool[] }> {
+): Promise<{ system: string; messages: ChatMessage[]; kb: KbInfo; tools?: AgentTool[]; webSearch?: { maxUses: number } }> {
   // Модель требует, чтобы диалог начинался с клиента: приветствие агента отбрасываем.
   const start = history.findIndex((m) => m.role === "user");
   const messages = start < 0 ? [] : history.slice(start).map((m) => ({ ...m }));
@@ -61,7 +63,12 @@ export async function prepareChat(
   // Удачные ответы этого агента — образец стиля (обновляются раз в сутки)
   const examples = tools.agentId ? examplesNote(await getExamples(tools.agentId).catch(() => [])) : undefined;
   const fullSystem = [system, examples, channelNote].filter(Boolean).join("\n\n");
-  const agentTools = config.calendar.enabled ? calendarTools(config.calendar, { ...tools, clientId: client.id }) : undefined;
+  const own = await loadAgentTools(client.id, config.toolIds ?? [], tools).catch((e) => {
+    console.error("load agent tools failed", e);
+    return [];
+  });
+  const all = [...(config.calendar.enabled ? calendarTools(config.calendar, { ...tools, clientId: client.id }) : []), ...own];
+  const agentTools = all.length ? all : undefined;
 
   const last = messages[messages.length - 1];
   // Клиент прислал то же, что и прошлым сообщением (часто — та же кнопка): прямая пометка, иначе модель повторяет ответ
@@ -80,7 +87,8 @@ export async function prepareChat(
           mode: kb.mode,
           sources: (kb.mode === "full" ? kb.sources : kb.used).map(({ title, url }) => ({ title, url })),
         };
-  return { system: fullSystem, messages, kb: kbInfo, tools: agentTools };
+  const webSearch = await webSearchFor(config).catch(() => undefined);
+  return { system: fullSystem, messages, kb: kbInfo, tools: agentTools, webSearch };
 }
 
 /** «[Сейчас у компании: четверг, 15 октября 2026, 21:40 (Europe/Kyiv)]» — служебная строка для агента. */

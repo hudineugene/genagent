@@ -24,6 +24,7 @@ import {
   Pencil,
   RotateCcw,
   SendHorizontal,
+  ShieldCheck,
   Smile,
   Trash2,
   Video,
@@ -34,6 +35,7 @@ import { scenarioFromConversationAction } from "@/app/actions/tests";
 import {
   deleteConversation,
   approveDraft,
+  checkOperatorDraft,
   markRead,
   rejectDraft,
   returnToAgent,
@@ -101,6 +103,9 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
   const [pending, start] = useTransition();
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // «Проверить ответ»: оценка черновика менеджера и улучшенный вариант
+  const [review, setReview] = useState<{ score: number; problems: string[]; better: string } | null>(null);
+  const [checking, startCheck] = useTransition();
   // «В автотест»: создан сценарий-повтор этого разговора (ссылка на вкладку проверки агента)
   const [scenarioNote, setScenarioNote] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
@@ -126,6 +131,7 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
     const body = text.trim();
     if (!body) return;
     setText("");
+    setReview(null);
     run(async () => {
       const r = await sendOperatorMessage(data.id, body);
       if (r.error) setText(body);
@@ -342,6 +348,14 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
                     ✓ {t.inbox.checkFixed} ·{" "}
                   </span>
                 )}
+                {m.meta?.operatorReview && (
+                  <span
+                    className={cx(m.meta.operatorReview.score >= 8 ? "text-success" : m.meta.operatorReview.score >= 6 ? "text-amber-600" : "text-danger")}
+                    title={[`${t.inbox.review}: ${m.meta.operatorReview.score}/10`, ...m.meta.operatorReview.problems.map((p) => `• ${p}`), m.meta.operatorReview.better ? `\n${t.inbox.reviewBetter}:\n${m.meta.operatorReview.better}` : ""].filter(Boolean).join("\n")}
+                  >
+                    <ShieldCheck className="inline size-3" /> {m.meta.operatorReview.score}/10 ·{" "}
+                  </span>
+                )}
                 {m.role === "assistant" ? t.inbox.agent : m.role === "operator" ? (m.author ?? t.inbox.you) : m.role === "bot" ? t.inbox.bot : ""}
                 {ours && " · "}
                 {time.format(new Date(m.createdAt))}
@@ -352,7 +366,7 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
                   </span>
                 )}
                 {m.meta?.cost !== undefined && ` · ${m.meta.cost.toFixed(4)}`}
-                {m.meta?.followUp && ` · ${t.inbox.followUp}`}
+                {m.meta?.campaign ? ` · ${t.inbox.campaign} «${m.meta.campaign.name}»` : m.meta?.followUp && ` · ${t.inbox.followUp}`}
                 {m.meta?.rating === "up" && " · 👍"}
                 {m.meta?.rating === "down" && <span className="text-danger"> · 👎</span>}
                 {m.meta?.fromSite && ` · ${t.inbox.fromSite}`}
@@ -429,10 +443,51 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
           placeholder={data.mode === "ai" ? t.inbox.placeholderAi : t.inbox.placeholder}
           className="max-h-40 min-h-11 flex-1 resize-y rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-accent focus:ring-4 focus:ring-accent/15"
         />
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={!text.trim() || checking}
+          title={t.inbox.reviewCheck}
+          onClick={() =>
+            startCheck(async () => {
+              const r = await checkOperatorDraft(data.id, text);
+              setReview("error" in r ? null : r);
+            })
+          }
+        >
+          {checking ? <Spinner /> : <ShieldCheck className="size-4" />}
+        </Button>
         <Button type="submit" disabled={!text.trim() || pending} title={t.inbox.send}>
           <SendHorizontal className="size-4" />
         </Button>
       </form>
+      )}
+      {review && (
+        <div className="mx-3 mb-3 rounded-xl border border-border bg-surface-2/60 p-3 text-sm">
+          <div className={cx("flex items-center gap-1.5 font-medium", review.score >= 8 ? "text-success" : review.score >= 6 ? "text-amber-600" : "text-danger")}>
+            <ShieldCheck className="size-4" />
+            {review.problems.length ? `${t.inbox.review}: ${review.score}/10` : `${t.inbox.reviewGood} · ${review.score}/10`}
+            <button type="button" className="ml-auto text-muted hover:text-text" onClick={() => setReview(null)} aria-label="×">
+              <X className="size-4" />
+            </button>
+          </div>
+          {review.problems.length > 0 && (
+            <ul className="mt-1.5 list-disc space-y-0.5 pl-5 text-muted">
+              {review.problems.map((p) => (
+                <li key={p}>{p}</li>
+              ))}
+            </ul>
+          )}
+          {review.better && (
+            <div className="mt-2 rounded-lg bg-surface p-2.5">
+              <div className="mb-1 text-xs font-medium text-muted">{t.inbox.reviewBetter}</div>
+              <p className="whitespace-pre-wrap">{review.better}</p>
+              <button type="button" className="mt-1.5 text-xs font-semibold text-accent hover:underline" onClick={() => setText(review.better)}>
+                {t.inbox.reviewUse}
+              </button>
+            </div>
+          )}
+        </div>
       )}
       {data.botReplies && data.channelType === "api" && data.kind !== "comment" && (
         <p className="px-4 pb-3 text-xs text-muted">{t.inbox.apiViaBot}</p>

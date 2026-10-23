@@ -82,3 +82,16 @@ export async function forgetClientMemory(conversationId: string): Promise<InboxR
   refresh();
   return {};
 }
+
+/** «Проверить ответ» до отправки: оценка, замечания и улучшенный вариант (по правилам и базе знаний агента). */
+export async function checkOperatorDraft(conversationId: string, text: string): Promise<{ score: number; problems: string[]; better: string } | { error: string }> {
+  await requireUser();
+  if (!text.trim()) return { error: "empty" };
+  const { reviewReply } = await import("@/lib/agent/operator-review");
+  try {
+    return (await reviewReply(conversationId, text.trim().slice(0, 4000))) ?? { error: "unavailable" };
+  } catch (e) {
+    console.error("check operator draft failed", e);
+    return { error: "unavailable" };
+  }
+}

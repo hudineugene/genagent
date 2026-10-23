@@ -19,15 +19,19 @@ export async function* streamAnthropic(
 ): AsyncGenerator<ChatStreamEvent> {
   const client = getClient(apiKey);
   const withFallback = FALLBACK_MODELS.has(model);
-  const tools: Anthropic.Beta.BetaTool[] | undefined = req.tools?.length
-    ? req.tools.map((t) => ({
-        name: t.name,
-        description: t.description,
-        input_schema: t.inputSchema as Anthropic.Beta.BetaTool.InputSchema,
-        // Вход инструмента приходит потоком сразу; проверяем его сами (runTool → zod).
-        eager_input_streaming: true,
-      }))
-    : undefined;
+  const own: Anthropic.Beta.BetaToolUnion[] = (req.tools ?? []).map((t) => ({
+    name: t.name,
+    description: t.description,
+    input_schema: t.inputSchema as Anthropic.Beta.BetaTool.InputSchema,
+    // Вход инструмента приходит потоком сразу; проверяем его сами (runTool → zod).
+    eager_input_streaming: true,
+  }));
+  // Поиск в интернете выполняет сама Anthropic; новая версия (с фильтрацией результатов) — у старших моделей
+  if (req.webSearch) {
+    const dynamic = /opus|sonnet|fable|mythos/.test(model);
+    own.push({ type: dynamic ? "web_search_20260209" : "web_search_20250305", name: "web_search", max_uses: req.webSearch.maxUses } as Anthropic.Beta.BetaToolUnion);
+  }
+  const tools = own.length ? own : undefined;
 
   const messages: Anthropic.Beta.BetaMessageParam[] = req.messages.map((m) => ({ role: m.role, content: m.content }));
   const usage: ChatUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0 };
@@ -74,6 +78,18 @@ export async function* streamAnthropic(
       final.usage.input_tokens + (final.usage.cache_creation_input_tokens ?? 0) + (final.usage.cache_read_input_tokens ?? 0);
     usage.outputTokens += final.usage.output_tokens;
     usage.cacheReadTokens! += final.usage.cache_read_input_tokens ?? 0;
+    const searches = final.usage.server_tool_use?.web_search_requests ?? 0;
+    if (searches) usage.webSearches = (usage.webSearches ?? 0) + searches;
+
+    // Поиск в интернете — отмечаем, что агент искал (ответ с найденным в сети не проверяется по базе знаний)
+    for (const b of final.content) {
+      if (b.type === "server_tool_use" && b.name === "web_search") yield { type: "tool", name: "web_search", input: b.input, result: "" };
+    }
+    // Поиск занял много шагов — сервер просит продолжить тем же ходом
+    if (final.stop_reason === "pause_turn" && round < MAX_TOOL_ROUNDS) {
+      messages.push({ role: "assistant", content: final.content });
+      continue;
+    }
 
     const calls = final.content.filter((b): b is Anthropic.Beta.BetaToolUseBlock => b.type === "tool_use");
     // Отказ может оборвать вызов инструмента на середине — такие вызовы не выполняем.

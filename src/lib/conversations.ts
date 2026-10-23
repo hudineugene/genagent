@@ -107,6 +107,13 @@ export async function addMessage(
     })
     .onConflictDoNothing()
     .returning();
+  // Клиент написал «стоп» — отписать от рассылок и цепочек
+  if (m && role === "user" && text.length <= 20) {
+    const c = await import("@/lib/campaigns/engine");
+    if (c.isOptOut(text)) await c.optOut(conversationId).catch((e) => console.error("opt-out failed", e));
+  }
+  // Ответ сотрудника — на проверку качества (в фоне; включается у агента)
+  if (m && role === "operator" && (extra.status ?? "sent") === "sent") void import("@/lib/agent/operator-review").then((r) => r.reviewOperatorMessage(m.id));
   // Это сообщение бот уже прислал журналом переписки (тот же номер) — оно есть, второй раз не пишем
   if (!m && extra.botId) {
     const [same] = await db.select().from(messages).where(and(eq(messages.conversationId, conversationId), eq(messages.botId, extra.botId)));
@@ -216,7 +223,7 @@ export async function respond(conversationId: string): Promise<void> {
       await flag(conversationId, "budget_exceeded");
       return;
     }
-    const { system, messages: prepared, kb, tools } = await prepareChat(
+    const { system, messages: prepared, kb, tools, webSearch } = await prepareChat(
       config,
       client,
       chat,
@@ -250,7 +257,7 @@ export async function respond(conversationId: string): Promise<void> {
     const used: { name: string; error?: boolean }[] = [];
     const toolResults: string[] = [];
     let booked = false;
-    for await (const ev of streamChat({ model: config.model, effort: config.effort, system, messages: prepared, tools })) {
+    for await (const ev of streamChat({ model: config.model, effort: config.effort, system, messages: prepared, tools, webSearch })) {
       if (ev.type === "text") text += ev.text;
       else if (ev.type === "tool") {
         used.push({ name: ev.name, ...(ev.error ? { error: true } : {}) });
@@ -382,7 +389,10 @@ export async function respond(conversationId: string): Promise<void> {
       void import("@/lib/agent/lead")
         .then((m) => m.updateLead(conversationId))
         .catch(() => null)
-        .then((lead) => notify().then((n) => n.notifyHandoff(conversationId, summary, { upset, draft, reason, lead })));
+        .then((lead) => {
+          void import("@/lib/integrations/events").then((m) => m.emitEvent("handoff", { clientId: conversation.clientId, agentId: conversation.agentId, conversationId, summary: summary ?? undefined, reason, lead }));
+          return notify().then((n) => n.notifyHandoff(conversationId, summary, { upset, draft, reason, lead }));
+        });
     }
   } catch (e) {
     console.error("respond failed", conversationId, e);
