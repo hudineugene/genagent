@@ -23,7 +23,7 @@
     "lucide-react": "^1.57.0",
     "mailparser": "3.9.32",
     "mammoth": "^1.13.0",
-    "next": "16.4.0",
+    "next": "16.4.1",
     "nodemailer": "10.0.13",
     "openai": "^7.33.0",
     "react": "19.3.0",
@@ -41,7 +41,7 @@
     "@types/react-dom": "^19",
     "drizzle-kit": "^0.31.11",
     "eslint": "^9",
-    "eslint-config-next": "16.4.0",
+    "eslint-config-next": "16.4.1",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5"
