@@ -47,13 +47,28 @@ export type TgMessage = {
   reply_to_message?: TgMessage;
   text?: string;
   caption?: string;
-  photo?: unknown;
+  photo?: { file_id: string; file_size?: number; width?: number }[];
   voice?: unknown;
   video?: unknown;
-  document?: { file_name?: string };
+  document?: { file_id?: string; file_name?: string; file_size?: number; mime_type?: string };
   sticker?: { emoji?: string };
 };
 export type TgUpdate = { update_id: number; message?: TgMessage };
+
+/** Скачать файл, который прислал клиент (документ, фото). null — слишком большой или не вышло. */
+export async function downloadFile(token: string, fileId: string, maxBytes: number): Promise<Buffer | null> {
+  try {
+    const f = await call<{ file_path?: string; file_size?: number }>(token, "getFile", { file_id: fileId });
+    if (!f.file_path || (f.file_size ?? 0) > maxBytes) return null;
+    const res = await fetch(`${API()}/file/bot${token}/${f.file_path}`, { signal: AbortSignal.timeout(30_000) });
+    if (!res.ok) return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    return buf.length > maxBytes ? null : buf;
+  } catch (e) {
+    console.error("telegram download failed", e instanceof Error ? e.message : e);
+    return null;
+  }
+}
 
 export const getMe = (token: string) =>
   call<{ id: number; username: string; first_name: string }>(token, "getMe");

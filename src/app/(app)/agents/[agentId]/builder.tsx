@@ -4,7 +4,7 @@ import { InfoHint } from "@/components/hint";
 
 import Link from "next/link";
 import { useMemo, useState, useTransition, type ReactNode } from "react";
-import { BookOpen, Brain, CalendarDays, ChevronDown, Cpu, MessageSquareText, ScrollText, Sparkles, UserRound, Wrench } from "lucide-react";
+import { BookOpen, Brain, CalendarDays, ChevronDown, ClipboardList, Cpu, FileText, MessageSquareText, ScrollText, Sparkles, UserRound, Wrench } from "lucide-react";
 import { SKILLS } from "@/lib/agent/skills";
 import { compileSystemPrompt, type ClientContext } from "@/lib/agent/compile";
 import { EFFORTS, REPLY_LANGUAGES, TONES, type AgentConfig } from "@/lib/agent/types";
@@ -30,6 +30,9 @@ export type BuilderSource = {
 
 /** Свой инструмент клиента — для выбора в агенте */
 export type BuilderTool = { id: string; title: string; name: string; enabled: boolean; readOnly: boolean };
+/** Анкета клиента — для выбора в агенте */
+export type BuilderForm = { id: string; name: string; kind: "form" | "quiz"; enabled: boolean };
+export type BuilderDocTemplate = { id: string; name: string; enabled: boolean };
 
 export function Builder({
   config,
@@ -40,6 +43,8 @@ export function Builder({
   agentId,
   examples = [],
   tools = [],
+  forms = [],
+  docTemplates = [],
 }: {
   config: AgentConfig;
   onChange: (c: AgentConfig) => void;
@@ -49,6 +54,8 @@ export function Builder({
   agentId?: string;
   examples?: ExampleItem[];
   tools?: BuilderTool[];
+  forms?: BuilderForm[];
+  docTemplates?: BuilderDocTemplate[];
 }) {
   const { t, locale } = useI18n();
   const set = <K extends keyof AgentConfig>(key: K, value: AgentConfig[K]) => onChange({ ...config, [key]: value });
@@ -447,6 +454,61 @@ export function Builder({
         </Link>
       </Section>
 
+      <Section icon={<ClipboardList />} id="forms" title={t.builder.sections.forms} badge={(config.formIds ?? []).length || undefined}>
+        <p className="text-xs text-muted">{t.builder.formsHint}</p>
+        {forms.length === 0 ? (
+          <p className="text-sm text-muted">{t.builder.formsEmpty}</p>
+        ) : (
+          <div className="space-y-1.5">
+            {forms.map((x) => {
+              const on = (config.formIds ?? []).includes(x.id);
+              return (
+                <label key={x.id} className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm hover:bg-surface-2">
+                  <input
+                    type="checkbox"
+                    checked={on}
+                    onChange={() => set("formIds", on ? (config.formIds ?? []).filter((i) => i !== x.id) : [...(config.formIds ?? []), x.id])}
+                    className="size-4 accent-[var(--accent)]"
+                  />
+                  <span className={cx("min-w-0 flex-1 truncate", !x.enabled && "text-muted line-through")}>{x.name}</span>
+                  <span className="shrink-0 text-xs text-muted">{t.forms.kinds[x.kind]}</span>
+                </label>
+              );
+            })}
+          </div>
+        )}
+        <Link href={`/clients/${client.id}?tab=forms`} className="text-sm text-accent hover:underline">
+          {t.builder.formsManage}
+        </Link>
+      </Section>
+
+      <Section icon={<FileText />} id="docs" title={t.builder.sections.docs} badge={(config.docTemplateIds ?? []).length || undefined}>
+        <p className="text-xs text-muted">{t.builder.docsHint}</p>
+        {docTemplates.length === 0 ? (
+          <p className="text-sm text-muted">{t.builder.docsEmpty}</p>
+        ) : (
+          <div className="space-y-1.5">
+            {docTemplates.map((x) => {
+              const on = (config.docTemplateIds ?? []).includes(x.id);
+              return (
+                <label key={x.id} className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm hover:bg-surface-2">
+                  <input
+                    type="checkbox"
+                    checked={on}
+                    onChange={() => set("docTemplateIds", on ? (config.docTemplateIds ?? []).filter((i) => i !== x.id) : [...(config.docTemplateIds ?? []), x.id])}
+                    className="size-4 accent-[var(--accent)]"
+                  />
+                  <span className={cx("min-w-0 flex-1 truncate", !x.enabled && "text-muted line-through")}>{x.name}</span>
+                </label>
+              );
+            })}
+          </div>
+        )}
+        <Link href={`/clients/${client.id}?tab=documents`} className="text-sm text-accent hover:underline">
+          {t.builder.docsManage}
+        </Link>
+      </Section>
+
       <Section icon={<Brain />} id="prompt" title={t.builder.sections.prompt} collapsible defaultOpen={false}>
         <p className="text-xs text-muted">{t.builder.promptHint}</p>
         <pre className="max-h-[480px] overflow-auto whitespace-pre-wrap rounded-xl bg-surface-2 p-4 font-mono text-xs leading-relaxed">
@@ -506,7 +568,7 @@ function ExamplesList({ agentId, items }: { agentId: string; items: ExampleItem[
   );
 }
 
-export const BUILDER_SECTIONS = ["basics", "model", "skills", "style", "knowledge", "rules", "calendar", "tools", "prompt"] as const;
+export const BUILDER_SECTIONS = ["basics", "model", "skills", "style", "knowledge", "rules", "calendar", "tools", "forms", "docs", "prompt"] as const;
 
 function Section({
   id,

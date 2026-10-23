@@ -424,6 +424,8 @@ export function historyForAi(history: { role: string; text: string; meta?: Messa
 
 /** Сообщение клиента для ИИ: к фото — описание того, что на нём (агент сам фото не видит). */
 function withVision(m: { role: string; text: string; meta?: MessageMeta | null }) {
+  // Документ: агент читает его текст
+  if (m.meta?.document) return `${m.text ? `${m.text}\n\n` : ""}[Клиент прислал документ «${m.meta.document.name}». Его текст:]\n${m.meta.document.text}`;
   // Вложение без подписи из журнала (фото, видео…) — ИИ не принимает пустые сообщения
   if (!m.meta?.vision) return m.text.trim() ? m.text : `[${m.role === "user" ? "Клиент прислал" : "Отправлено клиенту"}: ${m.meta?.kind ?? "вложение"}]`;
   return `${m.text ? `${m.text}\n\n` : ""}[Клиент прислал фото. На фото: ${m.meta.vision}]`;

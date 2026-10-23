@@ -1,10 +1,10 @@
 import "server-only";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { agents, channels, conversations, type ConversationContext, type TelegramConfig } from "@/db/schema";
+import { agents, channels, conversations, messages, type Channel, type ConversationContext, type TelegramConfig } from "@/db/schema";
 import { agentConfigSchema } from "@/lib/agent/types";
 import { addMessage, deliver, scheduleReply, upsertConversation } from "@/lib/conversations";
-import { TelegramError, deleteWebhook, getUpdates, messageText, type TgMessage, type TgUpdate } from "./telegram-api";
+import { TelegramError, deleteWebhook, downloadFile, getUpdates, messageText, type TgMessage, type TgUpdate } from "./telegram-api";
 
 /**
  * Получение сообщений Telegram через long polling: программе не нужен публичный адрес,
@@ -98,7 +98,9 @@ async function handleUpdate(channelId: string, u: TgUpdate) {
   });
 
   const text = messageText(m);
-  await addMessage(conversation.id, "user", text);
+  const msg = await addMessage(conversation.id, "user", text);
+  // Файл или фото: агент читает документ / получает описание фото (до ответа)
+  await readAttachment(channel, agent, conversation.id, msg.id, m).catch((e) => console.error("telegram attachment failed", e));
 
   // Команда запуска бота: отвечаем приветствием агента, если оно задано.
   const greeting = agentConfigSchema.safeParse(agent.config).data?.greeting?.trim();
@@ -108,6 +110,40 @@ async function handleUpdate(channelId: string, u: TgUpdate) {
     return;
   }
   scheduleReply(conversation.id);
+}
+
+/** Документ (PDF, Word, текст) — текст в сообщение; фото — описание с надписями и превью. */
+async function readAttachment(channel: Channel, agent: { id: string; clientId: string }, conversationId: string, messageId: string, m: TgMessage) {
+  const token = (channel.config as TelegramConfig).token;
+  if (m.document?.file_id) {
+    const name = m.document.file_name ?? "файл";
+    const { MAX_DOC_BYTES, attachDocument, readDocument } = await import("@/lib/documents/intake");
+    const buf = await downloadFile(token, m.document.file_id, MAX_DOC_BYTES);
+    const text = buf ? await readDocument(buf, name) : null;
+    if (text) await attachDocument(messageId, { name, text }, { clientId: agent.clientId, agentId: agent.id, conversationId });
+    return;
+  }
+  if (m.photo?.length) {
+    // Самый крупный вариант не больше 4 МБ
+    const photo = [...m.photo].sort((a, b) => (b.file_size ?? 0) - (a.file_size ?? 0)).find((p) => (p.file_size ?? 0) <= 4 * 1024 * 1024);
+    if (!photo) return;
+    const buf = await downloadFile(token, photo.file_id, 4 * 1024 * 1024);
+    if (!buf) return;
+    const { describePhoto, saveThumb } = await import("@/lib/media");
+    const data = buf.toString("base64");
+    const vision = await describePhoto(data, "image/jpeg", { agentId: agent.id, clientId: agent.clientId }, m.caption);
+    const thumb = data.length <= 560_000 ? saveThumb(messageId, data, "image/jpeg") : null;
+    const [cur] = await db.select({ meta: messages.meta }).from(messages).where(eq(messages.id, messageId));
+    await db
+      .update(messages)
+      .set({ meta: { ...cur?.meta, kind: "photo", ...(vision ? { vision } : {}), ...(thumb ? { thumb } : {}) } })
+      .where(eq(messages.id, messageId));
+    // Фото документа — тоже на разбор по типам документов клиента
+    if (vision) {
+      const { analyzeDocument } = await import("@/lib/documents/intake");
+      void analyzeDocument({ clientId: agent.clientId, agentId: agent.id, conversationId, messageId, filename: "фото", text: vision }).catch(() => null);
+    }
+  }
 }
 
 /**

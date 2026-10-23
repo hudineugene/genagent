@@ -35,6 +35,8 @@ export type EventPayload = {
   booking?: { start: string; service: string; name: string; phone: string; comment: string };
   rating?: "up" | "down";
   botEvent?: { type: string; label: string; value: number | null };
+  form?: { id: string; name: string; answers: Record<string, string>; score: number | null; maxScore: number | null };
+  document?: { type: string; filename: string; fields: Record<string, string>; summary: string };
 };
 
 export type EventInput = {
@@ -47,6 +49,8 @@ export type EventInput = {
   booking?: EventPayload["booking"];
   rating?: "up" | "down";
   botEvent?: EventPayload["botEvent"];
+  form?: EventPayload["form"];
+  document?: EventPayload["document"];
 };
 
 const LABELS: Record<IntegrationEventType, string> = {
@@ -55,6 +59,8 @@ const LABELS: Record<IntegrationEventType, string> = {
   booking: "Запись",
   rating: "Оценка",
   bot_event: "Событие бота",
+  form: "Анкета",
+  document: "Документ",
 };
 
 export const SHEET_HEADER = ["Дата", "Событие", "Агент", "Канал", "Клиент", "Контакт", "Температура", "Данные клиента", "Подробности", "Диалог"];
@@ -91,6 +97,8 @@ async function buildPayload(event: IntegrationEventType, input: EventInput): Pro
     ...(input.booking ? { booking: input.booking } : {}),
     ...(input.rating ? { rating: input.rating } : {}),
     ...(input.botEvent ? { botEvent: input.botEvent } : {}),
+    ...(input.form ? { form: input.form } : {}),
+    ...(input.document ? { document: input.document } : {}),
   };
 }
 
@@ -106,10 +114,14 @@ export function sheetRow(p: EventPayload): string[] {
           : "👎"
         : p.event === "bot_event" && p.botEvent
           ? `${p.botEvent.label || p.botEvent.type}${p.botEvent.value != null ? ` · ${p.botEvent.value}` : ""}`
-          : (p.summary ?? p.lead?.reason ?? p.reason ?? "");
+          : p.event === "document" && p.document
+            ? `${p.document.filename}: ${Object.entries(p.document.fields).map(([k, v]) => `${k}: ${v}`).join("; ")}${p.document.summary ? ` · ${p.document.summary}` : ""}`
+          : p.event === "form" && p.form
+            ? `${p.form.name}: ${Object.entries(p.form.answers).map(([k, v]) => `${k}: ${v}`).join("; ")}${p.form.score != null ? ` · баллы ${p.form.score}/${p.form.maxScore}` : ""}`
+            : (p.summary ?? p.lead?.reason ?? p.reason ?? "");
   return [
     when,
-    p.event === "bot_event" && p.botEvent ? p.botEvent.label || LABELS.bot_event : LABELS[p.event],
+    p.event === "bot_event" && p.botEvent ? p.botEvent.label || LABELS.bot_event : p.event === "form" && p.form ? `${LABELS.form}: ${p.form.name}` : p.event === "document" && p.document ? `${LABELS.document}: ${p.document.type}` : LABELS[p.event],
     p.agent?.name ?? "",
     p.channel ? `${p.channel.type} ${p.channel.name}` : "",
     p.conversation?.contact ?? "",

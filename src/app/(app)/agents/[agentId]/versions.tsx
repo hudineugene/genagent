@@ -42,6 +42,8 @@ const FIELDS: Field[] = [
   "toolIds",
   "webSearch",
   "operatorReview",
+  "formIds",
+  "docTemplateIds",
 ];
 
 export function VersionsPanel({
@@ -106,6 +108,8 @@ export function VersionsPanel({
       toolIds: b.sections.tools,
       webSearch: b.webSearch,
       operatorReview: b.operatorReview,
+      formIds: b.sections.forms,
+      docTemplateIds: b.sections.docs,
     };
     return map[f];
   };
@@ -135,6 +139,10 @@ export function VersionsPanel({
         return c.skills.map((k) => SKILL_MAP.get(k)?.name[locale] ?? k).join(", ") || "—";
       case "toolIds":
         return String((c.toolIds ?? []).length || "—");
+      case "formIds":
+        return String((c.formIds ?? []).length || "—");
+      case "docTemplateIds":
+        return String((c.docTemplateIds ?? []).length || "—");
       case "kbSourceIds":
         return c.kbSourceIds == null
           ? t.versions.allSources

@@ -134,6 +134,34 @@
       "when": 1792720000000,
       "tag": "0018_campaigns",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1792730000000,
+      "tag": "0019_forms",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1792740000000,
+      "tag": "0020_routines",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1792750000000,
+      "tag": "0021_documents",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1792760000000,
+      "tag": "0022_doc_templates",
+      "breakpoints": true
     }
   ]
 }

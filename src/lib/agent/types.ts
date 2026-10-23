@@ -60,6 +60,10 @@ export const agentConfigSchema = z.object({
   toolIds: z.array(z.string()).max(30).optional(),
   /** Поиск в интернете (если включён в «Внешних сервисах») */
   webSearch: z.boolean().optional(),
+  /** Анкеты и тесты клиента (client_forms), которые проводит агент */
+  formIds: z.array(z.string()).max(20).optional(),
+  /** Шаблоны документов (КП, справки…), которые агент может выдать клиенту */
+  docTemplateIds: z.array(z.string()).max(20).optional(),
   rules: z.string().max(5000).default(""),
   handoff: z.string().max(2000).default(""),
   /** Поля карточки лида через запятую (пусто — общие: что ищет, бюджет, сроки, контакт) */

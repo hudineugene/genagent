@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, count, desc, eq } from "drizzle-orm";
-import { BarChart3, BookOpen, Bot, Megaphone, Plus, Settings, Wrench } from "lucide-react";
+import { BarChart3, BookOpen, Bot, ClipboardList, FileBarChart2, FileText, Megaphone, Plus, Settings, Wrench } from "lucide-react";
 import { db } from "@/db";
-import { agents, campaigns, clientIntegrations, clientTools, clients, kbSources, knowledgeGaps } from "@/db/schema";
+import { agents, campaigns, clientDocTypes, clientDocuments, clientForms, clientIntegrations, clientTools, clients, conversations, docTemplates, formResponses, generatedDocs, kbSources, knowledgeGaps, routines } from "@/db/schema";
 import { getT } from "@/lib/i18n/server";
 import { findModel } from "@/lib/models";
 import type { Dict, Locale } from "@/lib/i18n";
@@ -13,6 +13,9 @@ import { KnowledgeBase } from "./knowledge-base";
 import { ToolsManager } from "./tools";
 import { IntegrationsOut } from "./integrations-out";
 import { CampaignsManager } from "./campaigns";
+import { FormsManager } from "./forms";
+import { RoutinesManager } from "./routines";
+import { DocumentsManager } from "./documents";
 import { campaignStats } from "@/lib/campaigns/engine";
 import { getGoogleSettings } from "@/lib/google/calendar";
 import { OwnersCard } from "./owners";
@@ -32,18 +35,25 @@ export default async function ClientPage({
   const [client] = await db.select().from(clients).where(eq(clients.id, clientId));
   if (!client) notFound();
 
-  const active = tab === "kb" ? "kb" : tab === "tools" ? "tools" : tab === "campaigns" ? "campaigns" : "agents";
-  const [[{ agentsCount }], [{ kbCount }], [{ toolsCount }], [{ campaignsCount }]] = await Promise.all([
+  const active = tab === "kb" ? "kb" : tab === "tools" ? "tools" : tab === "campaigns" ? "campaigns" : tab === "forms" ? "forms" : tab === "routines" ? "routines" : tab === "documents" ? "documents" : "agents";
+  const [[{ agentsCount }], [{ kbCount }], [{ toolsCount }], [{ campaignsCount }], [{ formsCount }], [{ routinesCount }], [{ docTypesCount }], [{ templatesCount }]] = await Promise.all([
     db.select({ agentsCount: count() }).from(agents).where(eq(agents.clientId, clientId)),
     db.select({ kbCount: count() }).from(kbSources).where(eq(kbSources.clientId, clientId)),
     db.select({ toolsCount: count() }).from(clientTools).where(eq(clientTools.clientId, clientId)),
     db.select({ campaignsCount: count() }).from(campaigns).where(eq(campaigns.clientId, clientId)),
+    db.select({ formsCount: count() }).from(clientForms).where(eq(clientForms.clientId, clientId)),
+    db.select({ routinesCount: count() }).from(routines).where(eq(routines.clientId, clientId)),
+    db.select({ docTypesCount: count() }).from(clientDocTypes).where(eq(clientDocTypes.clientId, clientId)),
+    db.select({ templatesCount: count() }).from(docTemplates).where(eq(docTemplates.clientId, clientId)),
   ]);
 
   const tabs = [
     { key: "agents", href: `/clients/${client.id}`, label: t.client.agents, icon: Bot, n: agentsCount },
     { key: "kb", href: `/clients/${client.id}?tab=kb`, label: t.kb.tab, icon: BookOpen, n: kbCount },
     { key: "tools", href: `/clients/${client.id}?tab=tools`, label: t.tools.tab, icon: Wrench, n: toolsCount },
+    { key: "forms", href: `/clients/${client.id}?tab=forms`, label: t.forms.tab, icon: ClipboardList, n: formsCount },
+    { key: "documents", href: `/clients/${client.id}?tab=documents`, label: t.documents.tab, icon: FileText, n: docTypesCount + templatesCount },
+    { key: "routines", href: `/clients/${client.id}?tab=routines`, label: t.routines.tab, icon: FileBarChart2, n: routinesCount },
     { key: "campaigns", href: `/clients/${client.id}?tab=campaigns`, label: t.campaigns.tab, icon: Megaphone, n: campaignsCount },
   ];
 
@@ -73,14 +83,14 @@ export default async function ClientPage({
         }
       />
 
-      <div className="mb-6 flex gap-1 border-b border-border">
+      <div className="mb-6 flex gap-1 overflow-x-auto border-b border-border [scrollbar-width:none]">
         {tabs.map(({ key, href, label, icon: Icon, n }) => (
           <Link
             key={key}
             href={href}
             replace
             className={cx(
-              "-mb-px flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium transition",
+              "-mb-px flex shrink-0 items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium whitespace-nowrap transition",
               active === key ? "border-accent text-accent" : "border-transparent text-muted hover:text-text",
             )}
           >
@@ -97,11 +107,128 @@ export default async function ClientPage({
         <ToolsTab clientId={client.id} />
       ) : active === "campaigns" ? (
         <CampaignsTab clientId={client.id} />
+      ) : active === "forms" ? (
+        <FormsTab clientId={client.id} />
+      ) : active === "documents" ? (
+        <DocumentsTab clientId={client.id} />
+      ) : active === "routines" ? (
+        <RoutinesTab clientId={client.id} />
       ) : (
         <AgentsTab clientId={client.id} t={t} locale={locale} />
       )}
     </div>
   );
+}
+
+async function DocumentsTab({ clientId }: { clientId: string }) {
+  const [types, templates, list] = await Promise.all([
+    db.select().from(clientDocTypes).where(eq(clientDocTypes.clientId, clientId)).orderBy(desc(clientDocTypes.createdAt)),
+    db.select().from(docTemplates).where(eq(docTemplates.clientId, clientId)).orderBy(desc(docTemplates.createdAt)),
+    db.select({ name: agents.name, config: agents.config }).from(agents).where(eq(agents.clientId, clientId)),
+  ]);
+  const typeRows = await Promise.all(
+    types.map(async (r) => {
+      const [[{ total }], recent] = await Promise.all([
+        db.select({ total: count() }).from(clientDocuments).where(eq(clientDocuments.docTypeId, r.id)),
+        db
+          .select({ d: clientDocuments, contact: conversations.contactName })
+          .from(clientDocuments)
+          .leftJoin(conversations, eq(conversations.id, clientDocuments.conversationId))
+          .where(eq(clientDocuments.docTypeId, r.id))
+          .orderBy(desc(clientDocuments.createdAt))
+          .limit(10),
+      ]);
+      return {
+        id: r.id,
+        name: r.name,
+        purpose: r.purpose,
+        fields: r.fields,
+        notify: r.notify,
+        enabled: r.enabled,
+        total,
+        recent: recent.map((x) => ({ at: x.d.createdAt.getTime(), contact: x.contact ?? "", filename: x.d.filename, fields: x.d.fields, summary: x.d.summary })),
+      };
+    }),
+  );
+  const templateRows = await Promise.all(
+    templates.map(async (r) => {
+      const recent = await db
+        .select({ id: generatedDocs.id, at: generatedDocs.createdAt, title: generatedDocs.title, contact: conversations.contactName })
+        .from(generatedDocs)
+        .leftJoin(conversations, eq(conversations.id, generatedDocs.conversationId))
+        .where(eq(generatedDocs.templateId, r.id))
+        .orderBy(desc(generatedDocs.createdAt))
+        .limit(10);
+      return {
+        id: r.id,
+        name: r.name,
+        purpose: r.purpose,
+        body: r.body,
+        fields: r.fields,
+        enabled: r.enabled,
+        counter: r.counter,
+        usedBy: list.filter((a) => a.config.docTemplateIds?.includes(r.id)).map((a) => a.name),
+        recent: recent.map((x) => ({ id: x.id, at: x.at.getTime(), title: x.title, contact: x.contact ?? "" })),
+      };
+    }),
+  );
+  return <DocumentsManager clientId={clientId} types={typeRows} templates={templateRows} />;
+}
+
+async function RoutinesTab({ clientId }: { clientId: string }) {
+  const rows = await db.select().from(routines).where(eq(routines.clientId, clientId)).orderBy(desc(routines.createdAt));
+  return (
+    <RoutinesManager
+      clientId={clientId}
+      rows={rows.map((r) => ({
+        id: r.id,
+        name: r.name,
+        task: r.task,
+        schedule: r.schedule,
+        sources: r.sources,
+        delivery: r.delivery,
+        enabled: r.enabled,
+        lastRunAt: r.lastRunAt?.getTime() ?? null,
+        lastStatus: r.lastStatus,
+        lastResult: r.lastResult,
+      }))}
+    />
+  );
+}
+
+async function FormsTab({ clientId }: { clientId: string }) {
+  const [rows, list] = await Promise.all([
+    db.select().from(clientForms).where(eq(clientForms.clientId, clientId)).orderBy(desc(clientForms.createdAt)),
+    db.select({ name: agents.name, config: agents.config }).from(agents).where(eq(agents.clientId, clientId)),
+  ]);
+  const items = await Promise.all(
+    rows.map(async (r) => {
+      const [[{ total }], recent] = await Promise.all([
+        db.select({ total: count() }).from(formResponses).where(eq(formResponses.formId, r.id)),
+        db
+          .select({ r: formResponses, contact: conversations.contactName })
+          .from(formResponses)
+          .leftJoin(conversations, eq(conversations.id, formResponses.conversationId))
+          .where(eq(formResponses.formId, r.id))
+          .orderBy(desc(formResponses.createdAt))
+          .limit(10),
+      ]);
+      return {
+        id: r.id,
+        kind: r.kind,
+        name: r.name,
+        purpose: r.purpose,
+        fields: r.fields,
+        thanks: r.thanks,
+        notify: r.notify,
+        enabled: r.enabled,
+        total,
+        recent: recent.map((x) => ({ at: x.r.createdAt.getTime(), contact: x.contact ?? "", answers: x.r.answers, score: x.r.score, maxScore: x.r.maxScore })),
+        usedBy: list.filter((a) => a.config.formIds?.includes(r.id)).map((a) => a.name),
+      };
+    }),
+  );
+  return <FormsManager clientId={clientId} rows={items} />;
 }
 
 async function CampaignsTab({ clientId }: { clientId: string }) {

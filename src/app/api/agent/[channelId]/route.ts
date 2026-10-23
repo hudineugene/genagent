@@ -25,6 +25,8 @@ const bodySchema = z.object({
   image: z
     .object({ data: z.string().min(100).max(5_600_000), mediaType: z.enum(["image/jpeg", "image/png", "image/webp"]).default("image/jpeg") })
     .optional(),
+  /** Документ от клиента (PDF, Word, TXT, CSV… до ~20 МБ, base64): агент прочитает его текст */
+  document: z.object({ data: z.string().min(4).max(28_000_000), filename: z.string().trim().min(1).max(200) }).optional(),
   /** Язык, на котором клиент пользуется ботом (ru, uk, en, es…) */
   language: z.string().trim().toLowerCase().regex(/^[a-z]{2}$/).optional(),
   /** Что клиент сейчас открыл в боте — например, карточку объекта */
@@ -61,8 +63,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ channel
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "bad_request", details: parsed.error.issues[0]?.message }, { status: 400 });
-  const { user, text, language, context, messageId, image, team, earlier, voiceReply } = parsed.data;
-  if (!text && !image) return Response.json({ error: "bad_request", details: "text or image required" }, { status: 400 });
+  const { user, text, language, context, messageId, image, team, earlier, voiceReply, document } = parsed.data;
+  if (!text && !image && !document) return Response.json({ error: "bad_request", details: "text or image required" }, { status: 400 });
 
   const { conversation } = await upsertConversation(channel, user.id, {
     name: user.name?.trim() || undefined,
@@ -101,6 +103,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ channel
       .update(messages)
       .set({ meta: { ...(userMsg.meta ?? {}), kind: "photo", ...(vision ? { vision } : {}), ...(thumb ? { thumb } : {}) } })
       .where(eq(messages.id, userMsg.id));
+  }
+  if (document) {
+    // Документ: текст — в сообщение клиента (агент его прочитает), данные — на разбор по типам документов клиента
+    const { attachDocument, readDocument } = await import("@/lib/documents/intake");
+    const docText = await readDocument(Buffer.from(document.data, "base64"), document.filename);
+    if (docText) await attachDocument(userMsg.id, { name: document.filename, text: docText }, { clientId: channel.clientId, agentId: channel.agentId, conversationId: conversation.id });
   }
   const [{ rowid: userRow }] = await db
     .select({ rowid: sql<number>`rowid` })

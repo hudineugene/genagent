@@ -6,6 +6,8 @@ import type { AgentTool, ChatMessage } from "@/lib/llm";
 import { utcToZoned } from "@/lib/google/calendar";
 import { calendarTools, type ToolContext } from "./tools";
 import { loadAgentTools } from "./custom-tools";
+import { formTool, formsNote, loadForms } from "./forms";
+import { docTool, docsNote, loadDocTemplates } from "@/lib/documents/templates";
 import { webSearchFor } from "@/lib/services";
 import { examplesNote, getExamples } from "./examples";
 
@@ -62,12 +64,19 @@ export async function prepareChat(
   );
   // Удачные ответы этого агента — образец стиля (обновляются раз в сутки)
   const examples = tools.agentId ? examplesNote(await getExamples(tools.agentId).catch(() => [])) : undefined;
-  const fullSystem = [system, examples, channelNote].filter(Boolean).join("\n\n");
+  const forms = await loadForms(client.id, config.formIds ?? []).catch(() => []);
+  const templates = await loadDocTemplates(client.id, config.docTemplateIds ?? []).catch(() => []);
+  const fullSystem = [system, examples, formsNote(forms), docsNote(templates), channelNote].filter(Boolean).join("\n\n");
   const own = await loadAgentTools(client.id, config.toolIds ?? [], tools).catch((e) => {
     console.error("load agent tools failed", e);
     return [];
   });
-  const all = [...(config.calendar.enabled ? calendarTools(config.calendar, { ...tools, clientId: client.id }) : []), ...own];
+  const all = [
+    ...(config.calendar.enabled ? calendarTools(config.calendar, { ...tools, clientId: client.id }) : []),
+    ...own,
+    ...forms.map((f) => formTool(f, { ...tools, clientId: client.id })),
+    ...templates.map((t) => docTool(t, { ...tools, clientId: client.id })),
+  ];
   const agentTools = all.length ? all : undefined;
 
   const last = messages[messages.length - 1];

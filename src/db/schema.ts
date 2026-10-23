@@ -223,6 +223,204 @@ export const campaignRuns = sqliteTable(
 );
 export type CampaignRun = typeof campaignRuns.$inferSelect;
 
+/** Поле анкеты. Для теста: correct — правильный ответ, points — баллы за него */
+export type FormField = {
+  key: string;
+  label: string;
+  type: "text" | "choice" | "number" | "phone" | "email" | "rating" | "date";
+  options?: string[];
+  required: boolean;
+  correct?: string;
+  points?: number;
+};
+
+/**
+ * Анкеты, опросы и тесты в диалоге: агент сам проводит клиента по вопросам обычным разговором (в любом канале)
+ * и сохраняет ответы инструментом. Для теста (quiz) — правильные ответы и баллы. Заполненная анкета — менеджеру
+ * в Telegram и во внешние системы (таблица, вебхук).
+ */
+export const clientForms = sqliteTable(
+  "client_forms",
+  {
+    id: id(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: ["form", "quiz"] }).notNull().default("form"),
+    name: text("name").notNull(),
+    /** Когда предлагать — читает агент */
+    purpose: text("purpose").notNull().default(""),
+    fields: text("fields", { mode: "json" }).$type<FormField[]>().notNull().default([]),
+    /** Что сказать после заполнения */
+    thanks: text("thanks").notNull().default(""),
+    notify: integer("notify", { mode: "boolean" }).notNull().default(true),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    createdAt: createdAt(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [index("client_forms_client_idx").on(t.clientId)],
+);
+export type ClientForm = typeof clientForms.$inferSelect;
+
+export const formResponses = sqliteTable(
+  "form_responses",
+  {
+    id: id(),
+    formId: text("form_id")
+      .notNull()
+      .references(() => clientForms.id, { onDelete: "cascade" }),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    agentId: text("agent_id").references(() => agents.id, { onDelete: "set null" }),
+    conversationId: text("conversation_id").references(() => conversations.id, { onDelete: "set null" }),
+    answers: text("answers", { mode: "json" }).$type<Record<string, string>>().notNull().default({}),
+    score: integer("score"),
+    maxScore: integer("max_score"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("form_responses_form_idx").on(t.formId, t.createdAt)],
+);
+export type FormResponse = typeof formResponses.$inferSelect;
+
+/** Когда запускать отчёт (время — по Киеву). weekday: 1 — пн … 0 — вс; day: число месяца */
+export type RoutineSchedule = { freq: "daily" | "weekly" | "monthly"; hour: number; weekday?: number; day?: number };
+/** Откуда брать данные */
+export type RoutineSource =
+  | { type: "conversations"; days: number; agentIds?: string[] }
+  | { type: "sheet"; url: string; sheet: string }
+  | { type: "url"; url: string }
+  | { type: "search"; query: string };
+/** Куда отправить: сотрудникам студии (бот уведомлений), владельцу бизнеса (подписанные владельцы клиента) */
+export type RoutineDelivery = { team: boolean; owners: boolean };
+
+/**
+ * Отчёты по расписанию: агент сам собирает данные (разговоры, Google Таблица, страница сайта, поиск в интернете),
+ * выполняет задание владельца (KPI, конкуренты, отклонения от бюджета, жалобы…) и присылает отчёт в Telegram.
+ */
+export const routines = sqliteTable(
+  "routines",
+  {
+    id: id(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    task: text("task").notNull(),
+    schedule: text("schedule", { mode: "json" }).$type<RoutineSchedule>().notNull(),
+    sources: text("sources", { mode: "json" }).$type<RoutineSource[]>().notNull().default([]),
+    delivery: text("delivery", { mode: "json" }).$type<RoutineDelivery>().notNull().default({ team: true, owners: false }),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(false),
+    lastRunAt: integer("last_run_at", { mode: "timestamp_ms" }),
+    lastStatus: text("last_status"),
+    lastResult: text("last_result"),
+    createdAt: createdAt(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [index("routines_client_idx").on(t.clientId)],
+);
+export type Routine = typeof routines.$inferSelect;
+
+/** Поле, которое достаём из документа */
+export type DocField = { key: string; label: string };
+
+/**
+ * Типы документов клиента: что за документ (счёт, договор, резюме, чек…) и какие данные из него достать.
+ * Когда клиент присылает файл или фото документа, тип определяется сам, данные извлекаются и сохраняются,
+ * уходят менеджеру и во внешние системы (таблица, вебхук).
+ */
+export const clientDocTypes = sqliteTable(
+  "client_doc_types",
+  {
+    id: id(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    /** Как узнать такой документ — для модели */
+    purpose: text("purpose").notNull().default(""),
+    fields: text("fields", { mode: "json" }).$type<DocField[]>().notNull().default([]),
+    notify: integer("notify", { mode: "boolean" }).notNull().default(true),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    createdAt: createdAt(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [index("client_doc_types_client_idx").on(t.clientId)],
+);
+export type ClientDocType = typeof clientDocTypes.$inferSelect;
+
+export const clientDocuments = sqliteTable(
+  "client_documents",
+  {
+    id: id(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    docTypeId: text("doc_type_id").references(() => clientDocTypes.id, { onDelete: "set null" }),
+    conversationId: text("conversation_id").references(() => conversations.id, { onDelete: "set null" }),
+    messageId: text("message_id"),
+    filename: text("filename").notNull().default(""),
+    fields: text("fields", { mode: "json" }).$type<Record<string, string>>().notNull().default({}),
+    /** Коротко: что за документ и главное в нём */
+    summary: text("summary").notNull().default(""),
+    createdAt: createdAt(),
+  },
+  (t) => [index("client_documents_client_idx").on(t.clientId, t.createdAt)],
+);
+export type ClientDocument = typeof clientDocuments.$inferSelect;
+
+/**
+ * Шаблоны документов (КП, справка, счёт, договор): текст с {{полями}}. Агент заполняет поля из разговора,
+ * документ получает ссылку (страница для печати и сохранения в PDF), агент отправляет её клиенту.
+ * Встроенные поля: {{date}} — сегодня, {{number}} — номер документа, {{client}} — имя клиента.
+ */
+export const docTemplates = sqliteTable(
+  "doc_templates",
+  {
+    id: id(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    purpose: text("purpose").notNull().default(""),
+    body: text("body").notNull().default(""),
+    fields: text("fields", { mode: "json" }).$type<DocField[]>().notNull().default([]),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    /** Сколько документов выдано — для {{number}} */
+    counter: integer("counter").notNull().default(0),
+    createdAt: createdAt(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [index("doc_templates_client_idx").on(t.clientId)],
+);
+export type DocTemplate = typeof docTemplates.$inferSelect;
+
+/** Выданный документ: id — неугадываемая ссылка /d/<id> */
+export const generatedDocs = sqliteTable(
+  "generated_docs",
+  {
+    id: text("id").primaryKey(),
+    templateId: text("template_id").references(() => docTemplates.id, { onDelete: "set null" }),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    conversationId: text("conversation_id").references(() => conversations.id, { onDelete: "set null" }),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("generated_docs_client_idx").on(t.clientId, t.createdAt)],
+);
+export type GeneratedDoc = typeof generatedDocs.$inferSelect;
+
 export const kbSources = sqliteTable(
   "kb_sources",
   {
@@ -547,6 +745,8 @@ export type ConversationContext = {
 };
 
 export type MessageMeta = {
+  /** Документ от клиента: имя файла и извлечённый текст (агент его читает) */
+  document?: { name: string; text: string };
   /** Сообщение рассылки или цепочки: какая и какой шаг */
   campaign?: { id: string; name: string; step: number };
   /** Оценка ответа сотрудника (контроль качества): 1–10, замечания, улучшенный вариант */

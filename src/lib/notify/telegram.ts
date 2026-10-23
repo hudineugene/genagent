@@ -354,6 +354,73 @@ export async function notifyGaps(agentId: string, count: number) {
   }
 }
 
+/** Сообщение подписанным владельцам бизнеса клиента. Возвращает, скольким отправлено. */
+export async function sendToOwners(clientId: string, html: string): Promise<number> {
+  const s = await getNotifySettings();
+  if (!s?.token) return 0;
+  let n = 0;
+  for (const o of (s.owners ?? []).filter((x) => x.clientId === clientId)) {
+    try {
+      await send(s, o.chatId, html);
+      n++;
+    } catch (e) {
+      console.error("send to owner failed", o.chatId, e instanceof Error ? e.message : e);
+    }
+  }
+  return n;
+}
+
+/** Сообщение сотрудникам студии (подписчикам бота уведомлений). */
+export async function sendToTeam(html: string) {
+  await broadcast(html);
+}
+
+/** Клиент прислал документ, данные из него извлечены — менеджеру. */
+export async function notifyDocument(
+  conversationId: string | null,
+  clientId: string,
+  doc: { type: string; filename: string; fields: Record<string, string>; summary: string },
+) {
+  try {
+    const s = await getNotifySettings();
+    const row = conversationId ? await conversationInfo(conversationId) : null;
+    let where = row ? `${header(row)} · ${esc(row.agent.name)}` : "";
+    if (!row) {
+      const [c] = await db.select({ name: clients.name }).from(clients).where(eq(clients.id, clientId));
+      where = c ? `<b>${esc(c.name)}</b>` : "";
+    }
+    const lines = Object.entries(doc.fields).map(([k, v]) => `• ${esc(k)}: ${esc(v.slice(0, 300))}`);
+    await broadcast(
+      `📄 <b>${esc(doc.type)}</b> · ${esc(doc.filename)}\n${where}\n\n${doc.summary ? `${esc(doc.summary)}\n\n` : ""}${lines.join("\n")}`,
+      conversationId ? openLink(s, conversationId) : undefined,
+    );
+  } catch (e) {
+    console.error("notify document failed", e);
+  }
+}
+
+/** Клиент заполнил анкету или прошёл тест — ответы менеджеру. */
+export async function notifyForm(
+  conversationId: string | null,
+  clientId: string,
+  form: { name: string; answers: Record<string, string>; score: number | null; maxScore: number | null },
+) {
+  try {
+    const s = await getNotifySettings();
+    const row = conversationId ? await conversationInfo(conversationId) : null;
+    let where = row ? `${header(row)} · ${esc(row.agent.name)}` : "";
+    if (!row) {
+      const [c] = await db.select({ name: clients.name }).from(clients).where(eq(clients.id, clientId));
+      where = c ? `<b>${esc(c.name)}</b>` : "";
+    }
+    const lines = Object.entries(form.answers).map(([k, v]) => `• ${esc(k)}: ${esc(v.slice(0, 300))}`);
+    const score = form.score != null ? `\n🎯 Баллы: <b>${form.score}</b> из ${form.maxScore}` : "";
+    await broadcast(`📝 <b>Анкета «${esc(form.name)}»</b>\n${where}\n\n${lines.join("\n")}${score}`, conversationId ? openLink(s, conversationId) : undefined);
+  } catch (e) {
+    console.error("notify form failed", e);
+  }
+}
+
 /** Сверка нашла, что один и тот же факт в данных агента записан по-разному (например, две цены объекта). */
 export async function notifyConflicts(agentId: string, conflicts: { item: string; values: string[]; where: string }[]) {
   try {
