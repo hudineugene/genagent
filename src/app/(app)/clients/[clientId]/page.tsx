@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, asc, count, desc, eq } from "drizzle-orm";
-import { BarChart3, BookOpen, Bot, ClipboardList, ClipboardCheck, FileBarChart2, FileText, Gift, Mic, PenLine, Truck, Table2, Megaphone, Plus, Settings, Wrench } from "lucide-react";
+import { BarChart3, Blocks, BookOpen, Bot, LayoutDashboard, ClipboardList, ClipboardCheck, FileBarChart2, FileText, Gift, Mic, PenLine, Truck, Table2, Megaphone, Plus, Settings, Wrench } from "lucide-react";
 import { db } from "@/db";
 import { agents, approvals, campaigns, channels, clientLogistics, contentItems, loyaltyAccounts, loyaltyPrograms, loyaltyTx, meetings, clientDocTypes, clientDocuments, clientForms, dataTables, clientIntegrations, clientTools, clients, conversations, docTemplates, formResponses, generatedDocs, kbSources, knowledgeGaps, routines } from "@/db/schema";
 import { getT } from "@/lib/i18n/server";
@@ -43,8 +43,9 @@ export default async function ClientPage({
   const [client] = await db.select().from(clients).where(eq(clients.id, clientId));
   if (!client) notFound();
 
-  const active = tab === "kb" ? "kb" : tab === "tools" ? "tools" : tab === "campaigns" ? "campaigns" : tab === "forms" ? "forms" : tab === "routines" ? "routines" : tab === "documents" ? "documents" : tab === "data" ? "data" : tab === "approvals" ? "approvals" : tab === "content" ? "content" : tab === "meetings" ? "meetings" : tab === "loyalty" ? "loyalty" : tab === "logistics" ? "logistics" : "agents";
-  const [[{ agentsCount }], [{ kbCount }], [{ toolsCount }], [{ campaignsCount }], [{ formsCount }], [{ routinesCount }], [{ docTypesCount }], [{ templatesCount }], [{ tablesCount }], [{ pendingApprovals }], [{ approvalsCount }], teamAgents, [{ contentCount }], [{ meetingsCount }], [{ programsCount }]] = await Promise.all([
+  const SECTIONS = ["kb", "data", "modules", "tools", "forms", "documents", "loyalty", "logistics", "approvals", "campaigns", "content", "meetings", "routines"] as const;
+  const active = (SECTIONS as readonly string[]).includes(tab ?? "") ? (tab as (typeof SECTIONS)[number]) : "agents";
+  const [[{ agentsCount }], [{ kbCount }], [{ toolsCount }], [{ campaignsCount }], [{ formsCount }], [{ routinesCount }], [{ docTypesCount }], [{ templatesCount }], [{ tablesCount }], [{ pendingApprovals }], [{ approvalsCount }], teamAgents, [{ contentCount }], [{ meetingsCount }], [{ programsCount }], [{ outsCount }], [logistics], agentConfigs] = await Promise.all([
     db.select({ agentsCount: count() }).from(agents).where(eq(agents.clientId, clientId)),
     db.select({ kbCount: count() }).from(kbSources).where(eq(kbSources.clientId, clientId)),
     db.select({ toolsCount: count() }).from(clientTools).where(eq(clientTools.clientId, clientId)),
@@ -60,29 +61,54 @@ export default async function ClientPage({
     db.select({ contentCount: count() }).from(contentItems).where(eq(contentItems.clientId, clientId)),
     db.select({ meetingsCount: count() }).from(meetings).where(eq(meetings.clientId, clientId)),
     db.select({ programsCount: count() }).from(loyaltyPrograms).where(eq(loyaltyPrograms.clientId, clientId)),
+    db.select({ outsCount: count() }).from(clientIntegrations).where(eq(clientIntegrations.clientId, clientId)),
+    db.select({ base: clientLogistics.baseAddress }).from(clientLogistics).where(eq(clientLogistics.clientId, clientId)),
+    db.select({ config: agents.config }).from(agents).where(eq(agents.clientId, clientId)),
   ]);
 
-  const tabs = [
-    { key: "agents", href: `/clients/${client.id}`, label: t.client.agents, icon: Bot, n: agentsCount },
-    { key: "kb", href: `/clients/${client.id}?tab=kb`, label: t.kb.tab, icon: BookOpen, n: kbCount },
-    { key: "tools", href: `/clients/${client.id}?tab=tools`, label: t.tools.tab, icon: Wrench, n: toolsCount },
-    { key: "forms", href: `/clients/${client.id}?tab=forms`, label: t.forms.tab, icon: ClipboardList, n: formsCount },
-    { key: "documents", href: `/clients/${client.id}?tab=documents`, label: t.documents.tab, icon: FileText, n: docTypesCount + templatesCount },
-    { key: "data", href: `/clients/${client.id}?tab=data`, label: t.data.tab, icon: Table2, n: tablesCount },
-    { key: "content", href: `/clients/${client.id}?tab=content`, label: t.content.tab, icon: PenLine, n: contentCount },
-    { key: "meetings", href: `/clients/${client.id}?tab=meetings`, label: t.meetings.tab, icon: Mic, n: meetingsCount },
-    { key: "loyalty", href: `/clients/${client.id}?tab=loyalty`, label: t.loyalty.tab, icon: Gift, n: programsCount },
-    { key: "logistics", href: `/clients/${client.id}?tab=logistics`, label: t.logistics.tab, icon: Truck, n: 0 },
-    ...(teamAgents || approvalsCount ? [{ key: "approvals", href: `/clients/${client.id}?tab=approvals`, label: t.approvals.tab, icon: ClipboardCheck, n: pendingApprovals }] : []),
-    { key: "routines", href: `/clients/${client.id}?tab=routines`, label: t.routines.tab, icon: FileBarChart2, n: routinesCount },
-    { key: "campaigns", href: `/clients/${client.id}?tab=campaigns`, label: t.campaigns.tab, icon: Megaphone, n: campaignsCount },
+  const base = `/clients/${client.id}`;
+  const used = (f: (c: (typeof agentConfigs)[number]["config"]) => boolean) => agentConfigs.filter((a) => f(a.config)).length;
+  const modules: ModuleCard[] = [
+    { key: "tools", icon: Wrench, title: t.tools.tab, text: t.ws.mod.tools, n: toolsCount + outsCount, used: used((c) => Boolean(c.toolIds?.length)) },
+    { key: "forms", icon: ClipboardList, title: t.forms.tab, text: t.ws.mod.forms, n: formsCount, used: used((c) => Boolean(c.formIds?.length)) },
+    { key: "documents", icon: FileText, title: t.documents.tab, text: t.ws.mod.documents, n: docTypesCount + templatesCount, used: used((c) => Boolean(c.docTemplateIds?.length)) },
+    { key: "loyalty", icon: Gift, title: t.loyalty.tab, text: t.ws.mod.loyalty, n: programsCount, used: used((c) => Boolean(c.loyaltyProgramId)) },
+    { key: "logistics", icon: Truck, title: t.logistics.tab, text: t.ws.mod.logistics, n: logistics?.base ? 1 : 0, used: used((c) => Boolean(c.logistics)) },
+    { key: "approvals", icon: ClipboardCheck, title: t.ws.mod.teamTitle, text: t.ws.mod.team, n: teamAgents ? 1 : approvalsCount, used: used((c) => Boolean(c.team?.enabled)), badge: pendingApprovals },
+  ];
+  const nav: { title?: string; items: { key: string; label: string; icon: typeof Bot; n?: number; alert?: number }[] }[] = [
+    { items: [{ key: "agents", label: t.ws.overview, icon: LayoutDashboard, n: agentsCount }] },
+    {
+      title: t.ws.knowledge,
+      items: [
+        { key: "kb", label: t.kb.tab, icon: BookOpen, n: kbCount },
+        { key: "data", label: t.data.tab, icon: Table2, n: tablesCount },
+      ],
+    },
+    {
+      title: t.ws.modules,
+      items: [
+        { key: "modules", label: t.ws.catalog, icon: Blocks, n: modules.filter((m) => m.n > 0).length },
+        // В меню — только настроенные модули и открытый сейчас; остальные — в каталоге
+        ...modules.filter((m) => m.n > 0 || m.key === active).map((m) => ({ key: m.key, label: m.title, icon: m.icon, alert: m.badge })),
+      ],
+    },
+    {
+      title: t.ws.work,
+      items: [
+        { key: "campaigns", label: t.campaigns.tab, icon: Megaphone, n: campaignsCount },
+        { key: "content", label: t.content.tab, icon: PenLine, n: contentCount },
+        { key: "meetings", label: t.meetings.tab, icon: Mic, n: meetingsCount },
+        { key: "routines", label: t.routines.tab, icon: FileBarChart2, n: routinesCount },
+      ],
+    },
   ];
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="mx-auto max-w-7xl">
       <BackLink href="/clients" label={t.nav.clients} />
       <PageHeader
-        icon={<ClientAvatar name={client.name} color={client.color} size={56} />}
+        icon={<ClientAvatar name={client.name} color={client.color} size={40} />}
         title={client.name}
         subtitle={[client.industry, client.website].filter(Boolean).join(" · ") || undefined}
         actions={
@@ -104,24 +130,35 @@ export default async function ClientPage({
         }
       />
 
-      <div className="mb-6 flex gap-1 overflow-x-auto border-b border-border [scrollbar-width:none]">
-        {tabs.map(({ key, href, label, icon: Icon, n }) => (
-          <Link
-            key={key}
-            href={href}
-            replace
-            className={cx(
-              "-mb-px flex shrink-0 items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium whitespace-nowrap transition",
-              active === key ? "border-accent text-accent" : "border-transparent text-muted hover:text-text",
-            )}
-          >
-            <Icon className="size-4" />
-            {label}
-            <span className="rounded-full bg-surface-2 px-1.5 text-xs text-muted">{n}</span>
-          </Link>
-        ))}
-      </div>
-
+      <div className="grid gap-6 md:grid-cols-[200px_minmax(0,1fr)] md:gap-8">
+        {/* Разделы клиента: на компьютере — колонка слева, на телефоне — строка с прокруткой */}
+        <nav className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1 [scrollbar-width:none] md:sticky md:top-6 md:mx-0 md:flex-col md:gap-4 md:self-start md:overflow-visible md:p-0">
+          {nav.map((g, i) => (
+            <div key={i} className="flex shrink-0 gap-1 md:flex-col md:gap-0.5">
+              {g.title && <div className="hidden px-2.5 pb-1 text-[11px] font-medium tracking-wide text-muted uppercase md:block">{g.title}</div>}
+              {g.items.map(({ key, label, icon: Icon, n, alert }) => (
+                <Link
+                  key={key}
+                  href={key === "agents" ? base : `${base}?tab=${key}`}
+                  replace
+                  className={cx(
+                    "flex shrink-0 items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm whitespace-nowrap transition",
+                    active === key ? "bg-surface font-medium text-text shadow-[0_0_0_1px_var(--border)] [&>svg]:text-accent" : "text-muted hover:bg-surface hover:text-text",
+                  )}
+                >
+                  <Icon className="size-4 shrink-0" />
+                  <span className="flex-1">{label}</span>
+                  {alert ? (
+                    <span className="min-w-5 rounded-full bg-danger px-1.5 text-center text-[11px] leading-5 font-semibold text-white">{alert}</span>
+                  ) : n ? (
+                    <span className="text-xs text-muted">{n}</span>
+                  ) : null}
+                </Link>
+              ))}
+            </div>
+          ))}
+        </nav>
+        <div className="min-w-0">
       {active === "kb" ? (
         <KnowledgeTab clientId={client.id} />
       ) : active === "tools" ? (
@@ -146,10 +183,55 @@ export default async function ClientPage({
         <DocumentsTab clientId={client.id} />
       ) : active === "routines" ? (
         <RoutinesTab clientId={client.id} />
+      ) : active === "modules" ? (
+        <ModulesCatalog base={base} modules={modules} t={t} />
       ) : (
-        <AgentsTab clientId={client.id} t={t} locale={locale} />
+        <AgentsTab clientId={client.id} t={t} locale={locale} base={base} modules={modules} />
       )}
+        </div>
+      </div>
     </div>
+  );
+}
+
+type ModuleCard = { key: string; icon: typeof Bot; title: string; text: string; n: number; used: number; badge?: number };
+
+/** Каталог модулей: что можно подключить клиенту, что уже настроено и сколько агентов этим пользуется. */
+function ModulesCatalog({ base, modules, t }: { base: string; modules: ModuleCard[]; t: Dict }) {
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-base font-semibold">{t.ws.catalogTitle}</h2>
+        <p className="mt-1 max-w-3xl text-sm text-muted">{t.ws.catalogHint}</p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {modules.map((m) => (
+          <ModuleTile key={m.key} base={base} m={m} t={t} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ModuleTile({ base, m, t, compact }: { base: string; m: ModuleCard; t: Dict; compact?: boolean }) {
+  const on = m.n > 0;
+  return (
+    <Link href={`${base}?tab=${m.key}`} replace className="group">
+      <Card className={cx("flex h-full flex-col gap-2 transition group-hover:border-accent/50", compact ? "p-3.5" : "p-4", !on && "border-dashed bg-surface/60")}>
+        <div className="flex items-center gap-2.5">
+          <span className={cx("grid size-8 shrink-0 place-items-center rounded-lg", on ? "bg-accent-soft text-accent" : "bg-surface-2 text-muted")}>
+            <m.icon className="size-4" />
+          </span>
+          <span className="min-w-0 flex-1 text-sm leading-tight font-medium">{m.title}</span>
+          {m.badge ? <Badge tone="warning">{m.badge}</Badge> : null}
+        </div>
+        {!compact && <p className="text-[13px] text-muted">{m.text}</p>}
+        <div className="mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
+          <Badge tone={on ? "success" : "neutral"}>{on ? t.ws.on : t.ws.off}</Badge>
+          {!compact && <span>{on ? (m.used ? t.ws.usedBy.replace("{n}", String(m.used)) : t.ws.notUsed) : t.ws.setUp}</span>}
+        </div>
+      </Card>
+    </Link>
   );
 }
 
@@ -526,7 +608,7 @@ async function KnowledgeTab({ clientId }: { clientId: string }) {
   return <KnowledgeBase clientId={clientId} sources={sources} semantic={semantic} />;
 }
 
-async function AgentsTab({ clientId, t, locale }: { clientId: string; t: Dict; locale: Locale }) {
+async function AgentsTab({ clientId, t, locale, base, modules }: { clientId: string; t: Dict; locale: Locale; base: string; modules: ModuleCard[] }) {
   const [list, notify, owners, [{ openGaps }]] = await Promise.all([
     db.select().from(agents).where(eq(agents.clientId, clientId)).orderBy(desc(agents.updatedAt)),
     getNotifySettings(),
@@ -552,12 +634,13 @@ async function AgentsTab({ clientId, t, locale }: { clientId: string; t: Dict; l
 
   return (
     <>
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <h2 className="mb-3 text-base font-semibold">{t.client.agents}</h2>
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
       {list.map((a) => (
         <Link key={a.id} href={`/agents/${a.id}`} className="group">
-          <Card className="flex h-full flex-col gap-3 p-5 transition group-hover:border-accent/50 group-hover:shadow-lg group-hover:shadow-black/5">
+          <Card className="flex h-full flex-col gap-3 p-4 transition group-hover:border-accent/50">
             <div className="flex items-start gap-3">
-              <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-surface-2 text-xl">
+              <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-surface-2 text-lg">
                 {a.config.icon}
               </span>
               <div className="min-w-0 flex-1">
@@ -577,6 +660,17 @@ async function AgentsTab({ clientId, t, locale }: { clientId: string; t: Dict; l
             </div>
           </Card>
         </Link>
+      ))}
+    </div>
+    <div className="mt-8 mb-3 flex items-center justify-between gap-3">
+      <h2 className="text-base font-semibold">{t.ws.modules}</h2>
+      <Link href={`${base}?tab=modules`} replace className="text-sm text-accent hover:underline">
+        {t.ws.allModules}
+      </Link>
+    </div>
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+      {modules.map((m) => (
+        <ModuleTile key={m.key} base={base} m={m} t={t} compact />
       ))}
     </div>
     <OwnersCard

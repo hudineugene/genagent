@@ -3,7 +3,7 @@ import { hideExampleAction, refreshExamplesAction } from "@/app/actions/examples
 import { InfoHint } from "@/components/hint";
 
 import Link from "next/link";
-import { useMemo, useState, useTransition, type ReactNode } from "react";
+import { createContext, useContext, useMemo, useState, useTransition, type ReactNode } from "react";
 import { BookOpen, Brain, CalendarDays, ChevronDown, ClipboardList, Cpu, FileText, Table2, MessageSquareText, Users, Gift, ScrollText, Sparkles, UserRound, Wrench } from "lucide-react";
 import { SKILLS } from "@/lib/agent/skills";
 import { compileSystemPrompt, type ClientContext } from "@/lib/agent/compile";
@@ -669,6 +669,20 @@ function ExamplesList({ agentId, items }: { agentId: string; items: ExampleItem[
 
 export const BUILDER_SECTIONS = ["basics", "model", "skills", "style", "knowledge", "rules", "calendar", "tools", "forms", "docs", "data", "loyalty", "team", "prompt"] as const;
 
+/** Экраны настроек агента: вместо одной длинной страницы — короткие группы разделов. */
+export const BUILDER_GROUPS = {
+  profile: ["basics", "style"],
+  brain: ["model", "skills"],
+  knowledge: ["knowledge", "rules"],
+  abilities: ["calendar", "tools", "forms", "docs", "data", "loyalty", "team"],
+  prompt: ["prompt"],
+} as const satisfies Record<string, readonly (typeof BUILDER_SECTIONS)[number][]>;
+export type BuilderGroup = keyof typeof BUILDER_GROUPS;
+export const groupOf = (section: string): BuilderGroup | null =>
+  (Object.keys(BUILDER_GROUPS) as BuilderGroup[]).find((g) => (BUILDER_GROUPS[g] as readonly string[]).includes(section)) ?? null;
+/** Какой экран открыт: разделы других экранов не показываются (но их несохранённые правки живут в конфигурации). */
+export const BuilderGroupContext = createContext<BuilderGroup | null>(null);
+
 function Section({
   id,
   icon,
@@ -687,6 +701,8 @@ function Section({
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
+  const group = useContext(BuilderGroupContext);
+  if (group && !(BUILDER_GROUPS[group] as readonly string[]).includes(id)) return null;
   const header = (
     <span className="flex items-center gap-2.5 font-semibold [&>svg]:size-[18px] [&>svg]:text-accent">
       {icon}
@@ -697,7 +713,7 @@ function Section({
     </span>
   );
   return (
-    <Card className="scroll-mt-20 p-5" id={`section-${id}`}>
+    <Card className="scroll-mt-20 p-4 md:p-5" id={`section-${id}`}>
       {collapsible ? (
         <button type="button" onClick={() => setOpen(!open)} className="flex w-full items-center justify-between">
           {header}

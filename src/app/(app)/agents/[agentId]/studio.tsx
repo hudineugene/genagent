@@ -8,7 +8,7 @@ import type { AgentConfig } from "@/lib/agent/types";
 import type { ClientContext } from "@/lib/agent/compile";
 import { useI18n } from "@/lib/i18n/client";
 import { Button, Input, Select, Spinner, cx } from "@/components/ui";
-import { BUILDER_SECTIONS, Builder } from "./builder";
+import { BUILDER_GROUPS, Builder, BuilderGroupContext, groupOf, type BuilderGroup } from "./builder";
 import { Playground } from "./playground";
 import { VersionsPanel } from "./versions";
 import type { BuilderDocTemplate, BuilderProgram, BuilderTable, BuilderForm, BuilderSource, BuilderTool, ExampleItem } from "./builder";
@@ -54,6 +54,18 @@ export function AgentStudio({
   const [saving, startSave] = useTransition();
   const [deleting, startDelete] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [group, setGroup] = useState<BuilderGroup>("profile");
+  // Ссылка вида /agents/<id>#rules или #abilities открывает нужный экран настроек
+  useEffect(() => {
+    const open = () => {
+      const h = window.location.hash.slice(1);
+      const g = h in BUILDER_GROUPS ? (h as BuilderGroup) : groupOf(h);
+      if (g) setGroup(g);
+    };
+    open();
+    window.addEventListener("hashchange", open);
+    return () => window.removeEventListener("hashchange", open);
+  }, []);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -162,9 +174,11 @@ export function AgentStudio({
             )}
           </div>
 
-          <SectionNav />
+          <GroupNav group={group} onChange={setGroup} config={config} />
 
+          <BuilderGroupContext.Provider value={group}>
           <Builder config={config} onChange={setConfig} client={client} sources={sources} googleEmail={googleEmail} agentId={agent.id} examples={examples} tools={tools} forms={forms} docTemplates={docTemplates} tables={tables} programs={programs} />
+          </BuilderGroupContext.Provider>
 
           {/* Панель сохранения — только когда есть изменения, прилипает к низу экрана */}
           {(dirty || error) && (
@@ -196,48 +210,35 @@ export function AgentStudio({
   );
 }
 
-/** Меню разделов над формой: прилипает сверху, подсвечивает раздел, который сейчас на экране. */
-function SectionNav() {
+/** Экраны настроек агента — вкладки над формой; счётчик у «Возможностей» — сколько модулей включено. */
+function GroupNav({ group, onChange, config }: { group: BuilderGroup; onChange: (g: BuilderGroup) => void; config: AgentConfig }) {
   const { t } = useI18n();
-  const [active, setActive] = useState<string>(BUILDER_SECTIONS[0]);
-  // После нажатия на раздел прокрутка не перебивает выбор (последние разделы короткие — до верха не доезжают)
-  const clickedAt = useRef(0);
-  useEffect(() => {
-    const onScroll = () => {
-      if (Date.now() - clickedAt.current < 1200) return;
-      let current: string = BUILDER_SECTIONS[0];
-      for (const id of BUILDER_SECTIONS) {
-        const el = document.getElementById(`section-${id}`);
-        if (el && el.getBoundingClientRect().top <= 140) current = id;
-      }
-      setActive(current);
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    // Браузер мог восстановить прокрутку — подсветку считаем сразу
-    const first = requestAnimationFrame(onScroll);
-    return () => {
-      cancelAnimationFrame(first);
-      window.removeEventListener("scroll", onScroll);
-    };
-  }, []);
+  const abilities =
+    (config.calendar.enabled ? 1 : 0) +
+    (config.toolIds?.length || config.webSearch ? 1 : 0) +
+    (config.formIds?.length ? 1 : 0) +
+    (config.docTemplateIds?.length ? 1 : 0) +
+    (config.tableIds?.length ? 1 : 0) +
+    (config.loyaltyProgramId || config.logistics ? 1 : 0) +
+    (config.team?.enabled ? 1 : 0);
   return (
     <nav aria-label={t.agentHeader.sectionsNav} className="sticky top-0 z-10 -mx-1 mb-4 overflow-x-auto bg-bg/90 px-1 py-2 backdrop-blur [scrollbar-width:none]">
-      <div className="flex gap-0.5">
-        {BUILDER_SECTIONS.map((id) => (
+      <div className="flex gap-1 rounded-xl border border-border bg-surface p-1">
+        {(Object.keys(BUILDER_GROUPS) as BuilderGroup[]).map((g) => (
           <button
-            key={id}
+            key={g}
             type="button"
             onClick={() => {
-              clickedAt.current = Date.now();
-              setActive(id);
-              document.getElementById(`section-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+              onChange(g);
+              window.scrollTo({ top: 0, behavior: "smooth" });
             }}
             className={cx(
-              "shrink-0 rounded-lg px-2.5 py-1.5 text-[13px] font-medium whitespace-nowrap transition",
-              active === id ? "bg-surface text-accent shadow-sm ring-1 ring-border" : "text-muted hover:bg-surface-2 hover:text-text",
+              "flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] font-medium whitespace-nowrap transition",
+              group === g ? "bg-accent-soft text-accent" : "text-muted hover:bg-surface-2 hover:text-text",
             )}
           >
-            {t.builder.sections[id]}
+            {t.builder.groups[g]}
+            {g === "abilities" && abilities > 0 && <span className="rounded-full bg-accent px-1.5 text-[11px] leading-4 text-accent-text">{abilities}</span>}
           </button>
         ))}
       </div>

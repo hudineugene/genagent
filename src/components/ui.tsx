@@ -17,7 +17,7 @@ export function cx(...inputs: ClassValue[]) {
 type Variant = "primary" | "secondary" | "ghost" | "danger";
 
 const VARIANTS: Record<Variant, string> = {
-  primary: "bg-accent text-accent-text hover:brightness-110 shadow-sm",
+  primary: "bg-accent text-accent-text hover:brightness-110",
   secondary: "bg-surface border border-border text-text hover:bg-surface-2",
   ghost: "text-muted hover:text-text hover:bg-surface-2",
   danger: "text-danger border border-border bg-surface hover:bg-danger/10",
@@ -26,7 +26,7 @@ const VARIANTS: Record<Variant, string> = {
 export function buttonClass(variant: Variant = "primary", size: "sm" | "md" = "md") {
   return cx(
     "inline-flex items-center justify-center gap-2 rounded-xl font-medium transition disabled:opacity-50 disabled:pointer-events-none cursor-pointer",
-    size === "md" ? "h-10 px-4 text-sm" : "h-8 px-3 text-[13px]",
+    size === "md" ? "h-9 px-3.5 text-sm" : "h-8 px-2.5 text-[13px]",
     VARIANTS[variant],
   );
 }
@@ -41,10 +41,10 @@ export function Button({
 }
 
 const field =
-  "w-full rounded-xl border border-border bg-surface px-3 text-sm text-text placeholder:text-muted/70 outline-none transition focus:border-accent focus:ring-4 focus:ring-accent/15";
+  "w-full rounded-xl border border-border bg-surface px-3 text-sm text-text placeholder:text-muted/70 outline-none transition focus:border-accent focus:ring-3 focus:ring-accent/15";
 
 export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) {
-  return <input className={cx(field, "h-10", className)} {...props} />;
+  return <input className={cx(field, "h-9", className)} {...props} />;
 }
 
 export function Textarea({ className, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
@@ -52,7 +52,7 @@ export function Textarea({ className, ...props }: TextareaHTMLAttributes<HTMLTex
 }
 
 export function Select({ className, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
-  return <select className={cx(field, "h-10 pr-8", className)} {...props} />;
+  return <select className={cx(field, "h-9 pr-8", className)} {...props} />;
 }
 
 export function Field({
@@ -68,7 +68,7 @@ export function Field({
 }) {
   return (
     <label className={cx("block", className)}>
-      <span className="mb-1.5 flex items-center gap-1 text-sm font-medium">
+      <span className="mb-1.5 flex items-center gap-1 text-[13px] font-medium">
         {label}
         {hint && <InfoHint>{hint}</InfoHint>}
       </span>
@@ -119,11 +119,11 @@ export function PageHeader({
   icon?: ReactNode;
 }) {
   return (
-    <div className="mb-7 flex flex-wrap items-center justify-between gap-4">
+    <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
       <div className="flex min-w-0 items-center gap-4">
         {icon}
         <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+          <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
           {subtitle && <p className="mt-1 text-sm text-muted">{subtitle}</p>}
         </div>
       </div>
@@ -171,7 +171,7 @@ export function EmptyState({
   className?: string;
 }) {
   return (
-    <div className={cx("flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border bg-surface px-6 py-12 text-center", className)}>
+    <div className={cx("flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border bg-surface px-6 py-10 text-center", className)}>
       {icon && (
         <span
           className={cx(

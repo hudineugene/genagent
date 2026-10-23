@@ -50,12 +50,12 @@ export function Sidebar({ userName, isAdmin, inboxBadge }: { userName: string; i
   const openSearch = () => window.dispatchEvent(new Event(OPEN_PALETTE));
 
   return (
-    <aside className="z-30 flex shrink-0 items-center gap-2 border-b border-border bg-surface/90 px-3 py-2.5 backdrop-blur md:sticky md:top-0 md:h-dvh md:w-64 md:flex-col md:items-stretch md:gap-1 md:border-r md:border-b-0 md:bg-surface md:px-3 md:py-5">
+    <aside className="z-30 flex shrink-0 items-center gap-2 border-b border-border bg-surface/90 px-3 py-2.5 backdrop-blur md:sticky md:top-0 md:h-dvh md:w-60 md:flex-col md:items-stretch md:gap-1 md:border-r md:border-b-0 md:bg-surface md:px-3 md:py-4">
       <CommandPalette pages={[...work, ...settings, { href: "/profile", label: t.nav.profile, icon: UserRound }]} />
 
-      <Link href="/" className="flex shrink-0 items-center gap-2.5 md:mb-5 md:px-2">
-        <span className="grid size-9 place-items-center rounded-xl bg-gradient-to-br from-accent to-violet-500 text-accent-text shadow-md shadow-accent/25">
-          <Sparkles className="size-5" />
+      <Link href="/" className="flex shrink-0 items-center gap-2.5 md:mb-4 md:px-2">
+        <span className="grid size-8 place-items-center rounded-lg bg-accent text-accent-text">
+          <Sparkles className="size-4" />
         </span>
         <span className="hidden font-semibold tracking-tight md:block">{t.app.name}</span>
       </Link>
@@ -65,14 +65,14 @@ export function Sidebar({ userName, isAdmin, inboxBadge }: { userName: string; i
         type="button"
         onClick={openSearch}
         title={`${t.nav.search} (Ctrl K)`}
-        className="order-last ml-auto grid size-9 shrink-0 place-items-center rounded-xl text-muted hover:bg-surface-2 hover:text-text md:order-none md:mb-4 md:ml-0 md:flex md:h-10 md:w-full md:items-center md:gap-2.5 md:border md:border-border md:bg-surface-2/60 md:px-3 md:text-sm"
+        className="order-last ml-auto grid size-9 shrink-0 place-items-center rounded-xl text-muted hover:bg-surface-2 hover:text-text md:order-none md:mb-3 md:ml-0 md:flex md:h-9 md:w-full md:items-center md:gap-2.5 md:border md:border-border md:bg-surface-2/60 md:px-3 md:text-sm"
       >
         <Search className="size-4" />
         <span className="hidden flex-1 text-left md:inline">{t.nav.search}</span>
         <kbd className="hidden rounded-md border border-border bg-surface px-1.5 text-[11px] font-medium md:inline">Ctrl K</kbd>
       </button>
 
-      <nav className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none] md:flex-col md:items-stretch md:gap-3 md:overflow-visible md:[&>div+div]:border-t md:[&>div+div]:border-border md:[&>div+div]:pt-3">
+      <nav className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none] md:flex-col md:items-stretch md:gap-2 md:overflow-visible md:[&>div+div]:border-t md:[&>div+div]:border-border md:[&>div+div]:pt-2">
         <NavGroup items={work} />
         {settings.length > 0 && <NavGroup items={settings} />}
       </nav>
@@ -166,13 +166,12 @@ function NavGroup({ items }: { items: NavItem[] }) {
           href={href}
           title={label}
           className={cx(
-            "relative flex shrink-0 items-center gap-3 rounded-xl px-2.5 py-2 text-sm font-medium transition md:px-3",
-            active ? "bg-accent-soft text-accent" : "text-muted hover:bg-surface-2 hover:text-text",
+            "relative flex shrink-0 items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition",
+            active ? "bg-surface-2 text-text [&_svg]:text-accent" : "text-muted hover:bg-surface-2 hover:text-text",
           )}
         >
-          {active && <span className="absolute top-2 bottom-2 -left-3 hidden w-1 rounded-r-full bg-accent md:block" />}
           <span className="relative">
-            <Icon className="size-[18px]" />
+            <Icon className="size-4" />
             {badge ? (
               <span className="absolute -top-1.5 -right-2 rounded-full bg-danger px-1 text-[10px] leading-4 font-semibold text-white md:hidden">{badge}</span>
             ) : null}

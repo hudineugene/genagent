@@ -65,13 +65,13 @@ export async function setupChecklist(agentId?: string): Promise<SetupItem[]> {
           : { key: `owner:${client.id}`, kind: "owner", agentId: agent.id, title, href: `/clients/${client.id}` },
       );
     }
-    if (!cfg.leadFields?.trim()) items.push({ key: `leadFields:${agent.id}`, kind: "leadFields", agentId: agent.id, title, href: `/agents/${agent.id}` });
+    if (!cfg.leadFields?.trim()) items.push({ key: `leadFields:${agent.id}`, kind: "leadFields", agentId: agent.id, title, href: `/agents/${agent.id}#rules` });
     const chans = await db.select({ type: channels.type, config: channels.config, enabled: channels.enabled }).from(channels).where(eq(channels.agentId, agent.id));
     if (chans.some((c) => c.enabled && c.type === "api" && !(c.config as ApiConfig).ratingInvite)) {
       items.push({ key: `rating:${agent.id}`, kind: "rating", agentId: agent.id, title, href: `/agents/${agent.id}/channels` });
     }
     if (cfg.voiceReplies !== false && !process.env.OPENAI_API_KEY && chans.some((c) => c.enabled && (c.type === "api" || c.type === "telegram"))) {
-      items.push({ key: `voice:${agent.id}`, kind: "voice", agentId: agent.id, title, href: `/agents/${agent.id}` });
+      items.push({ key: `voice:${agent.id}`, kind: "voice", agentId: agent.id, title, href: `/agents/${agent.id}#model` });
     }
   }
   // Один клиент — один пункт про владельца, даже если агентов несколько

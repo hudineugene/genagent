@@ -1,17 +1,17 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #f6f7fb;
+  --bg: #f7f7f8;
   --surface: #ffffff;
-  --surface-2: #f1f3f9;
-  --border: #e3e6ef;
-  --text: #141824;
-  --muted: #667085;
-  --accent: #5b5bf0;
-  --accent-soft: #ececfe;
+  --surface-2: #f3f3f5;
+  --border: #e5e5ea;
+  --text: #18181b;
+  --muted: #6b6b76;
+  --accent: #5e6ad2;
+  --accent-soft: #eef0fb;
   --accent-text: #ffffff;
-  --danger: #dc3545;
-  --success: #12a150;
+  --danger: #d93f3f;
+  --success: #1a8a4f;
 }
 
 /* Тема: data-theme на <html> ставит скрипт в layout (выбор пользователя или системная); без скрипта — как в системе. */
@@ -19,32 +19,32 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0e1016;
-    --surface: #161922;
-    --surface-2: #1d212c;
-    --border: #2a2f3d;
-    --text: #eceef4;
-    --muted: #8d94a6;
-    --accent: #7c7cff;
-    --accent-soft: #23244a;
+    --bg: #0f0f11;
+    --surface: #17171a;
+    --surface-2: #1f1f23;
+    --border: #2a2a30;
+    --text: #ededf0;
+    --muted: #8b8b96;
+    --accent: #8189ea;
+    --accent-soft: #23264a;
     --accent-text: #ffffff;
-    --danger: #ff6b78;
-    --success: #3ddc84;
+    --danger: #f06b6b;
+    --success: #3ccf7f;
   }
 }
 
 :root[data-theme="dark"] {
-  --bg: #0e1016;
-  --surface: #161922;
-  --surface-2: #1d212c;
-  --border: #2a2f3d;
-  --text: #eceef4;
-  --muted: #8d94a6;
-  --accent: #7c7cff;
-  --accent-soft: #23244a;
+  --bg: #0f0f11;
+  --surface: #17171a;
+  --surface-2: #1f1f23;
+  --border: #2a2a30;
+  --text: #ededf0;
+  --muted: #8b8b96;
+  --accent: #8189ea;
+  --accent-soft: #23264a;
   --accent-text: #ffffff;
-  --danger: #ff6b78;
-  --success: #3ddc84;
+  --danger: #f06b6b;
+  --success: #3ccf7f;
 }
 
 :root { color-scheme: light; }
@@ -63,6 +63,9 @@
   --color-danger: var(--danger);
   --color-success: var(--success);
   --font-sans: var(--font-inter), system-ui, sans-serif;
+  --radius-lg: 0.4375rem;
+  --radius-xl: 0.5625rem;
+  --radius-2xl: 0.75rem;
 }
 
 html,
