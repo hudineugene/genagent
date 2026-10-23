@@ -14,6 +14,7 @@ const sourceSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("sheet"), url: z.string().trim().min(1).max(1000), sheet: z.string().trim().max(100) }),
   z.object({ type: z.literal("url"), url: z.string().trim().url().max(1000) }),
   z.object({ type: z.literal("search"), query: z.string().trim().min(1).max(500) }),
+  z.object({ type: z.literal("table"), tableId: z.string().min(1).max(64) }),
 ]);
 
 const schema = z.object({

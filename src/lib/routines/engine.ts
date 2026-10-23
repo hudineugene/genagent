@@ -1,7 +1,7 @@
 import "server-only";
 import { and, asc, eq, gt, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { agents, clients, conversations, messages, routines, type Routine, type RoutineSchedule, type RoutineSource } from "@/db/schema";
+import { agents, clients, conversations, dataTables, messages, routines, type Routine, type RoutineSchedule, type RoutineSource } from "@/db/schema";
 import { streamChat } from "@/lib/llm";
 import { logUsage } from "@/lib/usage";
 
@@ -92,6 +92,12 @@ async function sourceText(clientId: string, src: RoutineSource): Promise<string>
       const [page] = await crawl(src.url, "page");
       return `## Страница ${src.url}${page ? ` — ${page.title}` : ""}\n${(page?.text ?? "(пусто)").slice(0, SOURCE_CHARS)}`;
     }
+    if (src.type === "table") {
+      const { describeTable, refreshTable, tableToolName } = await import("@/lib/data/tables");
+      const [t] = await db.select().from(dataTables).where(and(eq(dataTables.id, src.tableId), eq(dataTables.clientId, clientId)));
+      if (!t) return "## Таблица данных\n(удалена)";
+      return `## Таблица данных (считай по ней инструментом ${tableToolName(t)})\n${describeTable(await refreshTable(t))}`;
+    }
     return `## Поиск в интернете\nНайди в интернете: ${src.query}`;
   } catch (e) {
     return `## Источник недоступен (${src.type}): ${e instanceof Error ? e.message : String(e)}`;
@@ -125,6 +131,9 @@ export async function runRoutine(id: string, opts: { send?: boolean } = {}): Pro
     const { getServices } = await import("@/lib/services");
     const services = await getServices();
     const webSearch = search && services.webSearch.enabled ? { maxUses: Math.max(services.webSearch.maxUses, 3) } : undefined;
+    const tableIds = r.sources.flatMap((s) => (s.type === "table" ? [s.tableId] : []));
+    const { loadTables, tableTool } = await import("@/lib/data/tables");
+    const tools = (await loadTables(r.clientId, tableIds)).map((t) => tableTool(t));
     const today = new Intl.DateTimeFormat("ru-RU", { timeZone: TZ, dateStyle: "long" }).format(new Date());
     let text = "";
     const started = Date.now();
@@ -135,12 +144,14 @@ export async function runRoutine(id: string, opts: { send?: boolean } = {}): Pro
         `Ты аналитик компании «${client?.name ?? ""}». Сегодня ${today}. Выполни задание владельца по данным ниже и напиши готовый отчёт для Telegram.`,
         "Пиши по-русски, коротко и по делу: сначала главный вывод 1–2 предложениями, затем 3–8 пунктов с цифрами и конкретикой, в конце — что сделать. Без вступлений и воды.",
         "Опирайся только на данные ниже (и на поиск в интернете, если он есть). Чего нет в данных — так и скажи, не выдумывай цифры.",
+        tools.length ? "Числа из таблиц данных получай только инструментами table_… (суммы, количества, средние, сравнения периодов) — не считай в уме." : "",
         search && !webSearch ? "Поиск в интернете сейчас выключен в настройках — отметь, что эту часть задания выполнить не удалось." : "",
       ]
         .filter(Boolean)
         .join("\n"),
       messages: [{ role: "user", content: `Задание: ${r.task}\n\nДанные:${data || "\n(источники не заданы)"}` }],
       webSearch,
+      tools: tools.length ? tools : undefined,
     })) {
       if (ev.type === "text") text += ev.text;
       else if (ev.type === "done") await logUsage({ source: "insights", model: ev.servedBy, usage: ev.usage, clientId: r.clientId, ms: Date.now() - started }).catch(() => {});

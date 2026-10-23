@@ -11,7 +11,7 @@ import { Button, Input, Select, Spinner, cx } from "@/components/ui";
 import { BUILDER_SECTIONS, Builder } from "./builder";
 import { Playground } from "./playground";
 import { VersionsPanel } from "./versions";
-import type { BuilderDocTemplate, BuilderForm, BuilderSource, BuilderTool, ExampleItem } from "./builder";
+import type { BuilderDocTemplate, BuilderTable, BuilderForm, BuilderSource, BuilderTool, ExampleItem } from "./builder";
 
 type Status = "draft" | "active" | "paused";
 
@@ -28,6 +28,7 @@ export function AgentStudio({
   tools,
   forms,
   docTemplates,
+  tables,
 }: {
   agent: StudioAgent;
   client: ClientContext & { id: string };
@@ -37,6 +38,7 @@ export function AgentStudio({
   tools: BuilderTool[];
   forms: BuilderForm[];
   docTemplates: BuilderDocTemplate[];
+  tables: BuilderTable[];
 }) {
   const { t } = useI18n();
   const router = useRouter();
@@ -160,7 +162,7 @@ export function AgentStudio({
 
           <SectionNav />
 
-          <Builder config={config} onChange={setConfig} client={client} sources={sources} googleEmail={googleEmail} agentId={agent.id} examples={examples} tools={tools} forms={forms} docTemplates={docTemplates} />
+          <Builder config={config} onChange={setConfig} client={client} sources={sources} googleEmail={googleEmail} agentId={agent.id} examples={examples} tools={tools} forms={forms} docTemplates={docTemplates} tables={tables} />
 
           {/* Панель сохранения — только когда есть изменения, прилипает к низу экрана */}
           {(dirty || error) && (

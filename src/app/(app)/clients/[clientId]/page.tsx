@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, count, desc, eq } from "drizzle-orm";
-import { BarChart3, BookOpen, Bot, ClipboardList, FileBarChart2, FileText, Megaphone, Plus, Settings, Wrench } from "lucide-react";
+import { BarChart3, BookOpen, Bot, ClipboardList, ClipboardCheck, FileBarChart2, FileText, PenLine, Table2, Megaphone, Plus, Settings, Wrench } from "lucide-react";
 import { db } from "@/db";
-import { agents, campaigns, clientDocTypes, clientDocuments, clientForms, clientIntegrations, clientTools, clients, conversations, docTemplates, formResponses, generatedDocs, kbSources, knowledgeGaps, routines } from "@/db/schema";
+import { agents, approvals, campaigns, channels, contentItems, clientDocTypes, clientDocuments, clientForms, dataTables, clientIntegrations, clientTools, clients, conversations, docTemplates, formResponses, generatedDocs, kbSources, knowledgeGaps, routines } from "@/db/schema";
 import { getT } from "@/lib/i18n/server";
 import { findModel } from "@/lib/models";
 import type { Dict, Locale } from "@/lib/i18n";
@@ -16,12 +16,16 @@ import { CampaignsManager } from "./campaigns";
 import { FormsManager } from "./forms";
 import { RoutinesManager } from "./routines";
 import { DocumentsManager } from "./documents";
+import { DataManager } from "./data";
+import { ApprovalsManager } from "./approvals";
+import { ContentStudio } from "./content";
 import { campaignStats } from "@/lib/campaigns/engine";
 import { getGoogleSettings } from "@/lib/google/calendar";
 import { OwnersCard } from "./owners";
 import { clientOwners, getNotifySettings } from "@/lib/notify/telegram";
 import { embeddingProgress, embeddingStatus } from "@/lib/kb/embeddings";
 import { previousMonth } from "@/lib/agent/report";
+import { hasTeamAgents } from "@/lib/team/approvals";
 
 export default async function ClientPage({
   params,
@@ -35,8 +39,8 @@ export default async function ClientPage({
   const [client] = await db.select().from(clients).where(eq(clients.id, clientId));
   if (!client) notFound();
 
-  const active = tab === "kb" ? "kb" : tab === "tools" ? "tools" : tab === "campaigns" ? "campaigns" : tab === "forms" ? "forms" : tab === "routines" ? "routines" : tab === "documents" ? "documents" : "agents";
-  const [[{ agentsCount }], [{ kbCount }], [{ toolsCount }], [{ campaignsCount }], [{ formsCount }], [{ routinesCount }], [{ docTypesCount }], [{ templatesCount }]] = await Promise.all([
+  const active = tab === "kb" ? "kb" : tab === "tools" ? "tools" : tab === "campaigns" ? "campaigns" : tab === "forms" ? "forms" : tab === "routines" ? "routines" : tab === "documents" ? "documents" : tab === "data" ? "data" : tab === "approvals" ? "approvals" : tab === "content" ? "content" : "agents";
+  const [[{ agentsCount }], [{ kbCount }], [{ toolsCount }], [{ campaignsCount }], [{ formsCount }], [{ routinesCount }], [{ docTypesCount }], [{ templatesCount }], [{ tablesCount }], [{ pendingApprovals }], [{ approvalsCount }], teamAgents, [{ contentCount }]] = await Promise.all([
     db.select({ agentsCount: count() }).from(agents).where(eq(agents.clientId, clientId)),
     db.select({ kbCount: count() }).from(kbSources).where(eq(kbSources.clientId, clientId)),
     db.select({ toolsCount: count() }).from(clientTools).where(eq(clientTools.clientId, clientId)),
@@ -45,6 +49,11 @@ export default async function ClientPage({
     db.select({ routinesCount: count() }).from(routines).where(eq(routines.clientId, clientId)),
     db.select({ docTypesCount: count() }).from(clientDocTypes).where(eq(clientDocTypes.clientId, clientId)),
     db.select({ templatesCount: count() }).from(docTemplates).where(eq(docTemplates.clientId, clientId)),
+    db.select({ tablesCount: count() }).from(dataTables).where(eq(dataTables.clientId, clientId)),
+    db.select({ pendingApprovals: count() }).from(approvals).where(and(eq(approvals.clientId, clientId), eq(approvals.status, "pending"))),
+    db.select({ approvalsCount: count() }).from(approvals).where(eq(approvals.clientId, clientId)),
+    hasTeamAgents(clientId),
+    db.select({ contentCount: count() }).from(contentItems).where(eq(contentItems.clientId, clientId)),
   ]);
 
   const tabs = [
@@ -53,6 +62,9 @@ export default async function ClientPage({
     { key: "tools", href: `/clients/${client.id}?tab=tools`, label: t.tools.tab, icon: Wrench, n: toolsCount },
     { key: "forms", href: `/clients/${client.id}?tab=forms`, label: t.forms.tab, icon: ClipboardList, n: formsCount },
     { key: "documents", href: `/clients/${client.id}?tab=documents`, label: t.documents.tab, icon: FileText, n: docTypesCount + templatesCount },
+    { key: "data", href: `/clients/${client.id}?tab=data`, label: t.data.tab, icon: Table2, n: tablesCount },
+    { key: "content", href: `/clients/${client.id}?tab=content`, label: t.content.tab, icon: PenLine, n: contentCount },
+    ...(teamAgents || approvalsCount ? [{ key: "approvals", href: `/clients/${client.id}?tab=approvals`, label: t.approvals.tab, icon: ClipboardCheck, n: pendingApprovals }] : []),
     { key: "routines", href: `/clients/${client.id}?tab=routines`, label: t.routines.tab, icon: FileBarChart2, n: routinesCount },
     { key: "campaigns", href: `/clients/${client.id}?tab=campaigns`, label: t.campaigns.tab, icon: Megaphone, n: campaignsCount },
   ];
@@ -109,6 +121,12 @@ export default async function ClientPage({
         <CampaignsTab clientId={client.id} />
       ) : active === "forms" ? (
         <FormsTab clientId={client.id} />
+      ) : active === "content" ? (
+        <ContentTab clientId={client.id} />
+      ) : active === "approvals" ? (
+        <ApprovalsTab clientId={client.id} />
+      ) : active === "data" ? (
+        <DataTab clientId={client.id} />
       ) : active === "documents" ? (
         <DocumentsTab clientId={client.id} />
       ) : active === "routines" ? (
@@ -117,6 +135,94 @@ export default async function ClientPage({
         <AgentsTab clientId={client.id} t={t} locale={locale} />
       )}
     </div>
+  );
+}
+
+async function ContentTab({ clientId }: { clientId: string }) {
+  const [rows, bots] = await Promise.all([
+    db.select().from(contentItems).where(eq(contentItems.clientId, clientId)).orderBy(desc(contentItems.createdAt)).limit(150),
+    db.select({ id: channels.id, name: channels.name }).from(channels).where(and(eq(channels.clientId, clientId), eq(channels.type, "telegram"))),
+  ]);
+  return (
+    <ContentStudio
+      clientId={clientId}
+      bots={bots}
+      rows={rows.map((r) => ({
+        id: r.id,
+        batch: r.batch,
+        kind: r.kind,
+        platform: r.platform,
+        brief: r.brief,
+        title: r.title,
+        text: r.text,
+        status: r.status,
+        channelId: r.channelId,
+        target: r.target,
+        publishAt: r.publishAt?.getTime() ?? null,
+        publishedAt: r.publishedAt?.getTime() ?? null,
+        url: r.url,
+        error: r.error,
+        at: r.createdAt.getTime(),
+      }))}
+    />
+  );
+}
+
+async function ApprovalsTab({ clientId }: { clientId: string }) {
+  const rows = await db
+    .select({ a: approvals, agent: agents.name })
+    .from(approvals)
+    .leftJoin(agents, eq(agents.id, approvals.agentId))
+    .where(eq(approvals.clientId, clientId))
+    .orderBy(desc(approvals.createdAt))
+    .limit(200);
+  // Ждущие решения — сверху
+  rows.sort((x, y) => Number(y.a.status === "pending") - Number(x.a.status === "pending"));
+  return (
+    <ApprovalsManager
+      rows={rows.map(({ a, agent }) => ({
+        id: a.id,
+        number: a.number,
+        requester: a.requester,
+        agent: agent ?? "",
+        subject: a.subject,
+        details: a.details,
+        amount: a.amount,
+        status: a.status,
+        decidedBy: a.decidedBy,
+        comment: a.comment,
+        at: a.createdAt.getTime(),
+        decidedAt: a.decidedAt?.getTime() ?? null,
+      }))}
+    />
+  );
+}
+
+async function DataTab({ clientId }: { clientId: string }) {
+  const [rows, list] = await Promise.all([
+    db.select().from(dataTables).where(eq(dataTables.clientId, clientId)).orderBy(desc(dataTables.createdAt)),
+    db.select({ name: agents.name, config: agents.config }).from(agents).where(eq(agents.clientId, clientId)),
+  ]);
+  return (
+    <DataManager
+      clientId={clientId}
+      tables={rows.map((r) => ({
+        id: r.id,
+        name: r.name,
+        description: r.description,
+        source: r.source,
+        sheetUrl: r.sheetUrl,
+        sheetName: r.sheetName,
+        filename: r.filename,
+        columns: r.columns,
+        sample: r.rows.slice(0, 5).map((x) => x.map((v) => v.slice(0, 80))),
+        rowCount: r.rowCount,
+        enabled: r.enabled,
+        refreshedAt: r.refreshedAt?.getTime() ?? null,
+        error: r.error,
+        usedBy: list.filter((a) => a.config.tableIds?.includes(r.id)).map((a) => a.name),
+      }))}
+    />
   );
 }
 
@@ -176,10 +282,14 @@ async function DocumentsTab({ clientId }: { clientId: string }) {
 }
 
 async function RoutinesTab({ clientId }: { clientId: string }) {
-  const rows = await db.select().from(routines).where(eq(routines.clientId, clientId)).orderBy(desc(routines.createdAt));
+  const [rows, tables] = await Promise.all([
+    db.select().from(routines).where(eq(routines.clientId, clientId)).orderBy(desc(routines.createdAt)),
+    db.select({ id: dataTables.id, name: dataTables.name }).from(dataTables).where(eq(dataTables.clientId, clientId)),
+  ]);
   return (
     <RoutinesManager
       clientId={clientId}
+      tables={tables}
       rows={rows.map((r) => ({
         id: r.id,
         name: r.name,

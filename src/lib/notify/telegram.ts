@@ -2,7 +2,7 @@ import "server-only";
 import { randomBytes } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { agents, channels, clients, conversations, knowledgeGaps, messages, settings } from "@/db/schema";
+import { agents, approvals, channels, clients, conversations, knowledgeGaps, messages, settings, type Approval } from "@/db/schema";
 import { getSetting, setSetting } from "@/lib/settings";
 import { callTelegram, TelegramError } from "@/lib/channels/telegram-api";
 import { approveDraftCore, rejectDraftCore } from "@/lib/drafts";
@@ -365,6 +365,38 @@ export async function sendToOwners(clientId: string, html: string): Promise<numb
       n++;
     } catch (e) {
       console.error("send to owner failed", o.chatId, e instanceof Error ? e.message : e);
+    }
+  }
+  return n;
+}
+
+/** Заявка сотрудника на согласование — руководителям с кнопками «Согласовать» / «Отказать». Возвращает, скольким ушло. */
+export async function notifyApproval(a: Approval, approvers: "owners" | "team" | "both"): Promise<number> {
+  const s = await getNotifySettings();
+  if (!s?.token) return 0;
+  const [c] = await db.select({ name: clients.name }).from(clients).where(eq(clients.id, a.clientId));
+  const html = [
+    `🗂 <b>Заявка №${a.number} на согласование</b>${c ? ` · ${esc(c.name)}` : ""}`,
+    a.requester ? `От: ${esc(a.requester)}` : "",
+    "",
+    `<b>${esc(a.subject)}</b>`,
+    a.details ? esc(a.details.slice(0, 2500)) : "",
+    a.amount ? `💶 ${esc(a.amount)}` : "",
+  ]
+    .filter((x, i) => x || i === 2)
+    .join("\n");
+  const markup = { inline_keyboard: [[{ text: "✅ Согласовать", callback_data: `ap:${a.id}` }, { text: "❌ Отказать", callback_data: `ax:${a.id}` }]] };
+  const chats = [
+    ...(approvers !== "team" ? (s.owners ?? []).filter((o) => o.clientId === a.clientId).map((o) => o.chatId) : []),
+    ...(approvers !== "owners" ? s.subscribers.map((x) => x.chatId) : []),
+  ];
+  let n = 0;
+  for (const chatId of [...new Set(chats)]) {
+    try {
+      await send(s, chatId, html, markup);
+      n++;
+    } catch (e) {
+      console.error("approval send failed", chatId, e instanceof Error ? e.message : e);
     }
   }
   return n;
@@ -763,7 +795,19 @@ async function handleUpdate(u: Update) {
   if (!isStudio && !ownClients.length) return answer("Нет доступа");
   const [action, messageId] = q.data.split(":");
   if (!/^[0-9a-f-]{36}$/.test(messageId ?? "")) return answer("Неизвестная кнопка");
-  if (!isStudio && !["ga", "kx", "kb"].includes(action)) return answer("Нет доступа");
+  if (!isStudio && !["ga", "kx", "kb", "ap", "ax"].includes(action)) return answer("Нет доступа");
+  if (action === "ap" || action === "ax") {
+    const [a] = await db.select().from(approvals).where(eq(approvals.id, messageId));
+    if (!a) return answer("Заявка не найдена");
+    if (!isStudio && !ownClients.includes(a.clientId)) return answer("Нет доступа");
+    const { decideApproval } = await import("@/lib/team/approvals");
+    const who = q.from.first_name || "руководитель";
+    const done = await decideApproval(a.id, action === "ap", who);
+    if (!done) return answer(a.status === "approved" ? "Уже согласовано" : "Уже отказано");
+    await answer(action === "ap" ? "Согласовано — сотрудник получит ответ" : "Отказано — сотрудник получит ответ");
+    await markDone(s, q, `${action === "ap" ? "✅ Согласовано" : "❌ Отказано"} · ${who}`);
+    return;
+  }
   if (action === "ga" || action === "kx" || action === "kb") {
     const [gap] = await db.select().from(knowledgeGaps).where(eq(knowledgeGaps.id, messageId));
     if (gap && !isStudio && !ownClients.includes(gap.clientId)) return answer("Нет доступа");

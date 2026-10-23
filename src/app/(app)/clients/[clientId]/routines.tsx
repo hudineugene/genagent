@@ -29,11 +29,20 @@ const EMPTY: Draft = {
   delivery: { team: true, owners: false },
   enabled: true,
 };
-const SOURCE_TYPES = ["conversations", "sheet", "url", "search"] as const;
-const newSource = (type: RoutineSource["type"]): RoutineSource =>
-  type === "conversations" ? { type, days: 7 } : type === "sheet" ? { type, url: "", sheet: "Лист1" } : type === "url" ? { type, url: "" } : { type, query: "" };
+const SOURCE_TYPES = ["conversations", "table", "sheet", "url", "search"] as const;
+type TableOption = { id: string; name: string };
+const newSource = (type: RoutineSource["type"], tables: TableOption[] = []): RoutineSource =>
+  type === "conversations"
+    ? { type, days: 7 }
+    : type === "table"
+      ? { type, tableId: tables[0]?.id ?? "" }
+      : type === "sheet"
+        ? { type, url: "", sheet: "Лист1" }
+        : type === "url"
+          ? { type, url: "" }
+          : { type, query: "" };
 
-export function RoutinesManager({ clientId, rows }: { clientId: string; rows: RoutineRow[] }) {
+export function RoutinesManager({ clientId, rows, tables = [] }: { clientId: string; rows: RoutineRow[]; tables?: TableOption[] }) {
   const { t, locale } = useI18n();
   const r = t.routines;
   const [editing, setEditing] = useState<string | "new" | null>(null);
@@ -50,11 +59,11 @@ export function RoutinesManager({ clientId, rows }: { clientId: string; rows: Ro
           {r.new}
         </Button>
       )}
-      {editing === "new" && <RoutineForm clientId={clientId} initial={EMPTY} onDone={() => setEditing(null)} />}
+      {editing === "new" && <RoutineForm clientId={clientId} tables={tables} initial={EMPTY} onDone={() => setEditing(null)} />}
       {rows.length === 0 && editing !== "new" && <EmptyState icon={<BarChart3 />} text={r.empty} />}
       {rows.map((x) =>
         editing === x.id ? (
-          <RoutineForm key={x.id} clientId={clientId} id={x.id} initial={x} onDone={() => setEditing(null)} />
+          <RoutineForm key={x.id} clientId={clientId} tables={tables} id={x.id} initial={x} onDone={() => setEditing(null)} />
         ) : (
           <RoutineCard key={x.id} row={x} when={when(x.schedule)} last={x.lastRunAt ? `${fmt.format(x.lastRunAt)} · ${x.lastStatus ?? ""}` : r.never} onEdit={() => setEditing(x.id)} />
         ),
@@ -120,7 +129,7 @@ function RoutineCard({ row, when, last, onEdit }: { row: RoutineRow; when: strin
   );
 }
 
-function RoutineForm({ clientId, id, initial, onDone }: { clientId: string; id?: string; initial: Draft; onDone: () => void }) {
+function RoutineForm({ clientId, tables, id, initial, onDone }: { clientId: string; tables: TableOption[]; id?: string; initial: Draft; onDone: () => void }) {
   const { t } = useI18n();
   const r = t.routines;
   const [d, setD] = useState<Draft>({ name: initial.name, task: initial.task, schedule: initial.schedule, sources: initial.sources, delivery: initial.delivery, enabled: initial.enabled });
@@ -178,8 +187,8 @@ function RoutineForm({ clientId, id, initial, onDone }: { clientId: string; id?:
         <div className="text-sm font-semibold">{r.sources}</div>
         {d.sources.map((s, i) => (
           <div key={i} className="flex flex-wrap items-end gap-2 rounded-xl border border-border p-3">
-            <Select className="w-52" value={s.type} onChange={(e) => setSource(i, newSource(e.target.value as RoutineSource["type"]))}>
-              {SOURCE_TYPES.map((x) => (
+            <Select className="w-52" value={s.type} onChange={(e) => setSource(i, newSource(e.target.value as RoutineSource["type"], tables))}>
+              {SOURCE_TYPES.filter((x) => x !== "table" || tables.length || s.type === "table").map((x) => (
                 <option key={x} value={x}>
                   {r.sourceTypes[x]}
                 </option>
@@ -189,6 +198,15 @@ function RoutineForm({ clientId, id, initial, onDone }: { clientId: string; id?:
               <Field label={r.days}>
                 <Input type="number" min={1} max={90} className="w-24" value={s.days} onChange={(e) => setSource(i, { ...s, days: Math.min(90, Math.max(1, Number(e.target.value) || 7)) })} />
               </Field>
+            )}
+            {s.type === "table" && (
+              <Select className="min-w-64 flex-1" value={s.tableId} onChange={(e) => setSource(i, { ...s, tableId: e.target.value })}>
+                {tables.map((tb) => (
+                  <option key={tb.id} value={tb.id}>
+                    {tb.name}
+                  </option>
+                ))}
+              </Select>
             )}
             {s.type === "sheet" && (
               <>

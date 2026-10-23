@@ -218,6 +218,22 @@ export async function respond(conversationId: string): Promise<void> {
     const pendingHandoff = openHandoff(history);
 
     const config = agentConfigSchema.parse(agent.config);
+    // Агент для сотрудников: посторонним — один раз вежливый отказ, без затрат на модель
+    if (config.team?.enabled) {
+      const { isAllowed } = await import("@/lib/team/approvals");
+      if (!isAllowed(config.team.allowed, { externalId: conversation.externalId, handle: conversation.contactHandle })) {
+        if (!conversation.context?.teamDenied) {
+          const text = config.team.denyText.trim() || "Этот помощник работает только для сотрудников компании.";
+          await db.update(conversations).set({ context: { ...conversation.context, teamDenied: true } }).where(eq(conversations.id, conversationId));
+          const externalId = await deliver(channel, conversation, text).catch((e) => {
+            console.error("team deny deliver failed", e);
+            return null;
+          });
+          await addMessage(conversationId, "assistant", text, { externalId: externalId ?? undefined });
+        }
+        return;
+      }
+    }
     // Месячный лимит расходов агента: превышен — молчим и зовём менеджера.
     if (config.monthlyBudgetUsd != null && (await agentMonthSpend(agent.id)) >= config.monthlyBudgetUsd) {
       await flag(conversationId, "budget_exceeded");

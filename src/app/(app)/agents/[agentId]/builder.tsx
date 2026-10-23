@@ -4,7 +4,7 @@ import { InfoHint } from "@/components/hint";
 
 import Link from "next/link";
 import { useMemo, useState, useTransition, type ReactNode } from "react";
-import { BookOpen, Brain, CalendarDays, ChevronDown, ClipboardList, Cpu, FileText, MessageSquareText, ScrollText, Sparkles, UserRound, Wrench } from "lucide-react";
+import { BookOpen, Brain, CalendarDays, ChevronDown, ClipboardList, Cpu, FileText, Table2, MessageSquareText, Users, ScrollText, Sparkles, UserRound, Wrench } from "lucide-react";
 import { SKILLS } from "@/lib/agent/skills";
 import { compileSystemPrompt, type ClientContext } from "@/lib/agent/compile";
 import { EFFORTS, REPLY_LANGUAGES, TONES, type AgentConfig } from "@/lib/agent/types";
@@ -33,6 +33,7 @@ export type BuilderTool = { id: string; title: string; name: string; enabled: bo
 /** Анкета клиента — для выбора в агенте */
 export type BuilderForm = { id: string; name: string; kind: "form" | "quiz"; enabled: boolean };
 export type BuilderDocTemplate = { id: string; name: string; enabled: boolean };
+export type BuilderTable = { id: string; name: string; enabled: boolean; rowCount: number };
 
 export function Builder({
   config,
@@ -45,6 +46,7 @@ export function Builder({
   tools = [],
   forms = [],
   docTemplates = [],
+  tables = [],
 }: {
   config: AgentConfig;
   onChange: (c: AgentConfig) => void;
@@ -56,6 +58,7 @@ export function Builder({
   tools?: BuilderTool[];
   forms?: BuilderForm[];
   docTemplates?: BuilderDocTemplate[];
+  tables?: BuilderTable[];
 }) {
   const { t, locale } = useI18n();
   const set = <K extends keyof AgentConfig>(key: K, value: AgentConfig[K]) => onChange({ ...config, [key]: value });
@@ -509,6 +512,72 @@ export function Builder({
         </Link>
       </Section>
 
+      <Section icon={<Table2 />} id="data" title={t.builder.sections.data} badge={(config.tableIds ?? []).length || undefined}>
+        <p className="text-xs text-muted">{t.builder.dataHint}</p>
+        {tables.length === 0 ? (
+          <p className="text-sm text-muted">{t.builder.dataEmpty}</p>
+        ) : (
+          <div className="space-y-1.5">
+            {tables.map((x) => {
+              const on = (config.tableIds ?? []).includes(x.id);
+              return (
+                <label key={x.id} className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm hover:bg-surface-2">
+                  <input
+                    type="checkbox"
+                    checked={on}
+                    onChange={() => set("tableIds", on ? (config.tableIds ?? []).filter((i) => i !== x.id) : [...(config.tableIds ?? []), x.id])}
+                    className="size-4 accent-[var(--accent)]"
+                  />
+                  <span className={cx("min-w-0 flex-1 truncate", !x.enabled && "text-muted line-through")}>{x.name}</span>
+                  <span className="shrink-0 text-xs text-muted">{x.rowCount}</span>
+                </label>
+              );
+            })}
+          </div>
+        )}
+        <Link href={`/clients/${client.id}?tab=data`} className="text-sm text-accent hover:underline">
+          {t.builder.dataManage}
+        </Link>
+      </Section>
+
+      <Section icon={<Users />} id="team" title={t.builder.sections.team} collapsible defaultOpen={Boolean(config.team?.enabled)}>
+        <p className="text-xs text-muted">{t.builder.teamHint}</p>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="size-4 accent-[var(--accent)]"
+            checked={Boolean(config.team?.enabled)}
+            onChange={(e) => set("team", { allowed: "", denyText: "", approvals: false, approvers: "owners", ...config.team, enabled: e.target.checked })}
+          />
+          {t.builder.teamEnabled}
+        </label>
+        {config.team?.enabled && (
+          <>
+            <Field label={t.builder.teamAllowed} hint={t.builder.teamAllowedHint}>
+              <Textarea rows={4} className="font-mono text-[13px]" value={config.team.allowed} maxLength={5000} placeholder={"@ivan_petrov\n+380 67 123 45 67\n123456789"} onChange={(e) => set("team", { ...config.team!, allowed: e.target.value })} />
+            </Field>
+            <Field label={t.builder.teamDeny}>
+              <Input value={config.team.denyText} maxLength={500} placeholder={t.builder.teamDenyPlaceholder} onChange={(e) => set("team", { ...config.team!, denyText: e.target.value })} />
+            </Field>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={config.team.approvals} onChange={(e) => set("team", { ...config.team!, approvals: e.target.checked })} />
+              {t.builder.teamApprovals}
+            </label>
+            {config.team.approvals && (
+              <Field label={t.builder.teamApprovers} hint={t.builder.teamApproversHint}>
+                <Select className="w-72" value={config.team.approvers} onChange={(e) => set("team", { ...config.team!, approvers: e.target.value as "owners" | "team" | "both" })}>
+                  {(["owners", "team", "both"] as const).map((v) => (
+                    <option key={v} value={v}>
+                      {t.builder.teamApproverModes[v]}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            )}
+          </>
+        )}
+      </Section>
+
       <Section icon={<Brain />} id="prompt" title={t.builder.sections.prompt} collapsible defaultOpen={false}>
         <p className="text-xs text-muted">{t.builder.promptHint}</p>
         <pre className="max-h-[480px] overflow-auto whitespace-pre-wrap rounded-xl bg-surface-2 p-4 font-mono text-xs leading-relaxed">
@@ -568,7 +637,7 @@ function ExamplesList({ agentId, items }: { agentId: string; items: ExampleItem[
   );
 }
 
-export const BUILDER_SECTIONS = ["basics", "model", "skills", "style", "knowledge", "rules", "calendar", "tools", "forms", "docs", "prompt"] as const;
+export const BUILDER_SECTIONS = ["basics", "model", "skills", "style", "knowledge", "rules", "calendar", "tools", "forms", "docs", "data", "team", "prompt"] as const;
 
 function Section({
   id,

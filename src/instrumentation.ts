@@ -59,6 +59,8 @@ export async function register() {
   startCampaigns();
   const { startRoutines } = await import("./lib/routines/engine");
   startRoutines();
+  const { startContent } = await import("./lib/content/studio");
+  startContent();
   const { startMonthlyReports } = await import("./lib/agent/report");
   startMonthlyReports();
   const { startWatch } = await import("./lib/agent/watch");

@@ -1,0 +1,89 @@
+"use server";
+
+import { refresh } from "next/cache";
+import { and, eq } from "drizzle-orm";
+import { z } from "zod";
+import { db } from "@/db";
+import { channels, contentItems } from "@/db/schema";
+import { CONTENT_KINDS, CONTENT_PLATFORMS } from "@/lib/content/kinds";
+import { requireUser } from "@/lib/auth";
+import { generateContent, publishItem } from "@/lib/content/studio";
+
+const genSchema = z.object({
+  kind: z.enum(CONTENT_KINDS),
+  platform: z.enum(CONTENT_PLATFORMS),
+  brief: z.string().trim().min(3).max(3000),
+  tone: z.string().trim().max(200),
+  length: z.enum(["short", "medium", "long"]),
+  variants: z.number().int().min(1).max(3),
+  useKb: z.boolean(),
+});
+
+export async function generateContentAction(clientId: string, input: z.input<typeof genSchema>): Promise<{ error?: string; batch?: string }> {
+  await requireUser();
+  const parsed = genSchema.safeParse(input);
+  if (!parsed.success) return { error: "invalid" };
+  try {
+    const rows = await generateContent(clientId, parsed.data);
+    refresh();
+    return { batch: rows[0]?.batch };
+  } catch (e) {
+    const m = e instanceof Error ? e.message : "";
+    if (m !== "no_key" && m !== "empty") console.error("content generate failed", e);
+    return { error: m === "no_key" || m === "empty" ? m : "failed" };
+  }
+}
+
+const saveSchema = z.object({
+  title: z.string().trim().max(300),
+  text: z.string().trim().min(1).max(20_000),
+  channelId: z.string().nullable(),
+  target: z.string().trim().max(200),
+});
+
+/** Правка текста и куда публиковать. */
+export async function saveContentItem(clientId: string, id: string, input: z.input<typeof saveSchema>): Promise<{ error?: string }> {
+  await requireUser();
+  const parsed = saveSchema.safeParse(input);
+  if (!parsed.success) return { error: "invalid" };
+  const d = parsed.data;
+  if (d.channelId) {
+    const [ch] = await db.select({ type: channels.type }).from(channels).where(and(eq(channels.id, d.channelId), eq(channels.clientId, clientId)));
+    if (ch?.type !== "telegram") return { error: "invalid" };
+  }
+  await db
+    .update(contentItems)
+    .set({ ...d, updatedAt: new Date() })
+    .where(and(eq(contentItems.id, id), eq(contentItems.clientId, clientId)));
+  refresh();
+  return {};
+}
+
+/** Опубликовать сейчас (at = null) или по расписанию; отменить расписание — cancel. */
+export async function scheduleContent(clientId: string, id: string, at: number | null): Promise<{ error?: string; url?: string }> {
+  await requireUser();
+  const [item] = await db.select().from(contentItems).where(and(eq(contentItems.id, id), eq(contentItems.clientId, clientId)));
+  if (!item) return { error: "not_found" };
+  if (!item.channelId || !item.target.trim()) return { error: "no_target" };
+  if (at == null) {
+    const r = await publishItem(id);
+    refresh();
+    return r.ok ? { url: r.url } : { error: r.error };
+  }
+  if (!Number.isFinite(at) || at < Date.now() - 60_000) return { error: "past" };
+  await db.update(contentItems).set({ status: "scheduled", publishAt: new Date(at), error: null, updatedAt: new Date() }).where(eq(contentItems.id, id));
+  refresh();
+  return {};
+}
+
+export async function unscheduleContent(id: string) {
+  await requireUser();
+  await db.update(contentItems).set({ status: "draft", publishAt: null, updatedAt: new Date() }).where(and(eq(contentItems.id, id), eq(contentItems.status, "scheduled")));
+  refresh();
+}
+
+export async function deleteContentItem(id: string) {
+  await requireUser();
+  await db.delete(contentItems).where(eq(contentItems.id, id));
+  refresh();
+}

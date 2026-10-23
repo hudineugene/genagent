@@ -64,6 +64,20 @@ export const agentConfigSchema = z.object({
   formIds: z.array(z.string()).max(20).optional(),
   /** Шаблоны документов (КП, справки…), которые агент может выдать клиенту */
   docTemplateIds: z.array(z.string()).max(20).optional(),
+  /** Таблицы данных клиента (data_tables), по которым агент считает точно */
+  tableIds: z.array(z.string()).max(20).optional(),
+  /** Агент для сотрудников: отвечает только людям из списка, может оформлять заявки на согласование */
+  team: z
+    .object({
+      enabled: z.boolean(),
+      /** По одному в строке: @username, id Telegram, телефон, почта; «*» — все */
+      allowed: z.string().max(5000),
+      denyText: z.string().max(500),
+      approvals: z.boolean(),
+      /** Кто решает: владельцы бизнеса (подписанные в боте уведомлений), сотрудники студии или все */
+      approvers: z.enum(["owners", "team", "both"]),
+    })
+    .optional(),
   rules: z.string().max(5000).default(""),
   handoff: z.string().max(2000).default(""),
   /** Поля карточки лида через запятую (пусто — общие: что ищет, бюджет, сроки, контакт) */

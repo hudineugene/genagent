@@ -1,5 +1,6 @@
 import { sqliteTable, text, integer, real, blob, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 import type { AgentConfig } from "@/lib/agent/types";
+import { CONTENT_KINDS, CONTENT_PLATFORMS } from "@/lib/content/kinds";
 
 const id = () =>
   text("id")
@@ -292,7 +293,8 @@ export type RoutineSource =
   | { type: "conversations"; days: number; agentIds?: string[] }
   | { type: "sheet"; url: string; sheet: string }
   | { type: "url"; url: string }
-  | { type: "search"; query: string };
+  | { type: "search"; query: string }
+  | { type: "table"; tableId: string };
 /** Куда отправить: сотрудникам студии (бот уведомлений), владельцу бизнеса (подписанные владельцы клиента) */
 export type RoutineDelivery = { team: boolean; owners: boolean };
 
@@ -402,6 +404,105 @@ export const docTemplates = sqliteTable(
   (t) => [index("doc_templates_client_idx").on(t.clientId)],
 );
 export type DocTemplate = typeof docTemplates.$inferSelect;
+
+export type DataColumn = { name: string; type: "number" | "text" | "date" };
+/**
+ * Таблицы данных клиента для анализа: Google Таблица (обновляется сама) или загруженный CSV / Excel.
+ * Агент и «Аналитик» считают по ним точно (фильтры, группировки, суммы) — не на глаз модели.
+ */
+export const dataTables = sqliteTable(
+  "data_tables",
+  {
+    id: id(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    /** Что в таблице — читает агент */
+    description: text("description").notNull().default(""),
+    source: text("source", { enum: ["file", "sheet"] }).notNull().default("file"),
+    sheetUrl: text("sheet_url").notNull().default(""),
+    sheetName: text("sheet_name").notNull().default(""),
+    filename: text("filename").notNull().default(""),
+    columns: text("columns", { mode: "json" }).$type<DataColumn[]>().notNull().default([]),
+    /** Строки без заголовка, значения — как в источнике */
+    rows: text("rows", { mode: "json" }).$type<string[][]>().notNull().default([]),
+    rowCount: integer("row_count").notNull().default(0),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    refreshedAt: integer("refreshed_at", { mode: "timestamp_ms" }),
+    error: text("error"),
+    createdAt: createdAt(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [index("data_tables_client_idx").on(t.clientId)],
+);
+export type DataTable = typeof dataTables.$inferSelect;
+
+/**
+ * Заявки сотрудников на согласование (отпуск, закупка, скидка, расход): агент для команды оформляет заявку,
+ * руководитель решает кнопкой в Telegram или в студии, сотрудник получает ответ в том же чате.
+ */
+export const approvals = sqliteTable(
+  "approvals",
+  {
+    id: id(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    agentId: text("agent_id").references(() => agents.id, { onDelete: "set null" }),
+    conversationId: text("conversation_id").references(() => conversations.id, { onDelete: "set null" }),
+    /** Номер заявки у клиента по порядку */
+    number: integer("number").notNull().default(0),
+    requester: text("requester").notNull().default(""),
+    subject: text("subject").notNull(),
+    details: text("details").notNull().default(""),
+    amount: text("amount").notNull().default(""),
+    status: text("status", { enum: ["pending", "approved", "rejected"] }).notNull().default("pending"),
+    decidedBy: text("decided_by").notNull().default(""),
+    comment: text("comment").notNull().default(""),
+    decidedAt: integer("decided_at", { mode: "timestamp_ms" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("approvals_client_idx").on(t.clientId, t.createdAt)],
+);
+export type Approval = typeof approvals.$inferSelect;
+
+/**
+ * Контент-студия: тексты в стиле бренда (посты, статьи, реклама, SEO-брифы, вакансии), варианты для A/B
+ * (одна генерация — один batch), публикация в Telegram-канал клиента сразу или по расписанию.
+ */
+export const contentItems = sqliteTable(
+  "content_items",
+  {
+    id: id(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    batch: text("batch").notNull().default(""),
+    kind: text("kind", { enum: CONTENT_KINDS }).notNull().default("post"),
+    platform: text("platform", { enum: CONTENT_PLATFORMS }).notNull().default("telegram"),
+    brief: text("brief").notNull().default(""),
+    title: text("title").notNull().default(""),
+    text: text("text").notNull().default(""),
+    status: text("status", { enum: ["draft", "scheduled", "published", "failed"] }).notNull().default("draft"),
+    /** Бот клиента (канал типа telegram), от имени которого публикуем */
+    channelId: text("channel_id").references(() => channels.id, { onDelete: "set null" }),
+    /** Куда: @канал или id чата */
+    target: text("target").notNull().default(""),
+    publishAt: integer("publish_at", { mode: "timestamp_ms" }),
+    publishedAt: integer("published_at", { mode: "timestamp_ms" }),
+    url: text("url").notNull().default(""),
+    error: text("error"),
+    createdAt: createdAt(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [index("content_items_client_idx").on(t.clientId, t.createdAt), index("content_items_due_idx").on(t.status, t.publishAt)],
+);
+export type ContentItem = typeof contentItems.$inferSelect;
 
 /** Выданный документ: id — неугадываемая ссылка /d/<id> */
 export const generatedDocs = sqliteTable(
@@ -704,6 +805,8 @@ export type LeadCard = {
 export type ConversationContext = {
   /** Клиент написал «стоп» — рассылки и цепочки ему не отправляются */
   optOut?: boolean;
+  /** Агент для сотрудников: этому собеседнику уже ответили, что доступа нет */
+  teamDenied?: boolean;
   /** Строка заявки этого разговора в Google Таблице (id интеграции → номер строки) */
   sheetRows?: Record<string, number>;
   postId?: string;

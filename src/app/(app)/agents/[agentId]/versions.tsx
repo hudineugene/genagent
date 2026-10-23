@@ -44,6 +44,8 @@ const FIELDS: Field[] = [
   "operatorReview",
   "formIds",
   "docTemplateIds",
+  "tableIds",
+  "team",
 ];
 
 export function VersionsPanel({
@@ -110,6 +112,8 @@ export function VersionsPanel({
       operatorReview: b.operatorReview,
       formIds: b.sections.forms,
       docTemplateIds: b.sections.docs,
+      tableIds: b.sections.data,
+      team: b.sections.team,
     };
     return map[f];
   };
@@ -143,6 +147,10 @@ export function VersionsPanel({
         return String((c.formIds ?? []).length || "—");
       case "docTemplateIds":
         return String((c.docTemplateIds ?? []).length || "—");
+      case "team":
+        return c.team?.enabled ? t.versions.on : t.versions.off;
+      case "tableIds":
+        return String((c.tableIds ?? []).length || "—");
       case "kbSourceIds":
         return c.kbSourceIds == null
           ? t.versions.allSources
