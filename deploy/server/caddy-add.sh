@@ -2,7 +2,8 @@
 # Публичный HTTPS-адрес GenAgent через Caddy (один раз). Запуск на сервере:
 #   bash ~/bots/genagent/caddy-add.sh agents.yabotua.com
 # Наружу открыто ТОЛЬКО нужное сайтам клиентов и Meta: виджет (/widget.js, /w/*, /api/widget/*), статика Next.js,
-# /api/health, возврат после входа в Instagram/Threads (/oauth/*), вебхуки Meta (/api/webhooks/*) и запросы своих ботов клиентов к агенту (/api/agent/*, с ключом канала).
+# /api/health, возврат после входа в Instagram/Threads (/oauth/*), вебхуки Meta (/api/webhooks/*), запросы своих ботов клиентов к агенту (/api/agent/*, с ключом канала),
+# документы для клиентов по неугадываемой ссылке (/d/*) и начисления баллов из CRM (/api/loyalty/*, с ключом программы).
 # Остальное (админка студии) — 404; она доступна только в Tailscale.
 # Повторный запуск обновляет список открытых путей в уже добавленном блоке.
 # Общий yabot_security не подключаем: его frame-ancestors запретил бы встраивать виджет в сайты клиентов.
@@ -16,7 +17,7 @@ CADDY="$(docker ps --filter ancestor=caddy:2 --format '{{.Names}}' | head -1)"
 [ -n "$CADDY" ] || { echo "Не найден контейнер Caddy"; exit 1; }
 CADDYFILE="$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/etc/caddy/Caddyfile"}}{{.Source}}{{end}}{{end}}' "$CADDY")"
 [ -f "$CADDYFILE" ] || { echo "Не найден Caddyfile контейнера $CADDY"; exit 1; }
-PUBLIC_PATHS="/widget.js /w/* /api/widget/* /api/health /_next/static/* /icon.svg /oauth/* /api/webhooks/* /api/agent/* /privacy /data-deletion"
+PUBLIC_PATHS="/widget.js /w/* /api/widget/* /api/health /_next/static/* /icon.svg /oauth/* /api/webhooks/* /api/agent/* /privacy /data-deletion /d/* /api/loyalty/*"
 MATCHER="	@genagent_public path $PUBLIC_PATHS"
 UPDATE=0
 if grep -q "reverse_proxy genagent-bot:3000" "$CADDYFILE"; then

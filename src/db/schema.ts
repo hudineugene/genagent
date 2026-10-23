@@ -504,6 +504,131 @@ export const contentItems = sqliteTable(
 );
 export type ContentItem = typeof contentItems.$inferSelect;
 
+export type MeetingTask = { who: string; what: string; due: string };
+/**
+ * Встречи и звонки: запись (аудио/видео) или готовая расшифровка → протокол, разбор собеседования или
+ * звонка продаж; задачи уходят в Telegram и во внешние системы (событие meeting).
+ */
+export const meetings = sqliteTable(
+  "meetings",
+  {
+    id: id(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    title: text("title").notNull().default(""),
+    kind: text("kind", { enum: ["protocol", "interview", "sales", "custom"] }).notNull().default("protocol"),
+    /** Критерии собеседования, чек-лист звонка или своё задание */
+    instructions: text("instructions").notNull().default(""),
+    filename: text("filename").notNull().default(""),
+    transcript: text("transcript").notNull().default(""),
+    summary: text("summary").notNull().default(""),
+    /** Разбор в markdown */
+    result: text("result").notNull().default(""),
+    tasks: text("tasks", { mode: "json" }).$type<MeetingTask[]>().notNull().default([]),
+    /** Оценка 1–10 (собеседование, звонок) */
+    score: integer("score"),
+    status: text("status", { enum: ["processing", "done", "error"] }).notNull().default("processing"),
+    error: text("error"),
+    delivery: text("delivery", { mode: "json" }).$type<{ team: boolean; owners: boolean }>().notNull().default({ team: false, owners: false }),
+    createdAt: createdAt(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [index("meetings_client_idx").on(t.clientId, t.createdAt)],
+);
+export type Meeting = typeof meetings.$inferSelect;
+
+export type Vehicle = { name: string; capacityKg: number; capacityM3: number };
+/** Логистика клиента: склад / точка отправления, время на одну точку, машины; правила доставки — для агента. */
+export const clientLogistics = sqliteTable("client_logistics", {
+  clientId: text("client_id")
+    .primaryKey()
+    .references(() => clients.id, { onDelete: "cascade" }),
+  baseAddress: text("base_address").notNull().default(""),
+  stopMinutes: integer("stop_minutes").notNull().default(10),
+  vehicles: text("vehicles", { mode: "json" }).$type<Vehicle[]>().notNull().default([]),
+  /** Стоимость и условия доставки — агент называет их вместе с расчётом расстояния */
+  deliveryNote: text("delivery_note").notNull().default(""),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+export type ClientLogistics = typeof clientLogistics.$inferSelect;
+
+export type LoyaltyReward = { name: string; cost: number };
+/**
+ * Баллы и лояльность: программа клиента (правила, награды, приветственный бонус), счета клиентов или сотрудников
+ * (по контакту: @ник, id Telegram, телефон, почта) и история начислений и списаний.
+ */
+export const loyaltyPrograms = sqliteTable(
+  "loyalty_programs",
+  {
+    id: id(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    name: text("name").notNull().default("Бонусы"),
+    /** Как называть баллы в родительном падеже: «баллов», «бонусов», «звёзд» */
+    unit: text("unit").notNull().default("баллов"),
+    /** Как начисляются — читает агент */
+    rules: text("rules").notNull().default(""),
+    rewards: text("rewards", { mode: "json" }).$type<LoyaltyReward[]>().notNull().default([]),
+    welcome: integer("welcome").notNull().default(0),
+    /** Сообщать клиенту в чат о начислениях из студии и API */
+    notifyCustomer: integer("notify_customer", { mode: "boolean" }).notNull().default(true),
+    /** Ключ для начислений из CRM / сайта (POST /api/loyalty/<id>) */
+    apiKey: text("api_key").notNull(),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    createdAt: createdAt(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [index("loyalty_programs_client_idx").on(t.clientId)],
+);
+export type LoyaltyProgram = typeof loyaltyPrograms.$inferSelect;
+
+export const loyaltyAccounts = sqliteTable(
+  "loyalty_accounts",
+  {
+    id: id(),
+    programId: text("program_id")
+      .notNull()
+      .references(() => loyaltyPrograms.id, { onDelete: "cascade" }),
+    /** Нормализованный контакт: телефон цифрами, ник без @ строчными, id Telegram, почта */
+    contact: text("contact").notNull(),
+    name: text("name").notNull().default(""),
+    /** Последний разговор — туда приходят сообщения о начислениях */
+    conversationId: text("conversation_id").references(() => conversations.id, { onDelete: "set null" }),
+    balance: integer("balance").notNull().default(0),
+    createdAt: createdAt(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [uniqueIndex("loyalty_accounts_contact_idx").on(t.programId, t.contact)],
+);
+export type LoyaltyAccount = typeof loyaltyAccounts.$inferSelect;
+
+export const loyaltyTx = sqliteTable(
+  "loyalty_tx",
+  {
+    id: id(),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => loyaltyAccounts.id, { onDelete: "cascade" }),
+    delta: integer("delta").notNull(),
+    /** Баланс после операции */
+    balance: integer("balance").notNull(),
+    reason: text("reason").notNull().default(""),
+    source: text("source", { enum: ["studio", "api", "agent", "welcome"] }).notNull().default("studio"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("loyalty_tx_account_idx").on(t.accountId, t.createdAt)],
+);
+
 /** Выданный документ: id — неугадываемая ссылка /d/<id> */
 export const generatedDocs = sqliteTable(
   "generated_docs",

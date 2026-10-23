@@ -4,7 +4,7 @@ import { InfoHint } from "@/components/hint";
 
 import Link from "next/link";
 import { useMemo, useState, useTransition, type ReactNode } from "react";
-import { BookOpen, Brain, CalendarDays, ChevronDown, ClipboardList, Cpu, FileText, Table2, MessageSquareText, Users, ScrollText, Sparkles, UserRound, Wrench } from "lucide-react";
+import { BookOpen, Brain, CalendarDays, ChevronDown, ClipboardList, Cpu, FileText, Table2, MessageSquareText, Users, Gift, ScrollText, Sparkles, UserRound, Wrench } from "lucide-react";
 import { SKILLS } from "@/lib/agent/skills";
 import { compileSystemPrompt, type ClientContext } from "@/lib/agent/compile";
 import { EFFORTS, REPLY_LANGUAGES, TONES, type AgentConfig } from "@/lib/agent/types";
@@ -34,6 +34,7 @@ export type BuilderTool = { id: string; title: string; name: string; enabled: bo
 export type BuilderForm = { id: string; name: string; kind: "form" | "quiz"; enabled: boolean };
 export type BuilderDocTemplate = { id: string; name: string; enabled: boolean };
 export type BuilderTable = { id: string; name: string; enabled: boolean; rowCount: number };
+export type BuilderProgram = { id: string; name: string; enabled: boolean };
 
 export function Builder({
   config,
@@ -47,6 +48,7 @@ export function Builder({
   forms = [],
   docTemplates = [],
   tables = [],
+  programs = [],
 }: {
   config: AgentConfig;
   onChange: (c: AgentConfig) => void;
@@ -59,6 +61,7 @@ export function Builder({
   forms?: BuilderForm[];
   docTemplates?: BuilderDocTemplate[];
   tables?: BuilderTable[];
+  programs?: BuilderProgram[];
 }) {
   const { t, locale } = useI18n();
   const set = <K extends keyof AgentConfig>(key: K, value: AgentConfig[K]) => onChange({ ...config, [key]: value });
@@ -540,6 +543,33 @@ export function Builder({
         </Link>
       </Section>
 
+      <Section icon={<Gift />} id="loyalty" title={t.builder.sections.loyalty}>
+        <label className="flex items-start gap-2.5 text-sm">
+          <input type="checkbox" className="mt-0.5 size-4 accent-[var(--accent)]" checked={Boolean(config.logistics)} onChange={(e) => set("logistics", e.target.checked)} />
+          <span>
+            <span className="font-medium">{t.builder.deliveryEstimate}</span>
+            <span className="block text-xs text-muted">{t.builder.deliveryEstimateHint}</span>
+          </span>
+        </label>
+        <p className="text-xs text-muted">{t.builder.loyaltyHint}</p>
+        {programs.length === 0 ? (
+          <p className="text-sm text-muted">{t.builder.loyaltyEmpty}</p>
+        ) : (
+          <Select className="w-72" value={config.loyaltyProgramId ?? ""} onChange={(e) => set("loyaltyProgramId", e.target.value || null)}>
+            <option value="">{t.builder.loyaltyOff}</option>
+            {programs.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+                {p.enabled ? "" : ` (${t.status.paused})`}
+              </option>
+            ))}
+          </Select>
+        )}
+        <Link href={`/clients/${client.id}?tab=loyalty`} className="text-sm text-accent hover:underline">
+          {t.builder.loyaltyManage}
+        </Link>
+      </Section>
+
       <Section icon={<Users />} id="team" title={t.builder.sections.team} collapsible defaultOpen={Boolean(config.team?.enabled)}>
         <p className="text-xs text-muted">{t.builder.teamHint}</p>
         <label className="flex items-center gap-2 text-sm">
@@ -637,7 +667,7 @@ function ExamplesList({ agentId, items }: { agentId: string; items: ExampleItem[
   );
 }
 
-export const BUILDER_SECTIONS = ["basics", "model", "skills", "style", "knowledge", "rules", "calendar", "tools", "forms", "docs", "data", "team", "prompt"] as const;
+export const BUILDER_SECTIONS = ["basics", "model", "skills", "style", "knowledge", "rules", "calendar", "tools", "forms", "docs", "data", "loyalty", "team", "prompt"] as const;
 
 function Section({
   id,

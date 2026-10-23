@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { and, count, desc, eq } from "drizzle-orm";
-import { BarChart3, BookOpen, Bot, ClipboardList, ClipboardCheck, FileBarChart2, FileText, PenLine, Table2, Megaphone, Plus, Settings, Wrench } from "lucide-react";
+import { and, asc, count, desc, eq } from "drizzle-orm";
+import { BarChart3, BookOpen, Bot, ClipboardList, ClipboardCheck, FileBarChart2, FileText, Gift, Mic, PenLine, Truck, Table2, Megaphone, Plus, Settings, Wrench } from "lucide-react";
 import { db } from "@/db";
-import { agents, approvals, campaigns, channels, contentItems, clientDocTypes, clientDocuments, clientForms, dataTables, clientIntegrations, clientTools, clients, conversations, docTemplates, formResponses, generatedDocs, kbSources, knowledgeGaps, routines } from "@/db/schema";
+import { agents, approvals, campaigns, channels, clientLogistics, contentItems, loyaltyAccounts, loyaltyPrograms, loyaltyTx, meetings, clientDocTypes, clientDocuments, clientForms, dataTables, clientIntegrations, clientTools, clients, conversations, docTemplates, formResponses, generatedDocs, kbSources, knowledgeGaps, routines } from "@/db/schema";
 import { getT } from "@/lib/i18n/server";
 import { findModel } from "@/lib/models";
 import type { Dict, Locale } from "@/lib/i18n";
@@ -19,6 +19,10 @@ import { DocumentsManager } from "./documents";
 import { DataManager } from "./data";
 import { ApprovalsManager } from "./approvals";
 import { ContentStudio } from "./content";
+import { MeetingsManager } from "./meetings";
+import { LoyaltyManager } from "./loyalty";
+import { LogisticsManager } from "./logistics";
+import { publicUrl } from "@/lib/settings";
 import { campaignStats } from "@/lib/campaigns/engine";
 import { getGoogleSettings } from "@/lib/google/calendar";
 import { OwnersCard } from "./owners";
@@ -39,8 +43,8 @@ export default async function ClientPage({
   const [client] = await db.select().from(clients).where(eq(clients.id, clientId));
   if (!client) notFound();
 
-  const active = tab === "kb" ? "kb" : tab === "tools" ? "tools" : tab === "campaigns" ? "campaigns" : tab === "forms" ? "forms" : tab === "routines" ? "routines" : tab === "documents" ? "documents" : tab === "data" ? "data" : tab === "approvals" ? "approvals" : tab === "content" ? "content" : "agents";
-  const [[{ agentsCount }], [{ kbCount }], [{ toolsCount }], [{ campaignsCount }], [{ formsCount }], [{ routinesCount }], [{ docTypesCount }], [{ templatesCount }], [{ tablesCount }], [{ pendingApprovals }], [{ approvalsCount }], teamAgents, [{ contentCount }]] = await Promise.all([
+  const active = tab === "kb" ? "kb" : tab === "tools" ? "tools" : tab === "campaigns" ? "campaigns" : tab === "forms" ? "forms" : tab === "routines" ? "routines" : tab === "documents" ? "documents" : tab === "data" ? "data" : tab === "approvals" ? "approvals" : tab === "content" ? "content" : tab === "meetings" ? "meetings" : tab === "loyalty" ? "loyalty" : tab === "logistics" ? "logistics" : "agents";
+  const [[{ agentsCount }], [{ kbCount }], [{ toolsCount }], [{ campaignsCount }], [{ formsCount }], [{ routinesCount }], [{ docTypesCount }], [{ templatesCount }], [{ tablesCount }], [{ pendingApprovals }], [{ approvalsCount }], teamAgents, [{ contentCount }], [{ meetingsCount }], [{ programsCount }]] = await Promise.all([
     db.select({ agentsCount: count() }).from(agents).where(eq(agents.clientId, clientId)),
     db.select({ kbCount: count() }).from(kbSources).where(eq(kbSources.clientId, clientId)),
     db.select({ toolsCount: count() }).from(clientTools).where(eq(clientTools.clientId, clientId)),
@@ -54,6 +58,8 @@ export default async function ClientPage({
     db.select({ approvalsCount: count() }).from(approvals).where(eq(approvals.clientId, clientId)),
     hasTeamAgents(clientId),
     db.select({ contentCount: count() }).from(contentItems).where(eq(contentItems.clientId, clientId)),
+    db.select({ meetingsCount: count() }).from(meetings).where(eq(meetings.clientId, clientId)),
+    db.select({ programsCount: count() }).from(loyaltyPrograms).where(eq(loyaltyPrograms.clientId, clientId)),
   ]);
 
   const tabs = [
@@ -64,6 +70,9 @@ export default async function ClientPage({
     { key: "documents", href: `/clients/${client.id}?tab=documents`, label: t.documents.tab, icon: FileText, n: docTypesCount + templatesCount },
     { key: "data", href: `/clients/${client.id}?tab=data`, label: t.data.tab, icon: Table2, n: tablesCount },
     { key: "content", href: `/clients/${client.id}?tab=content`, label: t.content.tab, icon: PenLine, n: contentCount },
+    { key: "meetings", href: `/clients/${client.id}?tab=meetings`, label: t.meetings.tab, icon: Mic, n: meetingsCount },
+    { key: "loyalty", href: `/clients/${client.id}?tab=loyalty`, label: t.loyalty.tab, icon: Gift, n: programsCount },
+    { key: "logistics", href: `/clients/${client.id}?tab=logistics`, label: t.logistics.tab, icon: Truck, n: 0 },
     ...(teamAgents || approvalsCount ? [{ key: "approvals", href: `/clients/${client.id}?tab=approvals`, label: t.approvals.tab, icon: ClipboardCheck, n: pendingApprovals }] : []),
     { key: "routines", href: `/clients/${client.id}?tab=routines`, label: t.routines.tab, icon: FileBarChart2, n: routinesCount },
     { key: "campaigns", href: `/clients/${client.id}?tab=campaigns`, label: t.campaigns.tab, icon: Megaphone, n: campaignsCount },
@@ -121,6 +130,12 @@ export default async function ClientPage({
         <CampaignsTab clientId={client.id} />
       ) : active === "forms" ? (
         <FormsTab clientId={client.id} />
+      ) : active === "logistics" ? (
+        <LogisticsTab clientId={client.id} />
+      ) : active === "loyalty" ? (
+        <LoyaltyTab clientId={client.id} />
+      ) : active === "meetings" ? (
+        <MeetingsTab clientId={client.id} />
       ) : active === "content" ? (
         <ContentTab clientId={client.id} />
       ) : active === "approvals" ? (
@@ -135,6 +150,85 @@ export default async function ClientPage({
         <AgentsTab clientId={client.id} t={t} locale={locale} />
       )}
     </div>
+  );
+}
+
+async function LogisticsTab({ clientId }: { clientId: string }) {
+  const [l] = await db.select().from(clientLogistics).where(eq(clientLogistics.clientId, clientId));
+  return (
+    <LogisticsManager
+      clientId={clientId}
+      mapsKey={Boolean(process.env.GOOGLE_MAPS_API_KEY)}
+      settings={{ baseAddress: l?.baseAddress ?? "", stopMinutes: l?.stopMinutes ?? 10, vehicles: l?.vehicles ?? [], deliveryNote: l?.deliveryNote ?? "" }}
+    />
+  );
+}
+
+async function LoyaltyTab({ clientId }: { clientId: string }) {
+  const [[p], list] = await Promise.all([
+    db.select().from(loyaltyPrograms).where(eq(loyaltyPrograms.clientId, clientId)).orderBy(asc(loyaltyPrograms.createdAt)).limit(1),
+    db.select({ name: agents.name, config: agents.config }).from(agents).where(eq(agents.clientId, clientId)),
+  ]);
+  const [accounts, tx] = p
+    ? await Promise.all([
+        db.select().from(loyaltyAccounts).where(eq(loyaltyAccounts.programId, p.id)).orderBy(desc(loyaltyAccounts.updatedAt)).limit(500),
+        db
+          .select({ t: loyaltyTx, contact: loyaltyAccounts.contact, name: loyaltyAccounts.name })
+          .from(loyaltyTx)
+          .innerJoin(loyaltyAccounts, eq(loyaltyAccounts.id, loyaltyTx.accountId))
+          .where(eq(loyaltyAccounts.programId, p.id))
+          .orderBy(desc(loyaltyTx.createdAt))
+          .limit(30),
+      ])
+    : [[], []];
+  return (
+    <LoyaltyManager
+      clientId={clientId}
+      apiBase={publicUrl() || ""}
+      program={
+        p
+          ? {
+              id: p.id,
+              name: p.name,
+              unit: p.unit,
+              rules: p.rules,
+              rewards: p.rewards,
+              welcome: p.welcome,
+              notifyCustomer: p.notifyCustomer,
+              enabled: p.enabled,
+              apiKey: p.apiKey,
+              usedBy: list.filter((a) => a.config.loyaltyProgramId === p.id).map((a) => a.name),
+            }
+          : null
+      }
+      accounts={accounts.map((a) => ({ id: a.id, contact: a.contact, name: a.name, balance: a.balance, updatedAt: a.updatedAt.getTime() }))}
+      tx={tx.map(({ t, contact, name }) => ({ contact, name, delta: t.delta, balance: t.balance, reason: t.reason, source: t.source, at: t.createdAt.getTime() }))}
+    />
+  );
+}
+
+async function MeetingsTab({ clientId }: { clientId: string }) {
+  const rows = await db.select().from(meetings).where(eq(meetings.clientId, clientId)).orderBy(desc(meetings.createdAt)).limit(100);
+  return (
+    <MeetingsManager
+      clientId={clientId}
+      openai={Boolean(process.env.OPENAI_API_KEY)}
+      rows={rows.map((r) => ({
+        id: r.id,
+        title: r.title,
+        kind: r.kind,
+        instructions: r.instructions,
+        filename: r.filename,
+        transcript: r.transcript,
+        summary: r.summary,
+        result: r.result,
+        tasks: r.tasks,
+        score: r.score,
+        status: r.status,
+        error: r.error,
+        at: r.createdAt.getTime(),
+      }))}
+    />
   );
 }
 

@@ -11,7 +11,7 @@ import { Button, Input, Select, Spinner, cx } from "@/components/ui";
 import { BUILDER_SECTIONS, Builder } from "./builder";
 import { Playground } from "./playground";
 import { VersionsPanel } from "./versions";
-import type { BuilderDocTemplate, BuilderTable, BuilderForm, BuilderSource, BuilderTool, ExampleItem } from "./builder";
+import type { BuilderDocTemplate, BuilderProgram, BuilderTable, BuilderForm, BuilderSource, BuilderTool, ExampleItem } from "./builder";
 
 type Status = "draft" | "active" | "paused";
 
@@ -29,6 +29,7 @@ export function AgentStudio({
   forms,
   docTemplates,
   tables,
+  programs,
 }: {
   agent: StudioAgent;
   client: ClientContext & { id: string };
@@ -39,6 +40,7 @@ export function AgentStudio({
   forms: BuilderForm[];
   docTemplates: BuilderDocTemplate[];
   tables: BuilderTable[];
+  programs: BuilderProgram[];
 }) {
   const { t } = useI18n();
   const router = useRouter();
@@ -162,7 +164,7 @@ export function AgentStudio({
 
           <SectionNav />
 
-          <Builder config={config} onChange={setConfig} client={client} sources={sources} googleEmail={googleEmail} agentId={agent.id} examples={examples} tools={tools} forms={forms} docTemplates={docTemplates} tables={tables} />
+          <Builder config={config} onChange={setConfig} client={client} sources={sources} googleEmail={googleEmail} agentId={agent.id} examples={examples} tools={tools} forms={forms} docTemplates={docTemplates} tables={tables} programs={programs} />
 
           {/* Панель сохранения — только когда есть изменения, прилипает к низу экрана */}
           {(dirty || error) && (

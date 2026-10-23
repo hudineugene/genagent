@@ -10,6 +10,8 @@ import { formTool, formsNote, loadForms } from "./forms";
 import { docTool, docsNote, loadDocTemplates } from "@/lib/documents/templates";
 import { loadTables, tableTool, tablesNote } from "@/lib/data/tables";
 import { approvalTool, teamNote } from "@/lib/team/approvals";
+import { getProgram, loyaltyNote, loyaltyTools } from "@/lib/loyalty/engine";
+import { deliveryTool } from "@/lib/logistics/routes";
 import { webSearchFor } from "@/lib/services";
 import { examplesNote, getExamples } from "./examples";
 
@@ -69,7 +71,8 @@ export async function prepareChat(
   const forms = await loadForms(client.id, config.formIds ?? []).catch(() => []);
   const templates = await loadDocTemplates(client.id, config.docTemplateIds ?? []).catch(() => []);
   const tables = await loadTables(client.id, config.tableIds ?? []).catch(() => []);
-  const fullSystem = [system, examples, formsNote(forms), docsNote(templates), tablesNote(tables), teamNote(config.team), channelNote].filter(Boolean).join("\n\n");
+  const loyalty = config.loyaltyProgramId ? await getProgram(config.loyaltyProgramId).then((p) => (p?.enabled && p.clientId === client.id ? p : null)).catch(() => null) : null;
+  const fullSystem = [system, examples, formsNote(forms), docsNote(templates), tablesNote(tables), teamNote(config.team), loyaltyNote(loyalty), channelNote].filter(Boolean).join("\n\n");
   const own = await loadAgentTools(client.id, config.toolIds ?? [], tools).catch((e) => {
     console.error("load agent tools failed", e);
     return [];
@@ -80,6 +83,8 @@ export async function prepareChat(
     ...forms.map((f) => formTool(f, { ...tools, clientId: client.id })),
     ...templates.map((t) => docTool(t, { ...tools, clientId: client.id })),
     ...tables.map((t) => tableTool(t)),
+    ...(config.logistics && process.env.GOOGLE_MAPS_API_KEY ? [deliveryTool(client.id)] : []),
+    ...(loyalty ? loyaltyTools(loyalty, { ...tools, clientId: client.id }) : []),
     ...(config.team?.enabled && config.team.approvals ? [approvalTool(config.team, { ...tools, clientId: client.id })] : []),
   ];
   const agentTools = all.length ? all : undefined;

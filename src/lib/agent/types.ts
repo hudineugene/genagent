@@ -66,6 +66,10 @@ export const agentConfigSchema = z.object({
   docTemplateIds: z.array(z.string()).max(20).optional(),
   /** Таблицы данных клиента (data_tables), по которым агент считает точно */
   tableIds: z.array(z.string()).max(20).optional(),
+  /** Расчёт доставки: расстояние и время в пути от склада клиента (Google Maps) */
+  logistics: z.boolean().optional(),
+  /** Программа лояльности клиента: агент показывает баланс и обменивает баллы на награды */
+  loyaltyProgramId: z.string().nullable().optional(),
   /** Агент для сотрудников: отвечает только людям из списка, может оформлять заявки на согласование */
   team: z
     .object({

@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { agents, clientForms, dataTables, docTemplates, clientTools, clients, kbSources } from "@/db/schema";
+import { agents, clientForms, dataTables, docTemplates, loyaltyPrograms, clientTools, clients, kbSources } from "@/db/schema";
 import { agentConfigSchema } from "@/lib/agent/types";
 import { getGoogleSettings } from "@/lib/google/calendar";
 import { AgentStudio } from "./studio";
@@ -51,6 +51,11 @@ export default async function AgentPage({ params }: { params: Promise<{ agentId:
     .where(eq(dataTables.clientId, client.id))
     .orderBy(asc(dataTables.createdAt));
 
+  const programs = await db
+    .select({ id: loyaltyPrograms.id, name: loyaltyPrograms.name, enabled: loyaltyPrograms.enabled })
+    .from(loyaltyPrograms)
+    .where(eq(loyaltyPrograms.clientId, client.id));
+
   // Старые конфигурации дополняем полями по умолчанию (например, kbSourceIds).
   const parsed = agentConfigSchema.safeParse(agent.config);
   const config = parsed.success ? parsed.data : agent.config;
@@ -77,6 +82,7 @@ export default async function AgentPage({ params }: { params: Promise<{ agentId:
         forms={forms}
         docTemplates={docs}
         tables={tables}
+        programs={programs}
       />
     </div>
   );
