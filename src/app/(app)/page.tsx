@@ -29,6 +29,7 @@ import { homeFeed, homeTrends, type FeedItem } from "@/lib/home-live";
 import { Spark } from "@/components/spark";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { RelTime } from "@/components/rel-time";
+import { CountUp } from "@/components/count-up";
 
 /** Главная «Сегодня»: кто ждёт человека, что требует решения, сводка за сутки и клиенты. */
 export default async function TodayPage() {
@@ -218,7 +219,7 @@ function Stat({
         {label}
       </div>
       <div className="mt-2 flex items-end justify-between gap-2">
-        <div className={cx("font-display text-2xl font-bold tracking-tight tabular-nums", tone === "danger" && "text-danger")}>{value}</div>
+        <div className={cx("font-display text-2xl font-bold tracking-tight tabular-nums", tone === "danger" && "text-danger")}>{typeof value === "string" || typeof value === "number" ? <CountUp value={value} /> : value}</div>
         <span className="hidden sm:block">
           <Spark data={trend} wide height={22} />
         </span>

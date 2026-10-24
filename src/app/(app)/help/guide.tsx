@@ -123,7 +123,7 @@ export function HelpGuide({ sections }: { sections: HelpSection[] }) {
 
   return (
     <div className="grid gap-6 md:grid-cols-[220px_minmax(0,1fr)]">
-      <aside className="space-y-3 md:sticky md:top-6 md:h-fit">
+      <aside className="space-y-3 md:sticky md:top-20 md:h-fit">
         <label className="relative block">
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted" />
           <Input className="pl-9" placeholder={h.search} value={query} onChange={(e) => setQuery(e.target.value)} />

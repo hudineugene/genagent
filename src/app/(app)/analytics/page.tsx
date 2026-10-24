@@ -4,10 +4,13 @@ import { db } from "@/db";
 import { agents, bookings, clients, conversations, messages, usageLog } from "@/db/schema";
 import { getT } from "@/lib/i18n/server";
 import { monthStart } from "@/lib/usage";
+import { studioTz } from "@/lib/general";
 import { SortTh, byKey, readSort, type SortDir } from "@/components/sort-th";
 import { findModel } from "@/lib/models";
 import { Card, PageHeader, cx } from "@/components/ui";
 import { AnalyticsCharts } from "./charts";
+import { Heatmap } from "@/components/heatmap";
+import { SectionTip } from "@/components/section-tip";
 import { ClientSelect } from "@/components/client-select";
 import { agentFunnels } from "@/lib/agent/funnel";
 import { InfoHint } from "@/components/hint";
@@ -131,6 +134,20 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
       .innerJoin(conversations, eq(conversations.id, messages.conversationId))
       .where(and(gte(messages.createdAt, prevFrom), lt(messages.createdAt, from), eq(conversations.isTest, false), clientId ? eq(conversations.clientId, clientId) : undefined)),
   ]);
+  // Карта активности: сообщения клиентов по дням недели и часам (часовой пояс студии)
+  const userTimes = await db
+    .select({ at: messages.createdAt })
+    .from(messages)
+    .innerJoin(conversations, eq(conversations.id, messages.conversationId))
+    .where(and(eq(messages.role, "user"), ...msgWhere))
+    .limit(100_000);
+  const heat = Array.from({ length: 7 }, () => Array<number>(24).fill(0));
+  const parts = new Intl.DateTimeFormat("en-GB", { weekday: "short", hour: "2-digit", hourCycle: "h23", timeZone: studioTz() });
+  const WD: Record<string, number> = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 };
+  for (const { at } of userTimes) {
+    const p = Object.fromEntries(parts.formatToParts(at).map((x) => [x.type, x.value]));
+    heat[WD[p.weekday] ?? 0][Number(p.hour) % 24]++;
+  }
   /** Изменение к прошлому периоду, %; нет данных за прошлый период — без сравнения. */
   const growth = (now: number, before: number) => (before > 0 ? Math.round(((now - before) / before) * 100) : null);
   const vs = t.analytics.vsPrev.replace("{n}", String(days));
@@ -187,6 +204,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <PageHeader title={t.analytics.title} />
+      <SectionTip id="analytics" />
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="inline-flex rounded-xl bg-surface-2 p-1">
@@ -234,6 +252,12 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
         conversations={keys.map((k) => ({ key: k.key, label: k.label, value: convMap.get(k.key) ?? 0 }))}
         costs={keys.map((k) => ({ key: k.key, label: k.label, value: Math.round((costMap.get(k.key) ?? 0) * 1000) / 1000 }))}
       />
+
+      {heat.some((row) => row.some(Boolean)) && (
+      <Card className="p-5">
+        <Heatmap grid={heat} days={t.analytics.weekdaysShort} title={t.analytics.heatTitle} hint={t.analytics.heatHint} peakLabel={t.analytics.heatPeak} less={t.analytics.heatLess} more={t.analytics.heatMore} unit={t.analytics.heatUnit} />
+      </Card>
+      )}
 
       {resolution.all.total > 0 && (
         <Card className="space-y-4 p-5">

@@ -47,6 +47,7 @@ import { getGeneral, studioTz } from "@/lib/general";
 import { ClientMapTab } from "./client-map";
 import { logoVersions } from "@/lib/client-logo";
 import { dashboardData } from "@/lib/dashboard";
+import { CountUp } from "@/components/count-up";
 import { CLIENT_TABS, clientSections, type ModuleCard } from "@/lib/client-sections";
 import { NAV_ICONS, visibleNav } from "@/lib/nav-icons";
 export default async function ClientPage({
@@ -119,7 +120,7 @@ export default async function ClientPage({
 
       <div className="ctx-grid grid gap-6 md:grid-cols-[200px_minmax(0,1fr)] md:gap-8">
         {/* Разделы клиента: на компьютере — колонка слева, на телефоне — строка с прокруткой */}
-        <nav className="ctx-inline -mx-1 flex gap-1 overflow-x-auto px-1 pb-1 [scrollbar-width:none] md:sticky md:top-6 md:mx-0 md:flex-col md:gap-4 md:self-start md:overflow-visible md:p-0">
+        <nav className="ctx-inline -mx-1 flex gap-1 overflow-x-auto px-1 pb-1 [scrollbar-width:none] md:sticky md:top-20 md:mx-0 md:flex-col md:gap-4 md:self-start md:overflow-visible md:p-0">
           {nav.map((g, i) => (
             <div key={i} className="flex shrink-0 gap-1 md:flex-col md:gap-0.5">
               {g.title && <div className="hidden px-2.5 pb-1 text-[11px] font-medium tracking-wide text-muted uppercase md:block">{g.title}</div>}
@@ -220,10 +221,10 @@ function HeroStat({ label, value, tone, href }: { label: string; value: number |
       <dd className={cx("font-display text-xl font-bold tabular-nums", tone === "danger" && "text-danger")}>
         {href ? (
           <Link href={href} className="hover:underline">
-            {value}
+            <CountUp value={value} />
           </Link>
         ) : (
-          value
+          <CountUp value={value} />
         )}
       </dd>
     </div>

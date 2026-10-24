@@ -473,7 +473,7 @@ function MobileTabs({
           </div>
         </div>
       )}
-      <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border bg-surface/95 px-2 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+      <nav className="mobile-tabs fixed inset-x-0 bottom-0 z-40 flex border-t border-border bg-surface/95 px-2 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
         {main.map(({ href, label, icon: Icon, active, badge }) => (
           <Link
             key={href}

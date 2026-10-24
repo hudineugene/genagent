@@ -144,7 +144,7 @@ export default async function InboxPage({
   const items: ListItem[] = rows.map((r) => ({ ...r, upset: upset.has(r.id), typing: isTyping(r.id), href: qs({ c: r.id }) }));
 
   return (
-    <div className="mx-auto flex max-w-[1500px] flex-col md:h-[calc(100dvh-5rem)]">
+    <div className="mx-auto flex max-w-[1500px] flex-col md:h-[calc(100dvh-7rem)]">
       <InboxPoller />
       <div className={cx("mb-4 flex-wrap items-center gap-x-6 gap-y-3", thread ? "hidden md:flex" : "flex")}>
         <h1 className="text-2xl font-bold tracking-tight">{t.inbox.title}</h1>
@@ -186,7 +186,7 @@ export default async function InboxPage({
         )}
       </div>
 
-      <Card className={cx("flex min-h-[480px]", thread ? "h-[calc(100dvh-7rem)]" : "h-[calc(100dvh-13rem)]", "overflow-hidden md:h-auto md:flex-1")}>
+      <Card className={cx("flex", thread ? "h-[calc(100dvh-6rem)] min-h-[420px]" : "h-[calc(100dvh-13rem)] min-h-[480px]", "overflow-hidden md:h-auto md:min-h-[480px] md:flex-1")}>
         <div className={cx("min-h-0 w-full shrink-0 border-border md:w-[320px] md:border-r", thread && "hidden md:block")}>
           {items.length === 0 ? (
             <div className="grid h-full place-items-center p-8 text-center text-sm text-muted">
@@ -199,7 +199,7 @@ export default async function InboxPage({
             <ConversationList items={items} selectedId={sp.c} />
           )}
         </div>
-        <div className={cx("min-h-0 min-w-0 flex-1", !thread && "hidden md:block")}>
+        <div data-thread-open={thread ? "" : undefined} className={cx("min-h-0 min-w-0 flex-1", !thread && "hidden md:block")}>
           {thread ? (
             <Thread data={thread.data} backHref={qs({ c: undefined })} />
           ) : (

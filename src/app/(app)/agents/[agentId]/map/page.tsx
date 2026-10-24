@@ -29,6 +29,7 @@ import { MODELS } from "@/lib/models";
 import { agentMapStats, moduleHistory, testCoverage } from "@/lib/agent/map-stats";
 import { studioTz } from "@/lib/general";
 import { AgentMap } from "./map";
+import { SectionTip } from "@/components/section-tip";
 
 /** Карта агента: каналы → ядро → модули; включение модулей прямо на схеме, сохранение — новой версией. */
 export default async function AgentMapPage({ params }: { params: Promise<{ agentId: string }> }) {
@@ -73,6 +74,8 @@ export default async function AgentMapPage({ params }: { params: Promise<{ agent
   });
 
   return (
+    <>
+    <SectionTip id="map" />
     <AgentMap
       key={agent.version}
       agent={{ id: agent.id, name: agent.name, status: agent.status, version: agent.version, config }}
@@ -94,6 +97,7 @@ export default async function AgentMapPage({ params }: { params: Promise<{ agent
       history={history}
       coverage={coverage}
     />
+    </>
   );
 }
 

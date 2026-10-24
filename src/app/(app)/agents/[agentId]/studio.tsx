@@ -59,6 +59,12 @@ export function AgentStudio({
   const [deleting, startDelete] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [group, setGroup] = useState<BuilderGroup>("profile");
+  // Вкладки, где есть несохранённые правки (отметка точкой на вкладке); сброс — при сохранении и отмене
+  const [touched, setTouched] = useState<ReadonlySet<BuilderGroup>>(new Set());
+  const edit = (c: AgentConfig) => {
+    setConfig(c);
+    setTouched((s) => (s.has(group) ? s : new Set(s).add(group)));
+  };
   // Ссылка вида /agents/<id>#rules или #abilities открывает нужный экран настроек
   useEffect(() => {
     const open = () => {
@@ -84,6 +90,7 @@ export function AgentStudio({
         const res = await saveAgent(agent.id, { name, status, config });
         setVersion(res.version);
         setSaved({ name, status, config });
+        setTouched(new Set());
         setNotice(null);
         setJustSaved(true);
         toast(`${t.common.saved} · v${res.version}`);
@@ -100,6 +107,7 @@ export function AgentStudio({
     setName(saved.name);
     setStatus(saved.status);
     setConfig(saved.config);
+    setTouched(new Set());
     setNotice(null);
     setError(null);
   };
@@ -179,10 +187,10 @@ export function AgentStudio({
             )}
           </div>
 
-          <GroupNav group={group} onChange={setGroup} config={config} />
+          <GroupNav group={group} onChange={setGroup} config={config} touched={dirty ? touched : undefined} />
 
           <BuilderGroupContext.Provider value={group}>
-          <Builder config={config} onChange={setConfig} client={client} sources={sources} googleEmail={googleEmail} agentId={agent.id} examples={examples} tools={tools} forms={forms} procedures={procedures} docTemplates={docTemplates} tables={tables} programs={programs} />
+          <Builder config={config} onChange={edit} client={client} sources={sources} googleEmail={googleEmail} agentId={agent.id} examples={examples} tools={tools} forms={forms} procedures={procedures} docTemplates={docTemplates} tables={tables} programs={programs} />
           </BuilderGroupContext.Provider>
 
           {/* Панель сохранения — только когда есть изменения, прилипает к низу экрана */}
@@ -207,7 +215,7 @@ export function AgentStudio({
             </div>
           )}
         </div>
-        <div className="xl:sticky xl:top-6 xl:h-[calc(100dvh-3rem)]">
+        <div className="xl:sticky xl:top-20 xl:h-[calc(100dvh-6rem)]">
           <Playground clientId={client.id} config={config} />
         </div>
       </div>
@@ -216,7 +224,7 @@ export function AgentStudio({
 }
 
 /** Экраны настроек агента — вкладки над формой; счётчик у «Возможностей» — сколько модулей включено. */
-function GroupNav({ group, onChange, config }: { group: BuilderGroup; onChange: (g: BuilderGroup) => void; config: AgentConfig }) {
+function GroupNav({ group, onChange, config, touched }: { group: BuilderGroup; onChange: (g: BuilderGroup) => void; config: AgentConfig; touched?: ReadonlySet<BuilderGroup> }) {
   const { t } = useI18n();
   const abilities =
     (config.calendar.enabled ? 1 : 0) +
@@ -227,7 +235,7 @@ function GroupNav({ group, onChange, config }: { group: BuilderGroup; onChange: 
     (config.loyaltyProgramId || config.logistics ? 1 : 0) +
     (config.team?.enabled ? 1 : 0);
   return (
-    <nav aria-label={t.agentHeader.sectionsNav} className="sticky top-0 z-10 -mx-1 mb-4 overflow-x-auto bg-bg/90 px-1 py-2 backdrop-blur [scrollbar-width:none]">
+    <nav aria-label={t.agentHeader.sectionsNav} className="sticky top-0 z-10 md:top-14 -mx-1 mb-4 overflow-x-auto bg-bg/90 px-1 py-2 backdrop-blur [scrollbar-width:none]">
       <div className="flex gap-1 rounded-xl border border-border bg-surface p-1">
         {(Object.keys(BUILDER_GROUPS) as BuilderGroup[]).map((g) => (
           <button
@@ -244,6 +252,7 @@ function GroupNav({ group, onChange, config }: { group: BuilderGroup; onChange: 
           >
             {t.builder.groups[g]}
             {g === "abilities" && abilities > 0 && <span className="rounded-full bg-accent px-1.5 text-[11px] leading-4 text-accent-text">{abilities}</span>}
+            {touched?.has(g) && <span className="size-1.5 rounded-full bg-amber-500" title={t.agentHeader.unsavedBar} aria-label={t.agentHeader.unsavedBar} />}
           </button>
         ))}
       </div>

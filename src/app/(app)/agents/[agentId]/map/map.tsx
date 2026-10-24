@@ -507,7 +507,7 @@ export function AgentMap({
       )}
 
       {dirty && !present && (
-        <div className="sticky top-2 z-20 space-y-2 rounded-2xl border border-accent/40 bg-surface/95 p-3 shadow-sm backdrop-blur">
+        <div className="sticky top-2 z-20 md:top-16 space-y-2 rounded-2xl border border-accent/40 bg-surface/95 p-3 shadow-sm backdrop-blur">
           <div className="flex flex-wrap items-center gap-3">
             <span className="flex-1 text-sm font-medium">{uk ? "Є незбережені зміни" : "Есть несохранённые изменения"}</span>
             {error && <span className="text-sm text-danger">{uk ? "Не збереглося" : "Не сохранилось"}</span>}

@@ -2,6 +2,7 @@
 
 import { useId, useState } from "react";
 import { cx } from "./ui";
+import { CountUp } from "./count-up";
 
 export type Column = { key: string; label: string; value: number; hint?: string };
 
@@ -153,7 +154,7 @@ export function StatTile({ label, value, hint, change }: { label: string; value:
     <div className="bg-metal rounded-2xl border p-4">
       <div className="text-xs text-muted">{label}</div>
       <div className="mt-1 flex items-baseline gap-2">
-        <span className="font-display text-2xl font-bold tracking-tight">{value}</span>
+        <CountUp value={value} className="font-display text-2xl font-bold tracking-tight" />
         {c && (
           <span
             title={c.label}

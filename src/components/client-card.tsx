@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronRight, Clock } from "lucide-react";
+import { ChevronRight, Clock, MessagesSquare, Wallet } from "lucide-react";
 import type { ClientSummary } from "@/lib/dashboard";
 import type { Dict } from "@/lib/i18n";
 import { ClientAvatar, cx } from "./ui";
@@ -11,7 +11,11 @@ import { Spark } from "./spark";
  */
 export function ClientCard({ client: c, t, trend }: { client: ClientSummary; t: Dict; trend?: number[] }) {
   return (
-    <div className="group relative flex h-full flex-col rounded-2xl border border-border bg-surface p-5 transition hover:border-accent/40 hover:shadow-lg hover:shadow-black/5">
+    <div
+      className="group relative flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-surface p-5 transition hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-lg hover:shadow-black/5"
+      // Лёгкий градиент цвета клиента сверху — карточки разных клиентов различимы с одного взгляда
+      style={{ backgroundImage: `linear-gradient(180deg, color-mix(in srgb, ${/^#[0-9a-f]{3,8}$/i.test(c.color) ? c.color : "var(--accent)"} 12%, transparent) 0, transparent 88px)` }}
+    >
       <Link href={`/clients/${c.id}`} className="absolute inset-0 rounded-2xl" aria-label={c.name} />
       <div className="flex items-start gap-3.5">
         <ClientAvatar id={c.id} v={c.logoV} name={c.name} color={c.color} size={44} morph />
@@ -41,13 +45,15 @@ export function ClientCard({ client: c, t, trend }: { client: ClientSummary; t: 
       </div>
 
       <div className="mt-4 flex items-center gap-4 border-t border-border pt-3 text-xs text-muted">
-        <span>
-          <b className="font-semibold text-text tabular-nums">{c.conversations}</b> {t.home.conversations}
+        <span className="inline-flex items-center gap-1" title={`${c.conversations} ${t.home.conversations} ${t.home.perWeek}`}>
+          <MessagesSquare className="size-3.5" />
+          <b className="font-semibold text-text tabular-nums">{c.conversations}</b>
         </span>
-        <span>
+        <span className="inline-flex items-center gap-1" title={`$${c.cost.toFixed(2)} ${t.home.perWeek}`}>
+          <Wallet className="size-3.5" />
           <b className="font-semibold text-text tabular-nums">${c.cost.toFixed(2)}</b>
         </span>
-        <span className="text-muted/70">{t.home.perWeek}</span>
+        <span className="whitespace-nowrap text-muted/70">{t.home.perWeek}</span>
         <span className="ml-auto hidden sm:block">
           <Spark data={trend} />
         </span>

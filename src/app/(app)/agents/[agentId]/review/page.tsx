@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { agents, clients } from "@/db/schema";
 import { getAgentReview } from "@/lib/agent/review";
 import { ReviewManager } from "./manager";
+import { SectionTip } from "@/components/section-tip";
 
 import { guardPage } from "@/lib/access";
 export default async function AgentReviewPage({ params }: { params: Promise<{ agentId: string }> }) {
@@ -20,6 +21,7 @@ export default async function AgentReviewPage({ params }: { params: Promise<{ ag
 
   return (
     <div className="max-w-4xl">
+      <SectionTip id="review" />
       <ReviewManager agentId={agentId} review={review ?? null} />
     </div>
   );
