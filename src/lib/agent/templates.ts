@@ -31,6 +31,8 @@ export function emptyConfig(): AgentConfig {
     voiceReplies: true,
     voice: "marin",
     qualityCheck: true,
+    // Проверка ответа перед отправкой ловит выдумки и разговоры о «базе знаний»; у новых агентов включена сразу
+    answerCheck: true,
     rules: "",
     handoff: "",
     greeting: "",

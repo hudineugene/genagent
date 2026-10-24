@@ -24,6 +24,8 @@ import { isRepeat, prepareChat } from "@/lib/agent/runtime";
     "агент получает пометку о повторе": String(same.messages.at(-1)?.content).includes("Клиент повторил своё прошлое сообщение"),
     "без повтора пометки нет": !String(other.messages.at(-1)?.content).includes("Клиент повторил"),
     "та же кнопка через долгий перерыв — новый запрос": !String(later.messages.at(-1)?.content).includes("Клиент повторил"),
+    "спустя время — пометка «ответь полностью, не упоминай»": String(later.messages.at(-1)?.content).includes("Это новый запрос: ответь полностью"),
+    "сразу — без пометки «спустя время»": !String(same.messages.at(-1)?.content).includes("Это новый запрос"),
   };
   console.log(checks);
   process.exit(Object.values(checks).every(Boolean) ? 0 : 1);

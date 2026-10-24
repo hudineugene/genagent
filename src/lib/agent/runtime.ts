@@ -26,10 +26,13 @@ export type KbInfo = { mode: "full" | "search"; sources: { title: string; url: s
  */
 /** Версия того, как ответ собирается вне инструкции (пометки к сообщению клиента и т.п.). Меняется — автотесты
  *  агентов прогоняются заново (lib/tests/auto.ts). Повышайте при правках логики подготовки запроса к модели. */
-export const RUNTIME_REV = "2026-10-22.4";
+export const RUNTIME_REV = "2026-10-24.1";
 
 const REPEAT_NOTE =
   "[Клиент повторил своё прошлое сообщение слово в слово (или нажал ту же кнопку). Не повторяй и не пересказывай прежний ответ и не комментируй сам повтор («вы снова нажали…»). Одной-двумя фразами спроси, что осталось непонятным, и предложи конкретный следующий шаг.]";
+
+const AFTER_BREAK_NOTE =
+  "[Клиент вернулся к этому вопросу (или снова нажал эту кнопку) спустя время. Это новый запрос: ответь полностью, как в первый раз, и не упоминай, что он уже спрашивал или нажимал это раньше.]";
 
 /** Последнее сообщение клиента совпадает с его предыдущим (без учёта регистра, эмодзи и знаков). */
 export function isRepeat(messages: { role: string; content: unknown }[]) {
@@ -91,8 +94,10 @@ export async function prepareChat(
 
   const last = messages[messages.length - 1];
   // Клиент прислал то же, что и прошлым сообщением (часто — та же кнопка): прямая пометка, иначе модель повторяет ответ
-  const repeated = last?.role === "user" && opts.recentRepeat !== false && isRepeat(messages);
-  if (repeated) last.content = `${REPEAT_NOTE}\n\n${last.content}`;
+  const same = last?.role === "user" && isRepeat(messages);
+  // Тот же вопрос сразу — коротко уточнить; спустя время — ответить заново (иначе модель подражает своему
+  // прежнему «вы снова нажали…» из истории)
+  if (same) last.content = `${opts.recentRepeat !== false ? REPEAT_NOTE : AFTER_BREAK_NOTE}\n\n${last.content}`;
   if (kb.mode === "search" && kb.context && last?.role === "user") {
     last.content = `<knowledge>\n${kb.context}\n</knowledge>\n\n${last.content}`;
   }
