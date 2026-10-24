@@ -59,14 +59,22 @@ import { agents, channels, conversations, messages } from "@/db/schema";
   };
   const quiet = await mk(10);
   const fresh = await mk(1);
+  // Последним в разговоре — ответ своего бота клиента (роль bot) чуть позже сообщения клиента: в разбор он не входит
+  const botTail = await mk(10);
+  const [bt] = await db.select().from(conversations).where(eq(conversations.id, botTail));
+  const tail = new Date(bt.lastMessageAt.getTime() + 730);
+  await db.insert(messages).values({ conversationId: botTail, role: "bot", text: "Здравствуйте! Каталог проектов…", status: "sent", createdAt: tail } as never);
+  await db.update(conversations).set({ lastMessageAt: tail }).where(eq(conversations.id, botTail));
 
   const started = Date.now();
   const { runLeads } = await import("@/lib/agent/lead");
   const n1 = await runLeads();
   const [q] = await db.select().from(conversations).where(eq(conversations.id, quiet));
   const [f] = await db.select().from(conversations).where(eq(conversations.id, fresh));
+  const [b1] = await db.select().from(conversations).where(eq(conversations.id, botTail));
   await runLeads(); // ничего нового в этом разговоре — его карточку не пересчитываем
   const [q2] = await db.select().from(conversations).where(eq(conversations.id, quiet));
+  const [b2] = await db.select().from(conversations).where(eq(conversations.id, botTail));
   const { collectLeads, leadsHtml } = await import("@/lib/agent/leads");
   const leads = await collectLeads(Date.now() - 864e5);
   const mine = leads.find((l) => l.conversationId === quiet);
@@ -74,7 +82,7 @@ import { agents, channels, conversations, messages } from "@/db/schema";
   const { leadHtml } = await import("@/lib/notify/telegram");
   const card = q.context?.lead ? leadHtml(q.context.lead) : "";
 
-  for (const id of [quiet, fresh]) {
+  for (const id of [quiet, fresh, botTail]) {
     await db.delete(messages).where(eq(messages.conversationId, id));
     await db.delete(conversations).where(eq(conversations.id, id));
   }
@@ -97,6 +105,7 @@ import { agents, channels, conversations, messages } from "@/db/schema";
     "поля агента и «только со слов клиента» — в запросе": prompts.some((p) => p.includes("Что ищет, Бюджет, Сроки, Контакт") && p.includes("только то, что клиент сам сказал")),
     "клиент пишет прямо сейчас — ждём паузу": !f.context?.lead,
     "без новых сообщений — не оцениваем повторно": q2.context?.lead?.at === q.context?.lead?.at,
+    "последним — ответ бота клиента: оценили один раз, не по кругу": Boolean(b1.context?.lead?.at) && b2.context?.lead?.at === b1.context?.lead?.at,
     "горячий без передачи — в сводке лидов с полями": mine?.status === "hot" && mine.temperature === "hot" && mine.wants.includes("Бюджет: до 600 000 €"),
     "в сводке — значок и пометка": html.includes("🔥 <b>Lucía</b>") && html.includes("менеджеру ещё не передан"),
     "карточка для Telegram": card.includes("🔥 Горячий") && card.includes("Бюджет: <b>до 600 000 €</b>"),

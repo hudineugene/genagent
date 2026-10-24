@@ -1832,6 +1832,7 @@ export const uk: Dict = {
     backupPasswordKept: "Задано. Залиште порожнім, щоб не змінювати.",
     backupConfirm: "Пароль ще раз",
     backupEnabled: "Надсилати копію раз на добу",
+    backupFiles: "Файли (картинки, документи)",
     backupLastSent: "Останню копію надіслано",
     backupNeverSent: "Копій ще не надсилалося",
     backupSendNow: "Надіслати зараз",

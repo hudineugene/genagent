@@ -1830,6 +1830,7 @@ export const ru = {
     backupPasswordKept: "Задан. Оставьте пустым, чтобы не менять.",
     backupConfirm: "Пароль ещё раз",
     backupEnabled: "Присылать копию раз в сутки",
+    backupFiles: "Файлы (картинки, документы)",
     backupLastSent: "Последняя копия отправлена",
     backupNeverSent: "Копий ещё не отправлялось",
     backupSendNow: "Отправить сейчас",

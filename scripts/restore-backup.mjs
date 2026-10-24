@@ -1,4 +1,5 @@
-// Расшифровка копии базы GenAgent из Telegram (.gab) в обычный файл базы (.db).
+// Расшифровка копии GenAgent из Telegram (.gab): база → .db, архив файлов (genagent-files-…) → .tar.gz
+// (распаковать в папку data: tar -xzf genagent-files-….tar.gz -C data — появятся media и docs).
 //   node scripts/restore-backup.mjs genagent-202610150300.gab
 // Спросит пароль копии (тот, что задан в «Интеграциях → Копия базы в Telegram»).
 // Восстановление на сервере: остановить контейнер, положить файл как data/genagent.db, запустить.
@@ -28,7 +29,8 @@ try {
   const decipher = createDecipheriv("aes-256-gcm", scryptSync(password, salt, 32), iv);
   decipher.setAuthTag(tag);
   const raw = gunzipSync(Buffer.concat([decipher.update(data.subarray(48)), decipher.final()]));
-  const out = file.replace(/\.gab$/i, "") + ".db";
+  const base = file.replace(/\.gab$/i, "");
+  const out = /genagent-files-/.test(base) ? `${base}.tar.gz` : `${base}.db`;
   writeFileSync(out, raw);
   console.log(`Готово: ${out} (${(raw.length / 1024).toFixed(0)} КБ)`);
 } catch {

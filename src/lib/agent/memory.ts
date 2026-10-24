@@ -74,7 +74,7 @@ export async function runMemory({ dryRun = false }: { dryRun?: boolean } = {}): 
       .orderBy(asc(messages.createdAt))
       .limit(200);
     const dialog = fresh.slice(-60);
-    const last = fresh.at(-1)?.createdAt.getTime() ?? c.lastMessageAt.getTime();
+    const last = Math.max(fresh.at(-1)?.createdAt.getTime() ?? 0, c.lastMessageAt.getTime());
     const said = dialog.some((m) => m.role === "user" && (m.text.trim().length >= 2 || m.meta?.vision));
     if (dryRun) {
       if (said) done++;

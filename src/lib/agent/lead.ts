@@ -77,7 +77,9 @@ async function updateLead__(conversationId: string): Promise<LeadCard | null> {
       .slice(0, 8),
     ...(data.test ? { looksTest: true } : {}),
     at: Date.now(),
-    upto: dialog.at(-1)?.createdAt.getTime() ?? Date.now(),
+    // До последнего сообщения разговора на момент разбора: ответы своего бота клиента и служебные отметки в разбор не
+    // входят, но двигают lastMessageAt — иначе такой разговор разбирался бы заново каждые 5 минут
+    upto: Math.max(dialog.at(-1)?.createdAt.getTime() ?? 0, c.lastMessageAt.getTime()),
   };
   // Свежий контекст: пока модель думала, могли дописаться язык, память, заказы
   const [cur] = await db.select({ context: conversations.context }).from(conversations).where(eq(conversations.id, c.id));

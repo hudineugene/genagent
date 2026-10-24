@@ -6,7 +6,7 @@ import { saveOffsiteBackup, sendOffsiteBackupNow } from "@/app/actions/integrati
 import { useI18n } from "@/lib/i18n/client";
 import { Button, Field, Input, Select, Spinner } from "@/components/ui";
 
-export type OffsiteView = { enabled: boolean; chatId: string; hasPassword: boolean; lastSentAt: string | null; lastError: string | null } | null;
+export type OffsiteView = { enabled: boolean; chatId: string; hasPassword: boolean; lastSentAt: string | null; lastError: string | null; filesNote?: string | null } | null;
 
 /** Копия базы в Telegram: кому, пароль шифрования, включение, «Отправить сейчас». */
 export function BackupSection({ offsite, subscribers }: { offsite: OffsiteView; subscribers: { chatId: string; name: string }[] }) {
@@ -66,6 +66,11 @@ export function BackupSection({ offsite, subscribers }: { offsite: OffsiteView; 
           <span>
             {offsite.lastSentAt ? `${s.backupLastSent}: ${fmt.format(new Date(offsite.lastSentAt))}` : s.backupNeverSent}
             {offsite.lastError && <span className="ml-2 text-danger">· {offsite.lastError}</span>}
+            {offsite.filesNote && (
+              <span className="ml-2 text-danger">
+                · {s.backupFiles}: {offsite.filesNote}
+              </span>
+            )}
           </span>
           <span className="flex items-center gap-2">
             {sendResult && <span className={sendResult === "ok" ? "text-success" : "text-danger"}>{sendResult === "ok" ? s.backupSent : errText(sendResult)}</span>}

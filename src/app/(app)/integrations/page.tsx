@@ -153,6 +153,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
                           hasPassword: Boolean(offsite.key),
                           lastSentAt: offsite.lastSentAt ?? null,
                           lastError: offsite.lastError ?? null,
+                          filesNote: offsite.filesNote ?? null,
                         }
                       : null
                   }
