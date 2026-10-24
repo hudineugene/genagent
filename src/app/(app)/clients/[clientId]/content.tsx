@@ -39,7 +39,7 @@ export function ContentStudio({ clientId, rows, bots, openai }: { clientId: stri
   return (
     <div className="space-y-6">
       <p className="max-w-3xl text-sm text-muted">{c.subtitle}</p>
-      <Generator clientId={clientId} />
+      <Generator clientId={clientId} openai={openai} />
       {rows.length === 0 && <EmptyState icon={<PenLine />} text={c.empty} />}
       {batches.map((items) => (
         <section key={items[0].batch} className="space-y-2">
@@ -55,10 +55,10 @@ export function ContentStudio({ clientId, rows, bots, openai }: { clientId: stri
   );
 }
 
-function Generator({ clientId }: { clientId: string }) {
+function Generator({ clientId, openai }: { clientId: string; openai: boolean }) {
   const { t } = useI18n();
   const c = t.content;
-  const [v, setV] = useState({ kind: "post" as Kind, platform: "telegram" as Platform, brief: "", tone: "", length: "medium" as "short" | "medium" | "long", variants: 2, useKb: true });
+  const [v, setV] = useState({ kind: "post" as Kind, platform: "telegram" as Platform, brief: "", tone: "", length: "medium" as "short" | "medium" | "long", variants: 2, useKb: true, withImage: false });
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const set = <K extends keyof typeof v>(k: K, val: (typeof v)[K]) => setV({ ...v, [k]: val });
@@ -67,7 +67,10 @@ function Generator({ clientId }: { clientId: string }) {
       setError(null);
       const r = await generateContentAction(clientId, v);
       if (r.error) setError((c.errors as Record<string, string>)[r.error] ?? c.errors.failed);
-      else set("brief", "");
+      else {
+        set("brief", "");
+        if (r.imageError) setError(`${c.imageAfterError} ${(c.errors as Record<string, string>)[r.imageError] ?? ""}`.trim());
+      }
     });
   return (
     <Card className="space-y-4 p-5">
@@ -123,11 +126,21 @@ function Generator({ clientId }: { clientId: string }) {
         <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={v.useKb} onChange={(e) => set("useKb", e.target.checked)} />
         {c.useKb}
       </label>
+      {v.kind !== "seo" && (
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" className="mt-0.5 size-4 accent-[var(--accent)]" checked={v.withImage && openai} disabled={!openai} onChange={(e) => set("withImage", e.target.checked)} />
+          <span>
+            {c.withImage}
+            <span className="block text-xs text-muted">{openai ? c.withImageHint.replace("{n}", String(v.variants)).replace("{sum}", (0.04 * v.variants).toFixed(2)) : c.noOpenaiImage}</span>
+          </span>
+        </label>
+      )}
       {error && <p className="text-sm text-danger">{error}</p>}
       <Button disabled={pending || v.brief.trim().length < 3} onClick={submit}>
         {pending ? <Spinner /> : <Sparkles className="size-4" />}
-        {pending ? c.generating : c.generate}
+        {pending ? (v.withImage && openai ? c.generatingWithImage : c.generating) : c.generate}
       </Button>
+      {v.kind !== "seo" && <p className="text-xs text-muted">{c.imageLaterHint}</p>}
     </Card>
   );
 }

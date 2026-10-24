@@ -18,16 +18,37 @@ const genSchema = z.object({
   length: z.enum(["short", "medium", "long"]),
   variants: z.number().int().min(1).max(3),
   useKb: z.boolean(),
+  /** Сразу нарисовать картинку к каждому варианту (OpenAI) */
+  withImage: z.boolean().optional(),
 });
 
-export async function generateContentAction(clientId: string, input: z.input<typeof genSchema>): Promise<{ error?: string; batch?: string }> {
+export async function generateContentAction(clientId: string, input: z.input<typeof genSchema>): Promise<{ error?: string; batch?: string; imageError?: string }> {
   await requireUser();
   const parsed = genSchema.safeParse(input);
   if (!parsed.success) return { error: "invalid" };
   try {
-    const rows = await generateContent(clientId, parsed.data);
+    const { withImage, ...gen } = parsed.data;
+    const rows = await generateContent(clientId, gen);
+    // Картинки — к каждому варианту параллельно; не вышло — тексты остаются, картинку можно добавить потом
+    let imageError: string | undefined;
+    if (withImage && rows.length) {
+      const [c] = await db.select({ name: clients.name, industry: clients.industry }).from(clients).where(eq(clients.id, clientId));
+      const results = await Promise.allSettled(
+        rows.map(async (r) => {
+          const prompt = defaultImagePrompt({ title: r.title, brief: r.brief, client: c?.name ?? "", industry: c?.industry ?? "" });
+          const name = await generateContentImage(prompt);
+          await db.update(contentItems).set({ image: name, imagePrompt: prompt, updatedAt: new Date() }).where(eq(contentItems.id, r.id));
+        }),
+      );
+      const failed = results.find((x): x is PromiseRejectedResult => x.status === "rejected");
+      if (failed) {
+        const m = failed.reason instanceof Error ? failed.reason.message : String(failed.reason);
+        if (m !== "no_openai") console.error("content image failed", m);
+        imageError = m === "no_openai" ? m : "image_failed";
+      }
+    }
     refresh();
-    return { batch: rows[0]?.batch };
+    return { batch: rows[0]?.batch, imageError };
   } catch (e) {
     const m = e instanceof Error ? e.message : "";
     if (m !== "no_key" && m !== "empty") console.error("content generate failed", e);
