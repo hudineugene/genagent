@@ -1,9 +1,10 @@
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
-import { and, asc, count, eq } from "drizzle-orm";
+import { and, asc, count, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
   agents,
+  agentVersions,
   channels,
   clientForms,
   clientLogistics,
@@ -25,6 +26,8 @@ import { getServices } from "@/lib/services";
 import { withKeys } from "@/lib/keys";
 import { speechAvailable } from "@/lib/speech";
 import { MODELS } from "@/lib/models";
+import { agentMapStats } from "@/lib/agent/map-stats";
+import { studioTz } from "@/lib/general";
 import { AgentMap } from "./map";
 
 /** Карта агента: каналы → ядро → модули; включение модулей прямо на схеме, сохранение — новой версией. */
@@ -57,6 +60,15 @@ export default async function AgentMapPage({ params }: { params: Promise<{ agent
   const config = parsed.success ? parsed.data : agentConfigSchema.parse({ ...agent.config, model: agent.config.model || "anthropic:claude-haiku-5-5" });
   // Голосовые ответы — ключ OpenAI студии или свой ключ клиента
   const voice = await withKeys({ clientId: cid }, async () => speechAvailable());
+  const [stats, versionRows] = await Promise.all([
+    agentMapStats(agentId, chs.map((c) => c.id)),
+    db.select({ version: agentVersions.version, config: agentVersions.config, createdAt: agentVersions.createdAt }).from(agentVersions).where(eq(agentVersions.agentId, agentId)).orderBy(desc(agentVersions.version)).limit(20),
+  ]);
+  const fmt = new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: studioTz() });
+  const versions = versionRows.flatMap((v) => {
+    const c = agentConfigSchema.safeParse(v.config);
+    return c.success ? [{ version: v.version, at: fmt.format(v.createdAt), config: c.data }] : [];
+  });
 
   return (
     <AgentMap
@@ -75,6 +87,8 @@ export default async function AgentMapPage({ params }: { params: Promise<{ agent
         voice,
       }}
       models={MODELS.map((m) => ({ id: m.id, label: m.label }))}
+      stats={stats}
+      versions={versions}
     />
   );
 }

@@ -19,6 +19,7 @@ import {
   updateWidget, addWhatsAppChannel, saveWhatsAppSettings, syncWhatsAppTemplates, addViberChannel, updateViberChannel, saveInstagramTriggers, addVoiceChannel, updateVoiceChannel, addMessengerChannel, addSmsChannel } from "@/app/actions/channels";
 import { WIDGET_LANGS, type ChannelType, type WidgetConfig } from "@/db/schema";
 import { useI18n } from "@/lib/i18n/client";
+import type { AddKind } from "@/lib/channels/add-kinds";
 import { Badge, Button, Card, Field, Input, Select, Spinner, Textarea, cx } from "@/components/ui";
 import { InfoHint } from "@/components/hint";
 
@@ -64,6 +65,7 @@ export function ChannelsManager({
   publicUrl,
   socialReady,
   isAdmin,
+  initialAdd = null,
 }: {
   agentId: string;
   agentStatus: "draft" | "active" | "paused";
@@ -71,9 +73,15 @@ export function ChannelsManager({
   publicUrl: string | null;
   socialReady: SocialReady;
   isAdmin: boolean;
+  /** Открыть форму нового канала сразу (ссылка с карты агента: ?add=telegram) */
+  initialAdd?: AddKind | null;
 }) {
   const { t } = useI18n();
-  const [adding, setAdding] = useState<"telegram" | "instagram" | "threads" | "email" | "api" | "whatsapp" | "viber" | "voice" | "messenger" | "sms" | null>(null);
+  const [adding, setAdding] = useState<AddKind | null>(initialAdd);
+  // Пришли с карты агента (?add=…) — сразу к форме нового канала
+  useEffect(() => {
+    if (initialAdd) document.getElementById("add-channel")?.scrollIntoView({ behavior: "smooth" });
+  }, [initialAdd]);
   const [pending, start] = useTransition();
   const errText = (code: string | null | undefined) =>
     code ? (t.channels.errors[code as ErrKey] ?? code) : null;
@@ -111,7 +119,7 @@ export function ChannelsManager({
         ),
       )}
 
-      <div>
+      <div id="add-channel" className="scroll-mt-6">
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">{t.channels.add}</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <AddCard

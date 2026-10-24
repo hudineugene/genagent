@@ -2,7 +2,7 @@ import Link from "next/link";
 import { and, asc, desc, eq, gte, sql } from "drizzle-orm";
 import { LogOut } from "lucide-react";
 import { db } from "@/db";
-import { clients, conversations, knowledgeGaps, messages, payments } from "@/db/schema";
+import { agents, channels, clients, conversations, knowledgeGaps, messages, payments } from "@/db/schema";
 import { requirePortalUser } from "@/lib/auth";
 import { getT } from "@/lib/i18n/server";
 import { getBrand } from "@/lib/whitelabel";
@@ -12,8 +12,12 @@ import { Card, cx } from "@/components/ui";
 import { GapAnswer, PortalReply } from "./forms";
 import { jsonText } from "@/db/dialect";
 import { studioTz } from "@/lib/general";
+import { agentConfigSchema } from "@/lib/agent/types";
+import { agentMapStats } from "@/lib/agent/map-stats";
+import { MODELS } from "@/lib/models";
+import { PortalAgentMap } from "./agent-map";
 
-const TABS = ["overview", "leads", "chats", "gaps"] as const;
+const TABS = ["overview", "leads", "chats", "gaps", "agent"] as const;
 
 /**
  * Кабинет клиента (владельца бизнеса): итоги месяца, заявки, разговоры с ответом от себя, вопросы без ответа
@@ -144,6 +148,8 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
             </Card>
             {brand.support && <p className="text-center text-xs text-muted">{p.support}: {brand.support}</p>}
           </>
+        ) : tab === "agent" ? (
+          <PortalAgents clientId={clientId} />
         ) : tab === "gaps" ? (
           <div className="space-y-3">
             <p className="text-sm text-muted">{p.gapsHint}</p>
@@ -175,3 +181,33 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
     </div>
   );
 }
+
+/** «Ваш агент»: карта каждого работающего агента клиента (черновики не показываем), только просмотр. */
+async function PortalAgents({ clientId }: { clientId: string }) {
+  const rows = await db.select({ id: agents.id, name: agents.name, status: agents.status, config: agents.config }).from(agents).where(eq(agents.clientId, clientId)).orderBy(asc(agents.createdAt));
+  const list = rows.filter((a) => a.status !== "draft");
+  const chs = await db.select({ id: channels.id, agentId: channels.agentId, type: channels.type, name: channels.name, enabled: channels.enabled }).from(channels).where(eq(channels.clientId, clientId));
+  const maps = await Promise.all(
+    list.map(async (a) => {
+      const cfg = agentConfigSchema.safeParse(a.config);
+      if (!cfg.success) return null;
+      const own = chs.filter((c) => c.agentId === a.id).map(({ id, type, name, enabled }) => ({ id, type, name, enabled }));
+      return { a, config: cfg.data, channels: own, stats: await agentMapStats(a.id, own.map((c) => c.id)) };
+    }),
+  );
+  return (
+    <div className="space-y-8">
+      {maps.map(
+        (m) =>
+          m && (
+            <Card key={m.a.id} className="p-4">
+              <PortalAgentMap name={m.a.name} config={m.config} channels={m.channels} stats={m.stats} modelLabel={MODELS.find((x) => x.id === m.config.model)?.label ?? m.config.model} />
+            </Card>
+          ),
+      )}
+    </div>
+  );
+}
+
+// Кабинет всегда читает сессию и свежие данные — страница собирается по запросу.
+export const instant = false;

@@ -852,7 +852,7 @@ export const ru = {
     fields: { role: "Роль", description: "Задача", tone: "Тон", toneCustom: "Свой тон", replyLanguage: "Язык ответа", skills: "Навыки", rules: "Правила", handoff: "Когда звать менеджера", greeting: "Приветствие", extraInstructions: "Доп. инструкции", leadFields: "Поля карточки лида", model: "Модель", effort: "Глубина размышлений", factGuard: "Проверка фактов", answerCheck: "Проверка ответа", qualityCheck: "Проверка качества", aiDisclosure: "Сообщать, что это ИИ", memory: "Память", voiceReplies: "Голосовые ответы", voice: "Голос", streaming: "Ответ по мере написания", quickReplies: "Кнопки", useBrandVoice: "Голос бренда" },
   },
   portal: {
-    tabs: { overview: "Итоги", leads: "Заявки", chats: "Разговоры", gaps: "Научить агента" },
+    tabs: { overview: "Итоги", leads: "Заявки", chats: "Разговоры", gaps: "Научить агента", agent: "Ваш агент" },
     preview: "Предпросмотр кабинета клиента",
     back: "Назад",
     customer: "Клиент",

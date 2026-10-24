@@ -6,10 +6,12 @@ import { isPolling } from "@/lib/channels/telegram-poller";
 import { requireUser } from "@/lib/auth";
 import { getMetaSettings, publicUrl } from "@/lib/settings";
 import { ChannelsManager, type ChannelItem } from "./manager";
+import { ADD_KINDS } from "@/lib/channels/add-kinds";
 import { inboundStale, lastInbound, webhookTimes } from "@/lib/channels/health";
 
 import { guardPage } from "@/lib/access";
-export default async function AgentChannelsPage({ params }: { params: Promise<{ agentId: string }> }) {
+export default async function AgentChannelsPage({ params, searchParams }: { params: Promise<{ agentId: string }>; searchParams: Promise<{ add?: string }> }) {
+  const { add } = await searchParams;
   const { agentId } = await params;
   await guardPage("agent", agentId);
   const user = await requireUser();
@@ -96,6 +98,7 @@ export default async function AgentChannelsPage({ params }: { params: Promise<{ 
         publicUrl={process.env.PUBLIC_URL ?? null}
         socialReady={socialReady}
         isAdmin={user.role === "admin"}
+        initialAdd={ADD_KINDS.find((k) => k === add) ?? null}
       />
     </div>
   );

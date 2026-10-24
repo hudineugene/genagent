@@ -854,7 +854,7 @@ export const uk: Dict = {
     fields: { role: "Роль", description: "Завдання", tone: "Тон", toneCustom: "Свій тон", replyLanguage: "Мова відповіді", skills: "Навички", rules: "Правила", handoff: "Коли кликати менеджера", greeting: "Привітання", extraInstructions: "Дод. інструкції", leadFields: "Поля картки ліда", model: "Модель", effort: "Глибина міркувань", factGuard: "Перевірка фактів", answerCheck: "Перевірка відповіді", qualityCheck: "Перевірка якості", aiDisclosure: "Повідомляти, що це ШІ", memory: "Пам'ять", voiceReplies: "Голосові відповіді", voice: "Голос", streaming: "Відповідь у міру написання", quickReplies: "Кнопки", useBrandVoice: "Голос бренду" },
   },
   portal: {
-    tabs: { overview: "Підсумки", leads: "Заявки", chats: "Розмови", gaps: "Навчити агента" },
+    tabs: { overview: "Підсумки", leads: "Заявки", chats: "Розмови", gaps: "Навчити агента", agent: "Ваш агент" },
     preview: "Перегляд кабінету клієнта",
     back: "Назад",
     customer: "Клієнт",

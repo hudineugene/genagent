@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, asc, count, desc, eq, inArray } from "drizzle-orm";
-import { Activity, BarChart3, BellRing, BookOpenCheck, GraduationCap, Repeat, Users, Blocks, BookOpen, Bot, Calculator, CreditCard, ListChecks, LayoutDashboard, ClipboardList, ClipboardCheck, FileBarChart2, FileText, Gift, Mail, Mic, PenLine, Route, Truck, Table2, Megaphone, Plus, Settings, Wrench } from "lucide-react";
+import { Network, Activity, BarChart3, BellRing, BookOpenCheck, GraduationCap, Repeat, Users, Blocks, BookOpen, Bot, Calculator, CreditCard, ListChecks, LayoutDashboard, ClipboardList, ClipboardCheck, FileBarChart2, FileText, Gift, Mail, Mic, PenLine, Route, Truck, Table2, Megaphone, Plus, Settings, Wrench } from "lucide-react";
 import { db } from "@/db";
 import { agents, approvals, campaigns, candidates, courses, incidents, learners, lessons, monitors, trips, clientRepeat, onboardingPlans, onboardings, reminders, vacancies, clientPricing, clientPayments, payments, procedures, routingRules, contactLists, contacts, outreach, outreachMessages, channels, clientLogistics, contentItems, loyaltyAccounts, loyaltyPrograms, loyaltyTx, meetings, clientDocTypes, clientDocuments, clientForms, dataTables, clientIntegrations, clientTools, clients, conversations, docTemplates, formResponses, generatedDocs, kbSources, knowledgeGaps, routines } from "@/db/schema";
 import { getT } from "@/lib/i18n/server";
@@ -44,6 +44,7 @@ import { hasKey } from "@/lib/keys";
 
 import { guardPage } from "@/lib/access";
 import { getGeneral, studioTz } from "@/lib/general";
+import { ClientMapTab } from "./client-map";
 export default async function ClientPage({
   params,
   searchParams,
@@ -57,7 +58,7 @@ export default async function ClientPage({
   const [client] = await db.select().from(clients).where(eq(clients.id, clientId));
   if (!client) notFound();
 
-  const SECTIONS = ["kb", "data", "modules", "outreach", "routing", "pricing", "payments", "reminders", "repeat", "onboarding", "hiring", "monitor", "learning", "tools", "forms", "procedures", "documents", "loyalty", "logistics", "approvals", "campaigns", "content", "meetings", "routines"] as const;
+  const SECTIONS = ["kb", "data", "modules", "map", "outreach", "routing", "pricing", "payments", "reminders", "repeat", "onboarding", "hiring", "monitor", "learning", "tools", "forms", "procedures", "documents", "loyalty", "logistics", "approvals", "campaigns", "content", "meetings", "routines"] as const;
   const active = (SECTIONS as readonly string[]).includes(tab ?? "") ? (tab as (typeof SECTIONS)[number]) : "agents";
   const [[{ agentsCount }], [{ kbCount }], [{ toolsCount }], [{ campaignsCount }], [{ formsCount }], [{ routinesCount }], [{ docTypesCount }], [{ templatesCount }], [{ tablesCount }], [{ pendingApprovals }], [{ approvalsCount }], teamAgents, [{ contentCount }], [{ meetingsCount }], [{ programsCount }], [{ outsCount }], [logistics], agentConfigs, [{ routingCount }], [pricingRow], [{ remindersCount }], [{ onboardingCount }], [{ vacanciesCount }], [{ monitorsCount }], [{ openIncidents }], [{ coursesCount }], [{ outreachCount }], [repeatRow], [payRow], [{ procCount }]] = await Promise.all([
     db.select({ agentsCount: count() }).from(agents).where(eq(agents.clientId, clientId)),
@@ -126,6 +127,7 @@ export default async function ClientPage({
       items: [
         { key: "agents", label: t.ws.overview, icon: LayoutDashboard, n: agentsCount },
         { key: "modules", label: t.ws.catalog, icon: Blocks, n: sections.filter((m) => m.n > 0).length },
+        { key: "map", label: t.help.mapTab, icon: Network },
       ],
     },
     {
@@ -196,7 +198,9 @@ export default async function ClientPage({
           ))}
         </nav>
         <div className="min-w-0">
-      {active === "kb" ? (
+      {active === "map" ? (
+        <ClientMapTab clientId={client.id} />
+      ) : active === "kb" ? (
         <KnowledgeTab clientId={client.id} />
       ) : active === "tools" ? (
         <ToolsTab clientId={client.id} />
