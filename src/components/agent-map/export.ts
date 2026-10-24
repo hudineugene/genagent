@@ -1,6 +1,11 @@
 import { CHANNEL_LABEL, GROUPS, MODULES, type Ctx } from "@/lib/agent/map-modules";
 import type { AgentConfig } from "@/lib/agent/types";
 import type { MapChannel } from "./canvas";
+import { channelColor } from "./channel-icon";
+import { BRAND_PATHS } from "@/lib/brand-paths";
+
+const BRAND_TYPES: Record<string, string> = { telegram: "telegram", whatsapp: "whatsapp", instagram: "instagram", threads: "threads", viber: "viber", messenger: "messenger" };
+const LETTER: Record<string, string> = { email: "@", sms: "SMS", widget: "W", voice: "☎", api: "API" };
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const cut = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
@@ -27,6 +32,21 @@ export async function downloadMapPng(opts: { config: AgentConfig; agentName: str
   const box = (x: number, y: number, w: number, h: number, stroke = "#e5e7eb", fill = "#ffffff", r = 14, sw = 1.5) => parts.push(`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`);
   const text = (x: number, y: number, s: string, size = 15, color = ink, weight = 400) => parts.push(`<text x="${x}" y="${y}" font-size="${size}" fill="${color}" font-weight="${weight}">${esc(s)}</text>`);
   const dot = (x: number, y: number, color: string) => parts.push(`<circle cx="${x}" cy="${y}" r="5" fill="${color}"/>`);
+  // Значок канала: логотип приложения (как на карте) или цветная плитка с буквой для своих каналов
+  const icon = (x: number, y: number, c: MapChannel) => {
+    const gmail = c.type === "email" && /gmail\.com$/i.test(c.name.trim());
+    const brand = gmail ? "gmail" : BRAND_TYPES[c.type];
+    const color = c.enabled ? channelColor(c.type) : "#94a3b8";
+    if (brand) {
+      const tileBg = c.type === "instagram" || c.type === "threads" ? color : "#ffffff";
+      const glyph = c.type === "instagram" || c.type === "threads" ? "#ffffff" : gmail ? "#EA4335" : color;
+      box(x, y, 28, 28, "#e5e7eb", tileBg, 7, 1);
+      parts.push(`<path d="${BRAND_PATHS[brand]}" fill="${glyph}" transform="translate(${x + 5},${y + 5}) scale(0.75)"/>`);
+    } else {
+      box(x, y, 28, 28, color, color, 7, 1);
+      parts.push(`<text x="${x + 14}" y="${y + 19}" font-size="11" fill="#ffffff" font-weight="700" text-anchor="middle">${esc(LETTER[c.type] ?? "•")}</text>`);
+    }
+  };
   const curve = (x1: number, y1: number, x2: number, y2: number, color = line, w = 2) => {
     const mx = (x1 + x2) / 2;
     parts.push(`<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" fill="none" stroke="${color}" stroke-width="${w}"/>`);
@@ -72,9 +92,10 @@ export async function downloadMapPng(opts: { config: AgentConfig; agentName: str
   opts.channels.forEach((c, i) => {
     const y = chStart + i * 60;
     box(colCh.x, y, colCh.w, 48, "#e5e7eb");
-    dot(colCh.x + 18, y + 24, c.enabled ? "#10b981" : "#d1d5db");
-    text(colCh.x + 32, y + 21, CHANNEL_LABEL[c.type] ?? c.type, 14, ink, 600);
-    text(colCh.x + 32, y + 38, cut(c.name, 26), 12, muted);
+    icon(colCh.x + 10, y + 10, c);
+    dot(colCh.x + 38, y + 38, c.enabled ? "#10b981" : "#d1d5db");
+    text(colCh.x + 50, y + 21, CHANNEL_LABEL[c.type] ?? c.type, 14, ink, 600);
+    text(colCh.x + 50, y + 38, cut(c.name, 24), 12, muted);
     curve(colCh.x + colCh.w, y + 24, colCore.x, coreY + coreH / 2, c.enabled ? line : "#e5e7eb", 2);
   });
 

@@ -7,6 +7,7 @@ import { CHANNEL_LABEL } from "@/lib/agent/map-modules";
 import { useI18n } from "@/lib/i18n/client";
 import { cx } from "@/components/ui";
 import { Dot } from "@/components/agent-map/canvas";
+import { ChannelIcon } from "@/components/agent-map/channel-icon";
 
 export type ClientMapAgent = { id: string; name: string; icon: string; status: "draft" | "active" | "paused"; conversations: number; channels: { type: string; name: string; enabled: boolean }[] };
 export type ClientMapResource = { key: string; title: string; count: number; unused: number; href: string; usedBy: string[]; ready: boolean };
@@ -103,8 +104,8 @@ export function ClientMapView({ agents, resources, clientId }: { agents: ClientM
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {a.channels.length === 0 && <span className="text-xs text-amber-600 dark:text-amber-400">{uk ? "немає каналів" : "нет каналов"}</span>}
                   {a.channels.map((c, i) => (
-                    <span key={i} className="flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs">
-                      <Dot state={c.enabled ? "on" : "off"} />
+                    <span key={i} className="flex items-center gap-1.5 rounded-full border border-border py-0.5 pr-2 pl-0.5 text-xs" title={c.name}>
+                      <ChannelIcon type={c.type} name={c.name} enabled={c.enabled} size={18} className="rounded-full" />
                       {CHANNEL_LABEL[c.type] ?? c.type}
                     </span>
                   ))}

@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { ChevronDown, FlaskConical, Plus, Radio, TrendingDown, TrendingUp, type LucideIcon } from "lucide-react";
-import { CHANNEL_BRAND, CHANNEL_LABEL, DEPENDENCIES, GROUPS, MODULES, TESTABLE, type Ctx, type GroupKey, type L, type MapStats, type Mod } from "@/lib/agent/map-modules";
+import { CHANNEL_LABEL, DEPENDENCIES, GROUPS, MODULES, TESTABLE, type Ctx, type GroupKey, type L, type MapStats, type Mod } from "@/lib/agent/map-modules";
 import type { AgentConfig } from "@/lib/agent/types";
 import { SwitchButton, cx } from "@/components/ui";
+import { ChannelIcon } from "./channel-icon";
 
 export type MapChannel = { id: string; type: string; name: string; enabled: boolean };
 export type ModState = "on" | "off" | "warn";
@@ -90,11 +91,10 @@ export function MapCanvas({
     const st = channelState(c);
     const s = stats?.channels[c.id];
     const width = c.enabled && s ? 1.5 + 3.5 * ((s.conversations ?? 0) / maxConv) : 1.5;
-    const brand = CHANNEL_BRAND[c.type] ?? { color: "#64748b", short: "?" };
     const inner = (
       <>
-        <span className="relative grid size-8 shrink-0 place-items-center rounded-lg text-[11px] font-bold text-white" style={{ background: c.enabled ? brand.color : "#94a3b8" }}>
-          {brand.short}
+        <span className="relative shrink-0">
+          <ChannelIcon type={c.type} name={c.name} enabled={c.enabled} size={present ? 40 : 34} />
           <span className={cx("absolute -right-0.5 -bottom-0.5 size-2.5 rounded-full ring-2 ring-[var(--surface)]", st.bad ? "bg-danger" : c.enabled ? "bg-success" : "bg-muted/40")} />
         </span>
         <span className="min-w-0 flex-1">

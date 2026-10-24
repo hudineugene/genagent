@@ -2,7 +2,8 @@ import { and, eq, gte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { agents, channels, clients, usageLog } from "@/db/schema";
 import { agentConfigSchema } from "@/lib/agent/types";
-import { CHANNEL_BRAND, CHANNEL_LABEL, GROUPS, MODULES } from "@/lib/agent/map-modules";
+import { CHANNEL_LABEL, GROUPS, MODULES } from "@/lib/agent/map-modules";
+import { ChannelIcon } from "./channel-icon";
 import { agentMapStats, moduleHistory } from "@/lib/agent/map-stats";
 import { getGeneral, studioTz } from "@/lib/general";
 import { MODELS } from "@/lib/models";
@@ -80,9 +81,7 @@ export async function AgentReport({ agentId, owner, brand, locale }: { agentId: 
         <div className="space-y-1.5">
           {chs.map((c) => (
             <div key={c.id} className="flex items-center gap-2 rounded-lg border border-[#e5e7eb] px-2 py-1">
-              <span className="grid size-6 place-items-center rounded-md text-[9px] font-bold text-white" style={{ background: c.enabled ? (CHANNEL_BRAND[c.type]?.color ?? "#64748b") : "#cbd5e1" }}>
-                {CHANNEL_BRAND[c.type]?.short ?? "?"}
-              </span>
+              <ChannelIcon type={c.type} name={c.name} enabled={c.enabled} size={22} />
               <span className="min-w-0 truncate">{CHANNEL_LABEL[c.type] ?? c.type}</span>
               <span className="ml-auto text-xs text-[#6b7280]">{sum(stats.daily.channels[c.id])}</span>
             </div>

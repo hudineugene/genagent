@@ -552,18 +552,3 @@ export function whatIf(key: string, turnOn: boolean, s: MapStats | null): L | nu
   }
   return cost ? { ru: `Добавит ${costText}`, uk: `Додасть ${costTextUk}` } : null;
 }
-
-/** Фирменные цвета и короткие метки каналов для значков на карте. */
-export const CHANNEL_BRAND: Record<string, { color: string; short: string }> = {
-  telegram: { color: "#229ED9", short: "TG" },
-  whatsapp: { color: "#25D366", short: "WA" },
-  instagram: { color: "#E1306C", short: "IG" },
-  threads: { color: "#111111", short: "@" },
-  viber: { color: "#7360F2", short: "Vb" },
-  messenger: { color: "#0084FF", short: "M" },
-  sms: { color: "#64748B", short: "SMS" },
-  email: { color: "#F59E0B", short: "@" },
-  widget: { color: "#6366F1", short: "W" },
-  voice: { color: "#F97316", short: "☎" },
-  api: { color: "#475569", short: "API" },
-};
