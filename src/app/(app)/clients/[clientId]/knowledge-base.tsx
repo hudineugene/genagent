@@ -8,6 +8,7 @@ import { addTextSource, addUrlSource, deleteSource, refreshSource } from "@/app/
 import { FULL_CONTEXT_MAX_CHARS, estimateTokens } from "@/lib/kb/text";
 import { useI18n } from "@/lib/i18n/client";
 import { Badge, Button, Card, EmptyState, Field, Input, Spinner, Textarea, cx } from "@/components/ui";
+import { ask } from "@/components/confirm-dialog";
 
 export type SourceRow = {
   id: string;
@@ -188,8 +189,8 @@ function SourceItem({ clientId, s }: { clientId: string; s: SourceRow }) {
           title={t.common.delete}
           className="hover:text-danger"
           disabled={pending}
-          onClick={() => {
-            if (confirm(`${t.common.confirmDelete}\n${s.title}`)) start(async () => void (await deleteSource(s.id)));
+          onClick={async () => {
+            if (await ask(`${t.common.confirmDelete}\n${s.title}`)) start(async () => void (await deleteSource(s.id)));
           }}
         >
           <Trash2 className="size-4" />

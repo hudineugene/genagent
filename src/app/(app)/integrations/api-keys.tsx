@@ -5,6 +5,7 @@ import { KeyRound } from "lucide-react";
 import { createApiKey, revokeApiKey } from "@/app/actions/api-keys";
 import { useI18n } from "@/lib/i18n/client";
 import { Badge, Button, Card, Field, Input, Select } from "@/components/ui";
+import { ask } from "@/components/confirm-dialog";
 
 export type ApiKeyRow = { id: string; name: string; prefix: string; scope: "read" | "write"; clients: string; lastUsedAt: string | null; revoked: boolean };
 
@@ -77,7 +78,7 @@ export function ApiKeys({ rows, clients, base }: { rows: ApiKeyRow[]; clients: {
               {r.revoked ? (
                 <Badge>{a.revoked}</Badge>
               ) : (
-                <Button size="sm" variant="ghost" className="hover:text-danger" disabled={pending} onClick={() => confirm(a.revokeConfirm) && start(() => revokeApiKey(r.id))}>
+                <Button size="sm" variant="ghost" className="hover:text-danger" disabled={pending} onClick={async () => await ask(a.revokeConfirm) && start(() => revokeApiKey(r.id))}>
                   {a.revoke}
                 </Button>
               )}

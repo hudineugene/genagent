@@ -6,6 +6,7 @@ import { deleteProcedure, saveProcedure, type ProcedureInput } from "@/app/actio
 import type { ProcedureStep } from "@/db/schema";
 import { useI18n } from "@/lib/i18n/client";
 import { Badge, Button, Card, Field, Input, Select, Textarea } from "@/components/ui";
+import { ask } from "@/components/confirm-dialog";
 
 export type ProcedureRow = { id: string; name: string; trigger: string; steps: ProcedureStep[]; enabled: boolean; usedBy: string[] };
 export type ToolOption = { id: string; title: string; kind: string; params: string[] };
@@ -46,7 +47,7 @@ export function ProceduresManager({ clientId, rows, tools }: { clientId: string;
           <Button size="sm" variant="secondary" onClick={() => setEditing(r)}>
             {p.edit}
           </Button>
-          <Button size="sm" variant="ghost" className="hover:text-danger" disabled={pending} onClick={() => confirm(t.common.confirmDelete) && start(() => deleteProcedure(r.id))}>
+          <Button size="sm" variant="ghost" className="hover:text-danger" disabled={pending} onClick={async () => await ask(t.common.confirmDelete) && start(() => deleteProcedure(r.id))}>
             <Trash2 className="size-4" />
           </Button>
         </Card>

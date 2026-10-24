@@ -6,6 +6,7 @@ import { adjustPoints, deleteAccount, renewProgramKey, saveProgram } from "@/app
 import { useI18n } from "@/lib/i18n/client";
 import { Badge, Button, Card, Field, Input, Textarea } from "@/components/ui";
 import type { LoyaltyReward } from "@/db/schema";
+import { ask } from "@/components/confirm-dialog";
 
 export type ProgramRow = {
   id: string;
@@ -181,7 +182,7 @@ function ApiBox({ program, apiBase }: { program: ProgramRow; apiBase: string }) 
         <Button variant="ghost" size="sm" onClick={() => void navigator.clipboard.writeText(program.apiKey)}>
           <Copy className="size-4" />
         </Button>
-        <Button variant="ghost" size="sm" disabled={pending} onClick={() => confirm(l.confirmRenew) && start(() => renewProgramKey(program.id))}>
+        <Button variant="ghost" size="sm" disabled={pending} onClick={async () => await ask(l.confirmRenew) && start(() => renewProgramKey(program.id))}>
           {l.renew}
         </Button>
       </div>
@@ -329,7 +330,7 @@ function AccountLine({ row, unit, when }: { row: AccountRow; unit: string; when:
         {row.balance} {unit}
       </span>
       <span className="w-28 text-right text-xs text-muted">{when}</span>
-      <Button variant="ghost" size="sm" disabled={pending} title={t.loyalty.deleteAccount} onClick={() => confirm(t.loyalty.confirmDeleteAccount) && start(() => deleteAccount(row.id))}>
+      <Button variant="ghost" size="sm" disabled={pending} title={t.loyalty.deleteAccount} onClick={async () => await ask(t.loyalty.confirmDeleteAccount) && start(() => deleteAccount(row.id))}>
         <Trash2 className="size-4" />
       </Button>
     </div>

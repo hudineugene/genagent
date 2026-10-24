@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useOptimistic, useState, useTransition } from "react";
 import { Eye, Megaphone, Pause, Pencil, Play, Plus, Rocket, Square, Trash2, Users, Workflow, X } from "lucide-react";
 import {
   deleteCampaign,
@@ -14,6 +14,8 @@ import {
 import { useI18n } from "@/lib/i18n/client";
 import { Badge, Button, Card, EmptyState, Field, Input, Select, Textarea, cx } from "@/components/ui";
 import type { CampaignOptions, CampaignSegment, CampaignStep } from "@/db/schema";
+import { ask } from "@/components/confirm-dialog";
+import { toast } from "@/components/toast";
 
 type Kind = "broadcast" | "sequence";
 type Trigger = "idle" | "handoff" | "booking" | "hot";
@@ -86,6 +88,8 @@ export function CampaignsManager({ clientId, rows, agents }: { clientId: string;
 }
 
 function CampaignCard({ clientId, row: r, onEdit }: { clientId: string; row: CampaignRow; onEdit: () => void }) {
+  // Пауза и запуск цепочки — сразу на экране, сохранение в фоне
+  const [enabled, setEnabled] = useOptimistic(r.enabled);
   const { t } = useI18n();
   const c = t.campaigns;
   const [pending, start] = useTransition();
@@ -150,7 +154,7 @@ function CampaignCard({ clientId, row: r, onEdit }: { clientId: string; row: Cam
                   setError(null);
                   const who = await previewSegment(clientId, r.segment);
                   if (!who.count) return setError(err("empty"));
-                  if (!confirm(c.confirmLaunch.replace("{n}", String(who.count)))) return;
+                  if (!await ask(c.confirmLaunch.replace("{n}", String(who.count)))) return;
                   const res = await launchCampaign(r.id);
                   if (!res.count) setError(err("empty"));
                 })
@@ -161,9 +165,19 @@ function CampaignCard({ clientId, row: r, onEdit }: { clientId: string; row: Cam
             </Button>
           )}
           {r.kind === "sequence" && (
-            <Button size="sm" variant={r.enabled ? "secondary" : "primary"} disabled={pending} onClick={() => start(async () => void (await setSequenceEnabled(r.id, !r.enabled)))}>
-              {r.enabled ? <Pause className="size-4" /> : <Play className="size-4" />}
-              {r.enabled ? c.disable : c.enable}
+            <Button
+              size="sm"
+              variant={enabled ? "secondary" : "primary"}
+              onClick={() =>
+                start(async () => {
+                  setEnabled(!enabled);
+                  const res = await setSequenceEnabled(r.id, !enabled).catch(() => ({ error: "" }));
+                  if (res.error !== undefined) toast(err(res.error) || t.shell.saveFailed, "error");
+                })
+              }
+            >
+              {enabled ? <Pause className="size-4" /> : <Play className="size-4" />}
+              {enabled ? c.disable : c.enable}
             </Button>
           )}
           {r.kind === "broadcast" && (r.status === "scheduled" || r.status === "sending") && (
@@ -177,7 +191,7 @@ function CampaignCard({ clientId, row: r, onEdit }: { clientId: string; row: Cam
               <Pencil className="size-4" />
             </Button>
           )}
-          <Button variant="ghost" size="sm" disabled={pending} title={c.delete} onClick={() => confirm(c.confirmDelete) && start(() => deleteCampaign(r.id))}>
+          <Button variant="ghost" size="sm" disabled={pending} title={c.delete} onClick={async () => await ask(c.confirmDelete) && start(() => deleteCampaign(r.id))}>
             <Trash2 className="size-4" />
           </Button>
         </div>

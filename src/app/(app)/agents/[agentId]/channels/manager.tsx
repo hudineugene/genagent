@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState, useSyncExternalStore, useTransition } from "react";
+import { useActionState, useEffect, useState, useSyncExternalStore, useTransition, useOptimistic } from "react";
 import Link from "next/link";
 import { AlertTriangle, AtSign, Bot, Camera, Check, Copy, ExternalLink, Eye, Globe, Mail, MessageCircle, MessagesSquare, Phone, PhoneCall, Plus, Smartphone, Power, RefreshCw, Send, Trash2 } from "lucide-react";
 import {
@@ -22,6 +22,8 @@ import { useI18n } from "@/lib/i18n/client";
 import type { AddKind } from "@/lib/channels/add-kinds";
 import { Badge, Button, Card, Field, Input, Select, Spinner, Textarea, cx } from "@/components/ui";
 import { InfoHint } from "@/components/hint";
+import { ask } from "@/components/confirm-dialog";
+import { toast } from "@/components/toast";
 
 export type ChannelItem = {
   id: string;
@@ -300,24 +302,32 @@ function LastActivity({ c }: { c: ChannelItem }) {
 function ChannelHeader({ c, icon, title }: { c: ChannelItem; icon: React.ReactNode; title: React.ReactNode }) {
   const { t } = useI18n();
   const [pending, start] = useTransition();
+  // Включение и выключение — сразу на экране, сохранение в фоне; ошибка — значение вернётся само
+  const [enabled, setEnabled] = useOptimistic(c.enabled);
   return (
     <div className="flex items-center gap-3">
       <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-surface-2 text-muted">{icon}</span>
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
         <div className="min-w-0 font-semibold">{title}</div>
-        <Badge tone={c.enabled ? (c.error ? "warning" : "success") : "neutral"}>
-          {c.enabled ? (c.type === "telegram" && c.live && !c.error ? t.channels.polling : t.channels.enabled) : t.channels.disabled}
+        <Badge tone={enabled ? (c.error ? "warning" : "success") : "neutral"}>
+          {enabled ? (c.type === "telegram" && c.live && !c.error ? t.channels.polling : t.channels.enabled) : t.channels.disabled}
         </Badge>
-        {c.enabled && <LastActivity c={c} />}
+        {enabled && <LastActivity c={c} />}
       </div>
       <Button
         size="sm"
         variant="ghost"
-        disabled={pending}
-        title={c.enabled ? t.channels.disable : t.channels.enable}
-        onClick={() => start(async () => void (await setChannelEnabled(c.id, !c.enabled)))}
+        title={enabled ? t.channels.disable : t.channels.enable}
+        aria-pressed={enabled}
+        onClick={() =>
+          start(async () => {
+            setEnabled(!enabled);
+            const r = await setChannelEnabled(c.id, !enabled).catch(() => ({ error: "failed" }));
+            if (r.error) toast(t.shell.saveFailed, "error");
+          })
+        }
       >
-        {pending ? <Spinner /> : <Power className="size-4" />}
+        <Power className={cx("size-4", enabled && "text-success")} />
       </Button>
       <Button
         size="sm"
@@ -325,8 +335,8 @@ function ChannelHeader({ c, icon, title }: { c: ChannelItem; icon: React.ReactNo
         className="hover:text-danger"
         disabled={pending}
         title={t.common.delete}
-        onClick={() => {
-          if (confirm(t.common.confirmDelete)) start(async () => void (await deleteChannel(c.id)));
+        onClick={async () => {
+          if (await ask(t.common.confirmDelete)) start(async () => void (await deleteChannel(c.id)));
         }}
       >
         <Trash2 className="size-4" />
@@ -1025,7 +1035,7 @@ function VoiceCard({ c, publicUrl }: { c: ChannelItem; publicUrl: string | null 
             <Button size="sm" variant="ghost" onClick={() => setShown(!shown)} title={ch.apiShow}>
               <Eye className="size-4" />
             </Button>
-            <Button size="sm" variant="ghost" disabled={pending} title={ch.apiRegenerate} onClick={() => confirm(ch.apiRegenerateConfirm) && start(async () => void (await regenerateApiKey(c.id)))}>
+            <Button size="sm" variant="ghost" disabled={pending} title={ch.apiRegenerate} onClick={async () => await ask(ch.apiRegenerateConfirm) && start(async () => void (await regenerateApiKey(c.id)))}>
               <RefreshCw className="size-4" />
             </Button>
           </span>
@@ -1278,8 +1288,8 @@ function ApiCard({ c, publicUrl }: { c: ChannelItem; publicUrl: string | null })
               variant="ghost"
               disabled={pending}
               title={ch.apiRegenerate}
-              onClick={() => {
-                if (confirm(ch.apiRegenerateConfirm)) start(async () => void (await regenerateApiKey(c.id)));
+              onClick={async () => {
+                if (await ask(ch.apiRegenerateConfirm)) start(async () => void (await regenerateApiKey(c.id)));
               }}
             >
               {pending ? <Spinner /> : <RefreshCw className="size-4" />}

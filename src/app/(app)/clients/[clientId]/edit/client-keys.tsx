@@ -5,6 +5,7 @@ import { Check, KeyRound, Trash2 } from "lucide-react";
 import { saveClientKey } from "@/app/actions/client-keys";
 import { useI18n } from "@/lib/i18n/client";
 import { Badge, Button, Card, Input, Spinner } from "@/components/ui";
+import { ask } from "@/components/confirm-dialog";
 
 type Kind = "anthropic" | "openai" | "openrouter" | "googleMaps";
 export type KeyView = { kind: Kind; masked: string | null; studio: boolean };
@@ -76,7 +77,7 @@ function KeyRow({ clientId, view }: { clientId: string; view: KeyView }) {
           {k.save}
         </Button>
         {view.masked && (
-          <Button size="sm" variant="ghost" disabled={pending} onClick={() => confirm(k.confirmRemove) && save("")}>
+          <Button size="sm" variant="ghost" disabled={pending} onClick={async () => await ask(k.confirmRemove) && save("")}>
             <Trash2 className="size-4" />
             {k.remove}
           </Button>

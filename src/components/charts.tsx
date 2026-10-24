@@ -142,12 +142,29 @@ export function ColumnChart({
   );
 }
 
-/** Плитка показателя: подпись, значение, необязательное пояснение. */
-export function StatTile({ label, value, hint }: { label: string; value: string; hint?: string }) {
+/** Изменение к прошлому периоду: pct — число (проценты или unit, например процентные пункты), better — какое направление хорошее. */
+export type TileChange = { pct: number | null; better: "up" | "down"; label: string; unit?: string };
+
+/** Плитка показателя: подпись, значение, сравнение с прошлым периодом (зелёным — к лучшему), пояснение. */
+export function StatTile({ label, value, hint, change }: { label: string; value: string; hint?: string; change?: TileChange }) {
+  const c = change && change.pct !== null ? change : null;
+  const good = c && c.pct !== 0 && (c.pct! > 0) === (c.better === "up");
   return (
     <div className="bg-metal rounded-2xl border p-4">
       <div className="text-xs text-muted">{label}</div>
-      <div className="mt-1 font-display text-2xl font-bold tracking-tight">{value}</div>
+      <div className="mt-1 flex items-baseline gap-2">
+        <span className="font-display text-2xl font-bold tracking-tight">{value}</span>
+        {c && (
+          <span
+            title={c.label}
+            className={cx("inline-flex items-center rounded-full px-1.5 text-xs leading-5 font-semibold tabular-nums", c.pct === 0 ? "bg-surface-2 text-muted" : good ? "bg-success/12 text-success" : "bg-danger/10 text-danger")}
+          >
+            {c.pct! > 0 ? "↑" : c.pct! < 0 ? "↓" : "→"} {Math.abs(c.pct!)}
+            {c.unit ? ` ${c.unit}` : "%"}
+          </span>
+        )}
+      </div>
+      {c && <div className="mt-0.5 text-[11px] text-muted">{c.label}</div>}
       {hint && <div className="mt-0.5 text-xs text-muted">{hint}</div>}
     </div>
   );

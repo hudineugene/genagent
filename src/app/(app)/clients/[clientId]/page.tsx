@@ -8,7 +8,7 @@ import { getT } from "@/lib/i18n/server";
 import { findModel } from "@/lib/models";
 import type { Dict, Locale } from "@/lib/i18n";
 import { BackLink } from "@/components/back-link";
-import { Badge, Card, ClientAvatar, EmptyState, buttonClass, cx } from "@/components/ui";
+import { AgentAvatar, Badge, Card, ClientAvatar, EmptyState, buttonClass, cx } from "@/components/ui";
 import { KnowledgeBase } from "./knowledge-base";
 import { ToolsManager } from "./tools";
 import { ConnectorsManager } from "./connectors";
@@ -77,7 +77,7 @@ export default async function ClientPage({
         <span className="absolute inset-x-0 top-0 h-1" style={{ background: client.color }} />
         <div className="flex flex-wrap items-center gap-x-8 gap-y-4 px-5 pt-6 pb-4">
           <div className="flex min-w-0 flex-1 basis-72 items-center gap-4">
-            <ClientAvatar id={client.id} v={(await logoVersions()).get(client.id)} name={client.name} color={client.color} size={56} />
+            <ClientAvatar id={client.id} v={(await logoVersions()).get(client.id)} name={client.name} color={client.color} size={56} morph />
             <div className="min-w-0">
               <h1 className="truncate text-2xl font-bold tracking-tight">{client.name}</h1>
               <p className="mt-0.5 truncate text-sm text-muted">
@@ -202,7 +202,7 @@ export default async function ClientPage({
       ) : active === "modules" ? (
         <ModulesCatalog base={base} modules={sections} t={t} />
       ) : (
-        <AgentsTab clientId={client.id} t={t} locale={locale} base={base} modules={modules} />
+        <AgentsTab clientId={client.id} t={t} locale={locale} base={base} modules={modules} color={client.color} />
       )}
         </div>
       </div>
@@ -1051,7 +1051,7 @@ async function KnowledgeTab({ clientId }: { clientId: string }) {
   return <KnowledgeBase clientId={clientId} sources={sources} semantic={semantic} />;
 }
 
-async function AgentsTab({ clientId, t, locale, base, modules }: { clientId: string; t: Dict; locale: Locale; base: string; modules: ModuleCard[] }) {
+async function AgentsTab({ clientId, t, locale, base, modules, color }: { clientId: string; t: Dict; locale: Locale; base: string; modules: ModuleCard[]; color: string }) {
   const [list, notify, owners, [{ openGaps }]] = await Promise.all([
     db.select().from(agents).where(eq(agents.clientId, clientId)).orderBy(desc(agents.updatedAt)),
     getNotifySettings(),
@@ -1083,9 +1083,7 @@ async function AgentsTab({ clientId, t, locale, base, modules }: { clientId: str
         <Link key={a.id} href={`/agents/${a.id}`} className="group">
           <Card className="flex h-full flex-col gap-3 p-4 transition group-hover:border-accent/50">
             <div className="flex items-start gap-3">
-              <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-surface-2 text-lg">
-                {a.config.icon}
-              </span>
+              <AgentAvatar icon={a.config.icon} color={color} size={40} morph={a.id} />
               <div className="min-w-0 flex-1">
                 <div className="truncate font-semibold">{a.name}</div>
                 <div className="truncate text-sm text-muted">{a.config.role || "—"}</div>

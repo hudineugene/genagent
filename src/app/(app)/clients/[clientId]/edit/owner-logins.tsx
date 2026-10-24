@@ -5,6 +5,7 @@ import { DoorOpen, KeyRound, Trash2 } from "lucide-react";
 import { addOwnerLogin, deleteOwnerLogin, resetOwnerLogin } from "@/app/actions/portal";
 import { useI18n } from "@/lib/i18n/client";
 import { Button, Card, Field, Input } from "@/components/ui";
+import { ask } from "@/components/confirm-dialog";
 
 /** Кабинет клиента: входы владельцев бизнеса (пароль показывается один раз) и предпросмотр кабинета. */
 export function OwnerLogins({ clientId, rows }: { clientId: string; rows: { id: string; name: string; email: string }[] }) {
@@ -32,10 +33,10 @@ export function OwnerLogins({ clientId, rows }: { clientId: string; rows: { id: 
           <span className="min-w-0 flex-1 truncate">
             {r.name} · <span className="text-muted">{r.email}</span>
           </span>
-          <Button size="sm" variant="ghost" title={o.reset} disabled={pending} onClick={() => confirm(o.resetConfirm) && start(async () => { const x = await resetOwnerLogin(r.id); if (x.password) setCreds({ email: x.email!, password: x.password }); })}>
+          <Button size="sm" variant="ghost" title={o.reset} disabled={pending} onClick={async () => await ask(o.resetConfirm) && start(async () => { const x = await resetOwnerLogin(r.id); if (x.password) setCreds({ email: x.email!, password: x.password }); })}>
             <KeyRound className="size-4" />
           </Button>
-          <Button size="sm" variant="ghost" className="hover:text-danger" disabled={pending} onClick={() => confirm(t.common.confirmDelete) && start(() => deleteOwnerLogin(r.id))}>
+          <Button size="sm" variant="ghost" className="hover:text-danger" disabled={pending} onClick={async () => await ask(t.common.confirmDelete) && start(() => deleteOwnerLogin(r.id))}>
             <Trash2 className="size-4" />
           </Button>
         </div>

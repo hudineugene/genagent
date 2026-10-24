@@ -13,6 +13,7 @@ import { Topbar } from "@/components/shell/topbar";
 import { Shortcuts } from "@/components/shell/shortcuts";
 import { Tour } from "@/components/shell/tour";
 import { Toaster } from "@/components/toast";
+import { ConfirmHost } from "@/components/confirm-dialog";
 import { Spinner } from "@/components/ui";
 
 // Внутренний инструмент: все страницы зависят от сессии, мгновенная навигация не критична.
@@ -56,6 +57,7 @@ async function Shell({ children }: { children: ReactNode }) {
         <Tour />
       </ShellFrame>
       <Toaster />
+      <ConfirmHost />
     </I18nProvider>
   );
 }

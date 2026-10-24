@@ -1,7 +1,7 @@
 "use client";
 
 import { useI18n } from "@/lib/i18n/client";
-import { AreaChart, ColumnChart, StatTile, type Column } from "@/components/charts";
+import { AreaChart, ColumnChart, StatTile, type Column, type TileChange } from "@/components/charts";
 import { Card } from "@/components/ui";
 
 /** Плитки показателей и два отдельных графика (диалоги и расходы — разные шкалы, поэтому не на одной оси). */
@@ -11,7 +11,7 @@ export function AnalyticsCharts({
   conversations,
   costs,
 }: {
-  tiles: { label: string; value: string; hint?: string }[];
+  tiles: { label: string; value: string; hint?: string; change?: TileChange }[];
   /** Второстепенные показатели — одной строкой под плитками */
   extra?: string[];
   conversations: Column[];

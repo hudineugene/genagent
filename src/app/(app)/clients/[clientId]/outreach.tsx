@@ -17,6 +17,7 @@ import {
 } from "@/app/actions/outreach";
 import { useI18n } from "@/lib/i18n/client";
 import { Badge, Button, Card, EmptyState, Field, Input, Select, Spinner, Textarea, cx } from "@/components/ui";
+import { ask } from "@/components/confirm-dialog";
 
 export type ListRow = { id: string; name: string; count: number; withEmail: number; groups: { name: string; n: number }[]; unsubscribed: number };
 export type OutreachRow = {
@@ -185,8 +186,8 @@ function DeleteButton({ confirmText, onDelete }: { confirmText: string; onDelete
       size="sm"
       variant="ghost"
       disabled={pending}
-      onClick={() =>
-        confirm(confirmText) &&
+      onClick={async () =>
+        await ask(confirmText) &&
         start(async () => {
           await onDelete();
         })
@@ -331,7 +332,7 @@ function OutreachCard({ clientId, row, lists, emailChannels, webSearch }: { clie
         </div>
         <div className="flex flex-wrap gap-1">
           {row.status !== "generating" && row.status !== "sending" && (
-            <Button size="sm" variant="secondary" disabled={pending} onClick={() => confirm(c.sent ? o.confirmRegenerateSent : o.confirmGenerate) && start(() => generateOutreachAction(row.id))}>
+            <Button size="sm" variant="secondary" disabled={pending} onClick={async () => await ask(c.sent ? o.confirmRegenerateSent : o.confirmGenerate) && start(() => generateOutreachAction(row.id))}>
               <Sparkles className="size-4" />
               {c.ready || c.approved ? o.regenerate : o.generate}
             </Button>
@@ -352,8 +353,8 @@ function OutreachCard({ clientId, row, lists, emailChannels, webSearch }: { clie
               <Button
                 size="sm"
                 disabled={pending}
-                onClick={() =>
-                  confirm(o.confirmSend.replace("{n}", String(c.approved))) &&
+                onClick={async () =>
+                  await ask(o.confirmSend.replace("{n}", String(c.approved))) &&
                   start(async () => {
                     const r = await setOutreachSending(row.id, true);
                     if (r.error) setError((o.errors as Record<string, string>)[r.error] ?? r.error);

@@ -8,6 +8,7 @@ import { deleteDocTemplate, saveDocTemplate } from "@/app/actions/doc-templates"
 import { useI18n } from "@/lib/i18n/client";
 import { Badge, Button, Card, EmptyState, Field, Input, Spinner, Textarea, buttonClass } from "@/components/ui";
 import type { DocField } from "@/db/schema";
+import { ask } from "@/components/confirm-dialog";
 
 export type DocTypeRow = {
   id: string;
@@ -203,8 +204,8 @@ function DeleteButton({ confirmText, onDelete }: { confirmText: string; onDelete
       size="sm"
       disabled={pending}
       title={t.documents.delete}
-      onClick={() =>
-        confirm(confirmText) &&
+      onClick={async () =>
+        await ask(confirmText) &&
         start(async () => {
           await onDelete();
         })

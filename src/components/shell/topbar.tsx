@@ -11,6 +11,7 @@ import { useI18n } from "@/lib/i18n/client";
 import { OPEN_PALETTE } from "../command-palette";
 import { cx } from "../ui";
 import { useShell } from "./frame";
+import { RelTime } from "../rel-time";
 import { rememberPage } from "./recent";
 import { chime, notifyOn } from "./notify";
 
@@ -83,16 +84,29 @@ function crumbs(pathname: string, tab: string | null, ctx: NavCtx | null, t: Dic
 
 function Crumbs() {
   const { t } = useI18n();
-  const { ctx } = useShell();
+  const { ctx, ctxPath } = useShell();
   const pathname = usePathname();
   const tab = useSearchParams().get("tab");
-  const list = crumbs(pathname, tab, ctx, t);
+  // Данные для адреса пришли, а имени нет (запись не найдена) — звено «…» убираем
+  const list = crumbs(pathname, tab, ctx, t).filter((c) => c.label !== "…" || ctxPath !== pathname);
   const title = list.map((c) => c.label).join(" › ");
   const href = pathname + (tab ? `?tab=${tab}` : "");
   // Страница с известными именами — в «Недавние» поиска
   useEffect(() => {
     if (title && !title.includes("…")) rememberPage({ href, title });
   }, [href, title]);
+  // Заголовок вкладки браузера: «(7) Карта · Консультант YABOT — GenAgent»; число — разговоры, ждущие человека
+  const waiting = ctx?.clients.reduce((a, c) => a + c.waiting, 0) ?? 0;
+  const tabTitle = list
+    .slice(-2)
+    .reverse()
+    .map((c) => c.label)
+    .filter((x) => x !== "…")
+    .join(" · ");
+  useEffect(() => {
+    document.title = `${waiting ? `(${waiting}) ` : ""}${tabTitle ? `${tabTitle} — ` : ""}GenAgent`;
+    setFaviconDot(waiting > 0);
+  }, [tabTitle, waiting]);
   return (
     <nav aria-label={t.shell.path} className="flex min-w-0 flex-1 items-center gap-1 text-sm">
       {list.map((c, i) => (
@@ -113,16 +127,40 @@ function Crumbs() {
   );
 }
 
+/** Значок вкладки: красная точка, когда кто-то ждёт человека (рисуется поверх знака на холсте). */
+let faviconBase: string | null = null;
+let faviconDot: boolean | null = null;
+function setFaviconDot(on: boolean) {
+  if (faviconDot === on) return;
+  faviconDot = on;
+  const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+  if (!link) return;
+  faviconBase ??= link.href;
+  if (!on) {
+    link.href = faviconBase;
+    return;
+  }
+  const img = new Image();
+  img.onload = () => {
+    const c = document.createElement("canvas");
+    c.width = c.height = 64;
+    const g = c.getContext("2d");
+    if (!g || !faviconDot) return;
+    g.drawImage(img, 0, 0, 64, 64);
+    g.beginPath();
+    g.arc(50, 14, 12, 0, Math.PI * 2);
+    g.fillStyle = "#e11d48";
+    g.fill();
+    g.lineWidth = 4;
+    g.strokeStyle = "#ffffff";
+    g.stroke();
+    link.href = c.toDataURL("image/png");
+  };
+  img.src = faviconBase;
+}
+
 const SEEN_KEY = "bell-seen";
 
-function ago(at: number, t: Dict) {
-  const min = Math.floor((Date.now() - at) / 60_000);
-  if (min < 1) return t.home.justNow;
-  if (min < 60) return `${min} ${t.home.minutes}`;
-  const h = Math.floor(min / 60);
-  if (h < 24) return `${h} ${t.home.hours}`;
-  return `${Math.floor(h / 24)} ${t.home.days}`;
-}
 
 /** Колокольчик: события за 3 дня; точка — есть новые с прошлого открытия. Обновляется раз в минуту. */
 function BellMenu() {
@@ -234,7 +272,7 @@ function BellMenu() {
                         {f.client}
                       </span>
                     </span>
-                    <span className="shrink-0 text-xs text-muted">{ago(f.at, t)}</span>
+                    <RelTime at={f.at} className="shrink-0 text-xs text-muted" />
                   </span>
                 );
                 return (

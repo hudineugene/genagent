@@ -8,6 +8,7 @@ import { addResumeText, deleteCandidate, deleteVacancy, rescoreVacancy, saveVaca
 import { useI18n } from "@/lib/i18n/client";
 import { Badge, Button, Card, EmptyState, Field, Input, Select, Spinner, Textarea, cx } from "@/components/ui";
 import type { OnboardingItem, OnboardingStep } from "@/db/schema";
+import { ask } from "@/components/confirm-dialog";
 
 export type PlanRow = { id: string; name: string; steps: OnboardingStep[]; welcome: string };
 export type OnboardingRow = {
@@ -97,7 +98,7 @@ export function OnboardingManager({ clientId, plans, rows, channels, teamAgent }
 function DeleteBtn({ text, run }: { text: string; run: () => Promise<unknown> }) {
   const [pending, start] = useTransition();
   return (
-    <Button variant="ghost" size="sm" disabled={pending} onClick={() => confirm(text) && start(async () => void (await run()))}>
+    <Button variant="ghost" size="sm" disabled={pending} onClick={async () => await ask(text) && start(async () => void (await run()))}>
       <Trash2 className="size-4" />
     </Button>
   );

@@ -7,6 +7,7 @@ import { deleteContentItem, generateContentAction, generateImageAction, removeIm
 import { useI18n } from "@/lib/i18n/client";
 import { Badge, Button, Card, EmptyState, Field, Input, Select, Spinner, Textarea } from "@/components/ui";
 import { CONTENT_KINDS, CONTENT_PLATFORMS, maxVariants } from "@/lib/content/kinds";
+import { ask } from "@/components/confirm-dialog";
 
 type Kind = (typeof CONTENT_KINDS)[number];
 type Platform = (typeof CONTENT_PLATFORMS)[number];
@@ -236,7 +237,7 @@ function ItemCard({ clientId, row, bots: allBots, openai, label, fmt }: { client
           <Button variant="ghost" size="sm" title={c.edit} onClick={() => setEditing(!editing)}>
             <Pencil className="size-4" />
           </Button>
-          <Button variant="ghost" size="sm" disabled={pending} title={c.delete} onClick={() => confirm(c.confirmDelete) && start(() => deleteContentItem(row.id))}>
+          <Button variant="ghost" size="sm" disabled={pending} title={c.delete} onClick={async () => await ask(c.confirmDelete) && start(() => deleteContentItem(row.id))}>
             <Trash2 className="size-4" />
           </Button>
         </div>
@@ -277,7 +278,7 @@ function ItemCard({ clientId, row, bots: allBots, openai, label, fmt }: { client
               </div>
               {needsTarget ? <p className="text-xs text-muted">{c.targetHint}</p> : <p className="text-xs text-muted">{c.threadsHint}</p>}
               <div className="flex flex-wrap items-center gap-2">
-                <Button size="sm" disabled={pending || (needsTarget && !draft.target.trim())} onClick={() => confirm(c.confirmPublish) && publish(null)}>
+                <Button size="sm" disabled={pending || (needsTarget && !draft.target.trim())} onClick={async () => await ask(c.confirmPublish) && publish(null)}>
                   {pending ? <Spinner /> : <Send className="size-4" />}
                   {c.publishNow}
                 </Button>

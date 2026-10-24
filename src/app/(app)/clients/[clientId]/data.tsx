@@ -8,6 +8,7 @@ import { useI18n } from "@/lib/i18n/client";
 import { Badge, Button, Card, EmptyState, Field, Input, Spinner, Textarea, cx } from "@/components/ui";
 import type { DataColumn } from "@/db/schema";
 import type { ChartSpec } from "@/lib/data/analyst";
+import { ask as confirmAsk } from "@/components/confirm-dialog";
 
 export type DataTableRow = {
   id: string;
@@ -219,7 +220,7 @@ function TableCard({ clientId, row, refreshed }: { clientId: string; row: DataTa
           <Button variant="ghost" size="sm" title={d.edit} onClick={() => setMode("edit")}>
             <Pencil className="size-4" />
           </Button>
-          <Button variant="ghost" size="sm" disabled={pending} title={d.delete} onClick={() => confirm(d.confirmDelete) && start(() => deleteTable(row.id))}>
+          <Button variant="ghost" size="sm" disabled={pending} title={d.delete} onClick={async () => await confirmAsk(d.confirmDelete) && start(() => deleteTable(row.id))}>
             <Trash2 className="size-4" />
           </Button>
         </div>

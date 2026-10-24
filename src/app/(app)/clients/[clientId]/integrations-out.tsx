@@ -6,6 +6,7 @@ import { deleteIntegration, saveIntegration, testIntegration } from "@/app/actio
 import { useI18n } from "@/lib/i18n/client";
 import { Badge, Button, Card, Field, Input, Select, cx } from "@/components/ui";
 import { INTEGRATION_EVENTS, type IntegrationEventType } from "@/lib/integrations/types";
+import { ask } from "@/components/confirm-dialog";
 
 export type IntegrationRow = {
   id: string;
@@ -113,7 +114,7 @@ function DeleteButton({ id }: { id: string }) {
   const { t } = useI18n();
   const [pending, start] = useTransition();
   return (
-    <Button variant="ghost" size="sm" disabled={pending} title={t.tools.delete} onClick={() => confirm(t.tools.confirmDelete) && start(() => deleteIntegration(id))}>
+    <Button variant="ghost" size="sm" disabled={pending} title={t.tools.delete} onClick={async () => await ask(t.tools.confirmDelete) && start(() => deleteIntegration(id))}>
       <Trash2 className="size-4" />
     </Button>
   );

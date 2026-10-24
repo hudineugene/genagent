@@ -6,6 +6,7 @@ import { deleteTool, saveTool, testTool } from "@/app/actions/tools";
 import { useI18n } from "@/lib/i18n/client";
 import { Badge, Button, Card, EmptyState, Field, Input, Select, Textarea, cx } from "@/components/ui";
 import type { ToolParam } from "@/db/schema";
+import { ask } from "@/components/confirm-dialog";
 
 export type ToolRow = {
   id: string;
@@ -126,8 +127,8 @@ function DeleteButton({ id }: { id: string }) {
       size="sm"
       disabled={pending}
       title={t.tools.delete}
-      onClick={() => {
-        if (confirm(t.tools.confirmDelete)) start(() => deleteTool(id));
+      onClick={async () => {
+        if (await ask(t.tools.confirmDelete)) start(() => deleteTool(id));
       }}
     >
       <Trash2 className="size-4" />

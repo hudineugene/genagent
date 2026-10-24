@@ -7,7 +7,7 @@ import { ArrowLeft, Plus, Search, Settings, Star } from "lucide-react";
 import type { NavAgent, NavClient, NavCtx } from "@/app/actions/nav";
 import { useI18n } from "@/lib/i18n/client";
 import { NAV_ICONS, visibleNav, type NavIcon } from "@/lib/nav-icons";
-import { ClientAvatar, cx } from "../ui";
+import { AgentAvatar, ClientAvatar, cx } from "../ui";
 import { useShell } from "./frame";
 
 /**
@@ -41,9 +41,11 @@ function expected(pathname: string): { kind: NavCtx["kind"]; id?: string } {
 }
 
 function PanelBody() {
-  const { ctx } = useShell();
+  const { ctx, ctxPath } = useShell();
   const pathname = usePathname();
   const want = expected(pathname);
+  // Данные для этого адреса пришли, а записи нет (удалена или чужая) — показываем клиентов, не заготовку
+  if (ctx && ctxPath === pathname && ctx.kind === "clients" && want.kind !== "clients") return <ClientsPanel clients={ctx.clients} />;
   // Данные прошлой вкладки той же записи годятся (без мигания); другой записи — заготовка, пока не придут новые
   const fits = ctx && ctx.kind === want.kind && (ctx.kind === "clients" || (ctx.kind === "client" ? ctx.client.id : ctx.agent.id) === want.id);
   if (!ctx || !fits) return <PanelSkeleton />;
@@ -245,7 +247,7 @@ function ClientPanel({ ctx, pathname }: { ctx: Extract<NavCtx, { kind: "client" 
           </div>
         ))}
       </nav>
-      <AgentList agents={ctx.agents} clientId={ctx.client.id} current="" />
+      <AgentList agents={ctx.agents} clientId={ctx.client.id} current="" color={ctx.client.color} />
     </>
   );
 }
@@ -265,7 +267,7 @@ function SectionLink({ href, label, icon, tone, active, n, alert, replace }: { h
 
 const STATUS_DOT = { active: "bg-success", paused: "bg-amber-500", draft: "bg-muted/50" } as const;
 
-function AgentList({ agents, clientId, current }: { agents: NavAgent[]; clientId: string; current: string }) {
+function AgentList({ agents, clientId, current, color }: { agents: NavAgent[]; clientId: string; current: string; color: string }) {
   const { t } = useI18n();
   return (
     <>
@@ -280,7 +282,7 @@ function AgentList({ agents, clientId, current }: { agents: NavAgent[]; clientId
       </Heading>
       {agents.map((a) => (
         <Link key={a.id} href={`/agents/${a.id}`} aria-current={a.id === current ? "page" : undefined} className={cx(row, a.id === current ? rowActive : rowIdle)}>
-          <span className="grid size-6 shrink-0 place-items-center rounded-md bg-surface-2 text-sm leading-none">{a.icon}</span>
+          <AgentAvatar icon={a.icon} color={color} size={24} />
           <span className="min-w-0 flex-1 truncate">{a.name}</span>
           <span className={cx("size-1.5 shrink-0 rounded-full", STATUS_DOT[a.status])} title={t.status[a.status]} />
         </Link>
@@ -305,7 +307,7 @@ function AgentPanel({ ctx, pathname }: { ctx: Extract<NavCtx, { kind: "agent" }>
     <>
       <ClientHead c={ctx.client} href={`/clients/${ctx.client.id}`} />
       <div className="mt-3 mb-1 flex items-center gap-2.5 px-2">
-        <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-surface-2 text-lg leading-none">{agent.icon}</span>
+        <AgentAvatar icon={agent.icon} color={ctx.client.color} size={36} />
         <span className="min-w-0">
           <span className="block truncate text-sm font-semibold">{agent.name}</span>
           <span className="flex items-center gap-1.5 text-xs text-muted">
@@ -319,7 +321,7 @@ function AgentPanel({ ctx, pathname }: { ctx: Extract<NavCtx, { kind: "agent" }>
           <SectionLink key={x.href} href={x.href} label={x.label} icon={x.icon} tone="bg-accent/10 text-accent" active={x.href === base ? pathname === base : pathname.startsWith(x.href)} n={x.n} alert={x.alert} />
         ))}
       </nav>
-      {ctx.agents.length > 1 && <AgentList agents={ctx.agents} clientId={ctx.client.id} current={agent.id} />}
+      {ctx.agents.length > 1 && <AgentList agents={ctx.agents} clientId={ctx.client.id} current={agent.id} color={ctx.client.color} />}
     </>
   );
 }

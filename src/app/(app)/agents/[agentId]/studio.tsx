@@ -13,6 +13,7 @@ import { Playground } from "./playground";
 import { VersionsPanel } from "./versions";
 import { toast } from "@/components/toast";
 import type { BuilderDocTemplate, BuilderProgram, BuilderTable, BuilderForm, BuilderProcedure, BuilderSource, BuilderTool, ExampleItem } from "./builder";
+import { ask } from "@/components/confirm-dialog";
 
 type Status = "draft" | "active" | "paused";
 
@@ -164,8 +165,8 @@ export function AgentStudio({
               title={t.builder.deleteAgent}
               className="hover:text-danger"
               disabled={deleting}
-              onClick={() => {
-                if (confirm(t.common.confirmDelete)) startDelete(() => deleteAgent(agent.id));
+              onClick={async () => {
+                if (await ask(t.common.confirmDelete)) startDelete(() => deleteAgent(agent.id));
               }}
             >
               {deleting ? <Spinner /> : <Trash2 className="size-4" />}

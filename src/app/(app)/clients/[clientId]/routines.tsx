@@ -6,6 +6,7 @@ import { deleteRoutine, runRoutineNow, saveRoutine } from "@/app/actions/routine
 import { useI18n } from "@/lib/i18n/client";
 import { Badge, Button, Card, EmptyState, Field, Input, Select, Spinner, Textarea, cx } from "@/components/ui";
 import type { RoutineDelivery, RoutineSchedule, RoutineSource } from "@/db/schema";
+import { ask } from "@/components/confirm-dialog";
 
 export type RoutineRow = {
   id: string;
@@ -120,7 +121,7 @@ function RoutineCard({ row, when, last, onEdit }: { row: RoutineRow; when: strin
           <Button variant="ghost" size="sm" title={r.edit} onClick={onEdit}>
             <Pencil className="size-4" />
           </Button>
-          <Button variant="ghost" size="sm" disabled={pending} title={r.delete} onClick={() => confirm(r.confirmDelete) && start(() => deleteRoutine(row.id))}>
+          <Button variant="ghost" size="sm" disabled={pending} title={r.delete} onClick={async () => await ask(r.confirmDelete) && start(() => deleteRoutine(row.id))}>
             <Trash2 className="size-4" />
           </Button>
         </div>

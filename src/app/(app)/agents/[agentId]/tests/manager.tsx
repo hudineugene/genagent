@@ -10,6 +10,7 @@ import { useI18n } from "@/lib/i18n/client";
 import { ColumnChart, StatTile } from "@/components/charts";
 import { Badge, Button, Card, EmptyState, Field, Input, Select, Spinner, Textarea, cx } from "@/components/ui";
 import { MODELS, findModel } from "@/lib/models";
+import { ask } from "@/components/confirm-dialog";
 
 type Scenario = {
   id: string;
@@ -361,8 +362,8 @@ function ScenarioRow({ s, onEdit }: { s: Scenario; onEdit: () => void }) {
         className="hover:text-danger"
         disabled={pending}
         title={t.common.delete}
-        onClick={() => {
-          if (confirm(`${t.common.confirmDelete}\n${s.name}`)) start(async () => void (await deleteScenario(s.id)));
+        onClick={async () => {
+          if (await ask(`${t.common.confirmDelete}\n${s.name}`)) start(async () => void (await deleteScenario(s.id)));
         }}
       >
         <Trash2 className="size-4" />

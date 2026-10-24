@@ -9,7 +9,7 @@ import { getT } from "@/lib/i18n/server";
 import { getAgentReview } from "@/lib/agent/review";
 import { findModel } from "@/lib/models";
 import type { AgentConfig } from "@/lib/agent/types";
-import { cx } from "@/components/ui";
+import { AgentAvatar, cx } from "@/components/ui";
 import { AgentTabs } from "./tabs";
 
 /**
@@ -59,7 +59,7 @@ export default async function AgentLayout({ children, params }: { children: Reac
         <div className="relative mb-4 flex flex-wrap items-center gap-x-6 gap-y-3 overflow-hidden rounded-2xl border border-border bg-metal px-5 pt-5 pb-4">
           <span className="absolute inset-x-0 top-0 h-1" style={{ background: row.clientColor }} />
           <div className="flex min-w-0 items-center gap-3.5">
-            <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-surface text-2xl shadow-sm ring-1 ring-border">{config.icon || "🤖"}</span>
+            <AgentAvatar icon={config.icon} color={row.clientColor} size={48} morph={agentId} />
             <div className="min-w-0">
               <div className="flex items-center gap-2.5">
                 <h1 className="truncate text-xl font-bold tracking-tight">{agent.name}</h1>

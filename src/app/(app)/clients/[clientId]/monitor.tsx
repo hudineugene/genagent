@@ -6,6 +6,7 @@ import Link from "next/link";
 import { checkMonitorNow, closeIncident, deleteMonitor, incidentToCampaign, renewMonitorKey, saveMonitor } from "@/app/actions/monitor";
 import { useI18n } from "@/lib/i18n/client";
 import { Badge, Button, Card, EmptyState, Field, Input, Select, Spinner, Textarea, cx } from "@/components/ui";
+import { ask } from "@/components/confirm-dialog";
 
 export type MonitorRow = {
   id: string;
@@ -104,7 +105,7 @@ function MonitorCard({ row, apiBase, onEdit }: { row: MonitorRow; apiBase: strin
                   <Copy className="size-3" />
                   {m.copyKey}
                 </button>
-                <button type="button" className="text-accent hover:underline" onClick={() => confirm(m.confirmRenew) && start(() => renewMonitorKey(row.id))}>
+                <button type="button" className="text-accent hover:underline" onClick={async () => await ask(m.confirmRenew) && start(() => renewMonitorKey(row.id))}>
                   {m.renewKey}
                 </button>
               </div>
@@ -121,7 +122,7 @@ function MonitorCard({ row, apiBase, onEdit }: { row: MonitorRow; apiBase: strin
         <Button variant="ghost" size="sm" onClick={onEdit}>
           <Pencil className="size-4" />
         </Button>
-        <Button variant="ghost" size="sm" disabled={pending} onClick={() => confirm(m.confirmDelete) && start(() => deleteMonitor(row.id))}>
+        <Button variant="ghost" size="sm" disabled={pending} onClick={async () => await ask(m.confirmDelete) && start(() => deleteMonitor(row.id))}>
           <Trash2 className="size-4" />
         </Button>
       </div>

@@ -7,6 +7,7 @@ import { useI18n } from "@/lib/i18n/client";
 import { cx } from "@/components/ui";
 import { contactLabel, waited } from "@/lib/contact";
 import { ContactAvatar } from "@/components/contact-avatar";
+import { RelTime } from "@/components/rel-time";
 
 export type ListItem = {
   id: string;
@@ -34,12 +35,10 @@ export const CHANNEL_ICONS = { telegram: Send, widget: Globe, instagram: Camera,
 export { contactLabel, waited, ContactAvatar };
 
 export function ConversationList({ items, selectedId }: { items: ListItem[]; selectedId?: string }) {
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
   const now = new Date();
   const today = now.toDateString();
   const yesterday = new Date(now.getTime() - 86_400_000).toDateString();
-  const time = new Intl.DateTimeFormat(locale === "uk" ? "uk-UA" : "ru-RU", { timeStyle: "short" });
-  const date = new Intl.DateTimeFormat(locale === "uk" ? "uk-UA" : "ru-RU", { day: "numeric", month: "short" });
   const group = (at: Date) => (at.toDateString() === today ? t.inbox.groupToday : at.toDateString() === yesterday ? t.inbox.groupYesterday : t.inbox.groupEarlier);
 
   return (
@@ -92,7 +91,7 @@ export function ConversationList({ items, selectedId }: { items: ListItem[]; sel
                     </span>
                   )}
                   <span className={cx("ml-auto shrink-0 text-[11px] tabular-nums", waiting ? "font-semibold text-danger" : "text-muted")}>
-                    {waiting ? `${t.inbox.waits} ${waited(at, t)}` : at.toDateString() === today ? time.format(at) : date.format(at)}
+                    {waiting ? `${t.inbox.waits} ${waited(at, t)}` : <RelTime at={at} />}
                   </span>
                 </span>
                 <span className="mt-0.5 flex items-center gap-2">

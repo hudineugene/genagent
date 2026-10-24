@@ -7,15 +7,21 @@ import { getT } from "@/lib/i18n/server";
 import { bills, currentMonth, DEFAULT_BILLING } from "@/lib/billing";
 import { Card, PageHeader, cx } from "@/components/ui";
 import { BillingEditor } from "./editor";
+import { SortTh, byKey, readSort, type SortDir } from "@/components/sort-th";
+
+type Bill = Awaited<ReturnType<typeof bills>>[number];
 
 /** Биллинг студии: по каждому клиенту за месяц — себестоимость, к оплате, маржа; условия клиента; счёт. */
-export default async function BillingPage({ searchParams }: { searchParams: Promise<{ month?: string; edit?: string }> }) {
+export default async function BillingPage({ searchParams }: { searchParams: Promise<{ month?: string; edit?: string; sort?: string; dir?: string }> }) {
   await requireAdmin();
   const { t } = await getT();
   const b = t.billing;
   const sp = await searchParams;
   const month = /^\d{4}-\d{2}$/.test(sp.month ?? "") ? sp.month! : currentMonth();
-  const list = (await bills(month)).sort((x, y) => y.total - x.total || y.aiCost - x.aiCost);
+  const { sort, dir } = readSort(sp, ["client", "ai", "channel", "own", "fee", "total", "margin"] as const, "total");
+  const pick = { client: (x: Bill) => x.client, ai: (x: Bill) => x.aiCost, channel: (x: Bill) => x.channelCost, own: (x: Bill) => x.aiOwnKey, fee: (x: Bill) => x.fee, total: (x: Bill) => x.total, margin: (x: Bill) => x.margin }[sort];
+  const list = (await bills(month)).sort(byKey(pick, dir));
+  const sortHref = (s: string, d: SortDir) => `/billing?month=${month}&sort=${s}&dir=${d}`;
   const [y, m] = month.split("-").map(Number);
   const prev = `${m === 1 ? y - 1 : y}-${String(m === 1 ? 12 : m - 1).padStart(2, "0")}`;
   const next = `${m === 12 ? y + 1 : y}-${String(m === 12 ? 1 : m + 1).padStart(2, "0")}`;
@@ -51,13 +57,13 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
         <table className="w-full min-w-[820px] text-sm">
           <thead>
             <tr className="border-b border-border text-left text-xs text-muted">
-              <th className="py-2 pr-3 font-medium">{b.client}</th>
-              <th className="py-2 pr-3 text-right font-medium">{b.aiCost}</th>
-              <th className="py-2 pr-3 text-right font-medium">{b.channelCost}</th>
-              <th className="py-2 pr-3 text-right font-medium">{b.ownKey}</th>
-              <th className="py-2 pr-3 text-right font-medium">{b.fee}</th>
-              <th className="py-2 pr-3 text-right font-medium">{b.total}</th>
-              <th className="py-2 pr-3 text-right font-medium">{b.margin}</th>
+              <SortTh label={b.client} col="client" sort={sort} dir={dir} href={sortHref} />
+              <SortTh label={b.aiCost} col="ai" sort={sort} dir={dir} href={sortHref} align="right" />
+              <SortTh label={b.channelCost} col="channel" sort={sort} dir={dir} href={sortHref} align="right" />
+              <SortTh label={b.ownKey} col="own" sort={sort} dir={dir} href={sortHref} align="right" />
+              <SortTh label={b.fee} col="fee" sort={sort} dir={dir} href={sortHref} align="right" />
+              <SortTh label={b.total} col="total" sort={sort} dir={dir} href={sortHref} align="right" />
+              <SortTh label={b.margin} col="margin" sort={sort} dir={dir} href={sortHref} align="right" />
               <th className="py-2 font-medium" />
             </tr>
           </thead>

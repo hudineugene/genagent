@@ -6,6 +6,7 @@ import { deleteForm, saveForm } from "@/app/actions/forms";
 import { useI18n } from "@/lib/i18n/client";
 import { Badge, Button, Card, EmptyState, Field, Input, Select, Textarea, buttonClass } from "@/components/ui";
 import type { FormField } from "@/db/schema";
+import { ask } from "@/components/confirm-dialog";
 
 type Kind = "form" | "quiz";
 export type FormRow = {
@@ -123,7 +124,7 @@ function DeleteButton({ id }: { id: string }) {
   const { t } = useI18n();
   const [pending, start] = useTransition();
   return (
-    <Button variant="ghost" size="sm" disabled={pending} title={t.forms.delete} onClick={() => confirm(t.forms.confirmDelete) && start(() => deleteForm(id))}>
+    <Button variant="ghost" size="sm" disabled={pending} title={t.forms.delete} onClick={async () => await ask(t.forms.confirmDelete) && start(() => deleteForm(id))}>
       <Trash2 className="size-4" />
     </Button>
   );

@@ -28,6 +28,7 @@ import { studioTz } from "@/lib/general";
 import { homeFeed, homeTrends, type FeedItem } from "@/lib/home-live";
 import { Spark } from "@/components/spark";
 import { AutoRefresh } from "@/components/auto-refresh";
+import { RelTime } from "@/components/rel-time";
 
 /** Главная «Сегодня»: кто ждёт человека, что требует решения, сводка за сутки и клиенты. */
 export default async function TodayPage() {
@@ -112,7 +113,7 @@ export default async function TodayPage() {
                       </span>
                       <span className="block truncate text-sm text-muted">{w.preview}</span>
                     </span>
-                    <span className="shrink-0 text-xs font-medium text-muted tabular-nums">{ago(w.at, t)}</span>
+                    <RelTime at={w.at} className="shrink-0 text-xs font-medium text-muted tabular-nums" />
                   </Link>
                 </li>
               ))}
@@ -249,7 +250,7 @@ function FeedRow({ f, t }: { f: FeedItem; t: Dict }) {
           {f.client}
         </span>
       </span>
-      <span className="shrink-0 text-xs text-muted">{ago(new Date(f.at), t)}</span>
+      <RelTime at={f.at} className="shrink-0 text-xs text-muted" />
     </span>
   );
   return f.conversationId ? (
@@ -353,14 +354,6 @@ function Count({ n }: { n: number }) {
   return <span className="ml-1 rounded-full bg-surface-2 px-1.5 py-px text-xs font-semibold tabular-nums">{n}</span>;
 }
 
-function ago(at: Date, t: Dict) {
-  const min = Math.floor((Date.now() - at.getTime()) / 60_000);
-  if (min < 1) return t.home.justNow;
-  if (min < 60) return `${min} ${t.home.minutes}`;
-  const h = Math.floor(min / 60);
-  if (h < 24) return `${h} ${t.home.hours}`;
-  return `${Math.floor(h / 24)} ${t.home.days}`;
-}
 
 // Внутренний инструмент: страница всегда читает свежие данные из БД.
 export const instant = false;

@@ -55,6 +55,7 @@ import type { ChannelType } from "@/db/schema";
 import { CHANNEL_ICONS, ContactAvatar, contactLabel } from "./list";
 import { InfoToggle } from "./info-panel";
 import { isSticker } from "@/lib/sticker";
+import { ask } from "@/components/confirm-dialog";
 
 // Значки для сообщений из журнала бота: что именно прислал клиент или бот
 const KIND_ICONS: Record<string, LucideIcon> = {
@@ -279,8 +280,8 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
             title={t.inbox.erasePerson}
             danger
             disabled={pending}
-            onClick={() => {
-              if (!confirm(t.inbox.erasePersonConfirm)) return;
+            onClick={async () => {
+              if (!await ask(t.inbox.erasePersonConfirm)) return;
               run(async () => {
                 const r = await erasePersonAction(data.id);
                 if (!r.error) router.replace(backHref);
@@ -294,8 +295,8 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
             title={t.inbox.delete}
             danger
             disabled={pending}
-            onClick={() => {
-              if (!confirm(t.inbox.deleteConfirm)) return;
+            onClick={async () => {
+              if (!await ask(t.inbox.deleteConfirm)) return;
               run(async () => {
                 const r = await deleteConversation(data.id);
                 if (!r.error) router.replace(backHref);

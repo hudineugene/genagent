@@ -5,6 +5,7 @@ import { BellRing, Eye, History, ListPlus, Pencil, Play, Plus, Repeat, Trash2 } 
 import { deleteReminder, previewReminder, reminderLogAction, repeatToContacts, runReminderNow, runRepeatNow, saveReminder, saveRepeat } from "@/app/actions/reminders";
 import { useI18n } from "@/lib/i18n/client";
 import { Badge, Button, Card, EmptyState, Field, Input, Select, Spinner, Textarea, cx } from "@/components/ui";
+import { ask } from "@/components/confirm-dialog";
 
 export type TableOpt = { id: string; name: string; columns: string[] };
 export type ChannelOpt = { id: string; name: string };
@@ -137,8 +138,8 @@ function ReminderCard({ row, table, last, onEdit }: { row: ReminderRow; table: s
             variant="secondary"
             size="sm"
             disabled={pending}
-            onClick={() =>
-              confirm(r.confirmRun) &&
+            onClick={async () =>
+              await ask(r.confirmRun) &&
               start(async () => {
                 const res = await runReminderNow(row.id);
                 setMsg("error" in res ? r.errors.failed : res.baseline != null ? r.baseline.replace("{n}", String(res.baseline)) : r.ran.replace("{sent}", String(res.sent)).replace("{none}", String(res.noChat.length)))
@@ -154,7 +155,7 @@ function ReminderCard({ row, table, last, onEdit }: { row: ReminderRow; table: s
           <Button variant="ghost" size="sm" title={r.edit} onClick={onEdit}>
             <Pencil className="size-4" />
           </Button>
-          <Button variant="ghost" size="sm" disabled={pending} title={r.delete} onClick={() => confirm(r.confirmDelete) && start(() => deleteReminder(row.id))}>
+          <Button variant="ghost" size="sm" disabled={pending} title={r.delete} onClick={async () => await ask(r.confirmDelete) && start(() => deleteReminder(row.id))}>
             <Trash2 className="size-4" />
           </Button>
         </div>
@@ -457,8 +458,8 @@ export function RepeatManager({ clientId, config, list, tables, channels }: { cl
               <Button
                 variant="secondary"
                 disabled={pending}
-                onClick={() =>
-                  confirm(r.confirmRun) &&
+                onClick={async () =>
+                  await ask(r.confirmRun) &&
                   start(async () => {
                     const res = await runRepeatNow(clientId);
                     setMsg({ ok: true, text: r.ran.replace("{sent}", String(res.sent)).replace("{none}", String(res.noChat.length)) });

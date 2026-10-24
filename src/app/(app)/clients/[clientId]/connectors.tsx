@@ -6,6 +6,7 @@ import { saveConnector, testConnector, type ConnectorInput } from "@/app/actions
 import { deleteTool } from "@/app/actions/tools";
 import { useI18n } from "@/lib/i18n/client";
 import { Badge, Button, Card, Field, Input, Select } from "@/components/ui";
+import { ask } from "@/components/confirm-dialog";
 
 export type ConnectorRow = {
   id: string;
@@ -99,7 +100,7 @@ function DeleteButton({ id }: { id: string }) {
   const { t } = useI18n();
   const [pending, start] = useTransition();
   return (
-    <Button size="sm" variant="ghost" className="hover:text-danger" disabled={pending} onClick={() => confirm(t.common.confirmDelete) && start(() => deleteTool(id))}>
+    <Button size="sm" variant="ghost" className="hover:text-danger" disabled={pending} onClick={async () => await ask(t.common.confirmDelete) && start(() => deleteTool(id))}>
       <Trash2 className="size-4" />
     </Button>
   );

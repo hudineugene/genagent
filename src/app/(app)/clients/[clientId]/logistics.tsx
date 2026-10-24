@@ -8,6 +8,7 @@ import { useI18n } from "@/lib/i18n/client";
 import { Badge, Button, Card, Field, Input, Spinner, Textarea, cx } from "@/components/ui";
 import type { TripStop, Vehicle } from "@/db/schema";
 import type { PlannedRoute, Stop } from "@/lib/logistics/routes";
+import { ask } from "@/components/confirm-dialog";
 
 export type LogisticsRow = { baseAddress: string; stopMinutes: number; vehicles: Vehicle[]; deliveryNote: string };
 export type TripRow = {
@@ -340,7 +341,7 @@ function TripCard({ row }: { row: TripRow }) {
             </Button>
           </>
         )}
-        <Button variant="ghost" size="sm" disabled={pending} onClick={() => confirm(g.confirmDeleteTrip) && start(() => deleteTrip(row.id))}>
+        <Button variant="ghost" size="sm" disabled={pending} onClick={async () => await ask(g.confirmDeleteTrip) && start(() => deleteTrip(row.id))}>
           <Trash2 className="size-4" />
         </Button>
       </div>

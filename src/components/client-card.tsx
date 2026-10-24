@@ -14,7 +14,7 @@ export function ClientCard({ client: c, t, trend }: { client: ClientSummary; t: 
     <div className="group relative flex h-full flex-col rounded-2xl border border-border bg-surface p-5 transition hover:border-accent/40 hover:shadow-lg hover:shadow-black/5">
       <Link href={`/clients/${c.id}`} className="absolute inset-0 rounded-2xl" aria-label={c.name} />
       <div className="flex items-start gap-3.5">
-        <ClientAvatar id={c.id} v={c.logoV} name={c.name} color={c.color} size={44} />
+        <ClientAvatar id={c.id} v={c.logoV} name={c.name} color={c.color} size={44} morph />
         <div className="min-w-0 flex-1">
           <div className="truncate font-semibold">{c.name}</div>
           <div className="truncate text-sm text-muted">{c.industry || "—"}</div>

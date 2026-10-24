@@ -13,6 +13,7 @@ import {
 } from "@/app/actions/team";
 import { useI18n } from "@/lib/i18n/client";
 import { Badge, Button, Card, Field, Input, Select, Spinner, cx } from "@/components/ui";
+import { ask } from "@/components/confirm-dialog";
 
 type Role = "admin" | "member";
 type Member = { id: string; name: string; email: string; role: Role | "client"; createdAt: Date; clientIds: string[] | null; totp: boolean };
@@ -124,8 +125,8 @@ export function TeamManager({ members, meId, clients }: { members: Member[]; meI
                   title={t.team.resetPassword}
                   disabled={busy}
                   className={cx(isMe && "invisible")}
-                  onClick={() => {
-                    if (!confirm(t.team.confirmReset)) return;
+                  onClick={async () => {
+                    if (!await ask(t.team.confirmReset)) return;
                     act(m.id, () => resetMemberPassword(m.id), (r) =>
                       setCreds({ title: t.team.passwordReset, email: r.email!, password: r.password! }),
                     );
@@ -134,7 +135,7 @@ export function TeamManager({ members, meId, clients }: { members: Member[]; meI
                   <KeyRound className="size-4" />
                 </Button>
                 {m.totp && !isMe && (
-                  <Button variant="ghost" size="sm" title={t.team.resetTwoFactor} disabled={busy} onClick={() => confirm(t.team.resetTwoFactorConfirm) && act(m.id, () => resetMemberTwoFactor(m.id))}>
+                  <Button variant="ghost" size="sm" title={t.team.resetTwoFactor} disabled={busy} onClick={async () => await ask(t.team.resetTwoFactorConfirm) && act(m.id, () => resetMemberTwoFactor(m.id))}>
                     <ShieldOff className="size-4" />
                   </Button>
                 )}
@@ -144,8 +145,8 @@ export function TeamManager({ members, meId, clients }: { members: Member[]; meI
                   title={t.common.delete}
                   disabled={busy}
                   className={cx("hover:text-danger", isMe && "invisible")}
-                  onClick={() => {
-                    if (confirm(`${t.common.confirmDelete}\n${m.name} (${m.email})`)) act(m.id, () => deleteMember(m.id));
+                  onClick={async () => {
+                    if (await ask(`${t.common.confirmDelete}\n${m.name} (${m.email})`)) act(m.id, () => deleteMember(m.id));
                   }}
                 >
                   <Trash2 className="size-4" />

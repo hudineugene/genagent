@@ -11,6 +11,7 @@ import {
 } from "@/app/actions/integrations";
 import { useI18n } from "@/lib/i18n/client";
 import { Button, Card, Field, Input, Spinner } from "@/components/ui";
+import { ask } from "@/components/confirm-dialog";
 
 export type NotifyView = {
   botUsername: string;
@@ -45,8 +46,8 @@ export function NotifyCard({ notify }: { notify: NotifyView }) {
             className="hover:text-danger"
             title={s.googleRemove}
             disabled={busy}
-            onClick={() => {
-              if (confirm(s.notifyRemoveConfirm)) start(async () => void (await removeNotifyBot()));
+            onClick={async () => {
+              if (await ask(s.notifyRemoveConfirm)) start(async () => void (await removeNotifyBot()));
             }}
           >
             <Trash2 className="size-4" />
@@ -78,8 +79,8 @@ export function NotifyCard({ notify }: { notify: NotifyView }) {
                 size="sm"
                 disabled={busy}
                 title={s.notifyNewLink}
-                onClick={() => {
-                  if (confirm(s.notifyNewLinkConfirm)) start(async () => void (await regenerateNotifyLink()));
+                onClick={async () => {
+                  if (await ask(s.notifyNewLinkConfirm)) start(async () => void (await regenerateNotifyLink()));
                 }}
               >
                 <RefreshCw className="size-4" />

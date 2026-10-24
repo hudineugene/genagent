@@ -6,6 +6,7 @@ import { deleteCourse, deleteLesson, generateQuizAction, saveCourse, saveLesson 
 import { useI18n } from "@/lib/i18n/client";
 import { Badge, Button, Card, EmptyState, Field, Input, Select, Spinner, Textarea } from "@/components/ui";
 import type { QuizQuestion } from "@/db/schema";
+import { ask } from "@/components/confirm-dialog";
 
 type Level = "beginner" | "intermediate" | "advanced";
 export type LessonRow = { id: string; position: number; title: string; body: string; videoUrl: string; quiz: QuizQuestion[]; passScore: number; points: number };
@@ -217,7 +218,7 @@ function CourseCard({ clientId, row, onEdit }: { clientId: string; row: CourseRo
         <Button variant="ghost" size="sm" onClick={onEdit}>
           <Pencil className="size-4" />
         </Button>
-        <Button variant="ghost" size="sm" disabled={pending} onClick={() => confirm(l.confirmDeleteCourse) && start(() => deleteCourse(row.id))}>
+        <Button variant="ghost" size="sm" disabled={pending} onClick={async () => await ask(l.confirmDeleteCourse) && start(() => deleteCourse(row.id))}>
           <Trash2 className="size-4" />
         </Button>
       </div>
@@ -237,7 +238,7 @@ function CourseCard({ clientId, row, onEdit }: { clientId: string; row: CourseRo
               <Button variant="ghost" size="sm" onClick={() => setEditing(x.id)}>
                 <Pencil className="size-4" />
               </Button>
-              <Button variant="ghost" size="sm" disabled={pending} onClick={() => confirm(l.confirmDeleteLesson) && start(() => deleteLesson(x.id))}>
+              <Button variant="ghost" size="sm" disabled={pending} onClick={async () => await ask(l.confirmDeleteLesson) && start(() => deleteLesson(x.id))}>
                 <Trash2 className="size-4" />
               </Button>
             </div>

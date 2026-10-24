@@ -5,6 +5,7 @@ import { Pencil, Plus, Route, Trash2 } from "lucide-react";
 import { deleteRoutingRule, saveRoutingRule } from "@/app/actions/routing";
 import { useI18n } from "@/lib/i18n/client";
 import { Badge, Button, Card, EmptyState, Field, Input, Textarea } from "@/components/ui";
+import { ask } from "@/components/confirm-dialog";
 
 export type RuleRow = { id: string; name: string; description: string; chatIds: string[] };
 export type Person = { chatId: string; name: string; kind: "studio" | "owner" };
@@ -59,7 +60,7 @@ function DeleteRule({ id }: { id: string }) {
   const { t } = useI18n();
   const [pending, start] = useTransition();
   return (
-    <Button size="sm" variant="ghost" disabled={pending} onClick={() => confirm(t.routing.confirmDelete) && start(() => deleteRoutingRule(id))}>
+    <Button size="sm" variant="ghost" disabled={pending} onClick={async () => await ask(t.routing.confirmDelete) && start(() => deleteRoutingRule(id))}>
       <Trash2 className="size-4" />
     </Button>
   );

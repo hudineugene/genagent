@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { and, asc, eq, gte, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, gte, lt, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { agents, bookings, clients, conversations, messages, usageLog } from "@/db/schema";
 import { getT } from "@/lib/i18n/server";
 import { monthStart } from "@/lib/usage";
+import { SortTh, byKey, readSort, type SortDir } from "@/components/sort-th";
 import { findModel } from "@/lib/models";
 import { Card, PageHeader, cx } from "@/components/ui";
 import { AnalyticsCharts } from "./charts";
@@ -16,7 +17,7 @@ import { jsonText } from "@/db/dialect";
 
 const PERIODS = [7, 30, 90] as const;
 
-export default async function AnalyticsPage({ searchParams }: { searchParams: Promise<{ days?: string; client?: string }> }) {
+export default async function AnalyticsPage({ searchParams }: { searchParams: Promise<{ days?: string; client?: string; sort?: string; dir?: string }> }) {
   const sp = await searchParams;
   const { t, locale } = await getT();
   const days = PERIODS.find((d) => String(d) === sp.days) ?? 30;
@@ -109,6 +110,31 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
     ]);
   const bookingCount = Number(bookingTotals?.n ?? 0);
 
+  // Прошлый период той же длины — для сравнения на плитках («+24% к прошлым 30 дням»)
+  const prevFrom = new Date(from);
+  prevFrom.setDate(prevFrom.getDate() - days);
+  const [[prevConv], [prevUsage], [prevMsg]] = await Promise.all([
+    db
+      .select({ n: sql<number>`count(*)` })
+      .from(conversations)
+      .where(and(gte(conversations.createdAt, prevFrom), lt(conversations.createdAt, from), eq(conversations.isTest, false), clientId ? eq(conversations.clientId, clientId) : undefined)),
+    db
+      .select({ cost: sql<number>`coalesce(sum(${usageLog.cost}), 0)` })
+      .from(usageLog)
+      .where(and(gte(usageLog.createdAt, prevFrom), lt(usageLog.createdAt, from), clientId ? eq(usageLog.clientId, clientId) : undefined)),
+    db
+      .select({
+        handoffConvs: sql<number>`count(distinct case when ${messages.role} = 'system' and ${messages.text} = 'handoff' then ${messages.conversationId} end)`,
+        activeConvs: sql<number>`count(distinct case when ${messages.role} = 'user' then ${messages.conversationId} end)`,
+      })
+      .from(messages)
+      .innerJoin(conversations, eq(conversations.id, messages.conversationId))
+      .where(and(gte(messages.createdAt, prevFrom), lt(messages.createdAt, from), eq(conversations.isTest, false), clientId ? eq(conversations.clientId, clientId) : undefined)),
+  ]);
+  /** Изменение к прошлому периоду, %; нет данных за прошлый период — без сравнения. */
+  const growth = (now: number, before: number) => (before > 0 ? Math.round(((now - before) / before) * 100) : null);
+  const vs = t.analytics.vsPrev.replace("{n}", String(days));
+
   // Ряды по дням без пропусков
   const fmtDay = new Intl.DateTimeFormat(locale === "uk" ? "uk-UA" : "ru-RU", { day: "numeric", month: "short" });
   const keys: { key: string; label: string }[] = [];
@@ -131,6 +157,8 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
   const totalCost = Number(usageTotals?.cost ?? 0);
   const money = (v: number) => (v >= 100 ? `$${v.toFixed(0)}` : v >= 1 ? `$${v.toFixed(2)}` : `$${v.toFixed(3)}`);
 
+  const agentSort = readSort(sp, ["agent", "conv", "replies", "handoffs", "resolved", "spend", "month"] as const, "spend");
+  const sortHref = (s: string, d: SortDir) => qs({ sort: s, dir: d });
   const qs = (patch: Record<string, string | undefined>) => {
     const p = new URLSearchParams();
     const next = { days: String(days), client: clientId ?? undefined, ...patch };
@@ -182,14 +210,19 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
 
       <AnalyticsCharts
         tiles={[
-          { label: t.analytics.conversations, value: totalConvs.toLocaleString() },
+          { label: t.analytics.conversations, value: totalConvs.toLocaleString(), change: { pct: growth(totalConvs, Number(prevConv?.n ?? 0)), better: "up", label: vs } },
           {
             label: t.analytics.handoffRate,
             value: activeConvs ? `${Math.round((handoffConvs / activeConvs) * 100)}%` : "—",
             hint: t.analytics.handoffsIn.replace("{n}", String(handoffs)).replace("{c}", String(handoffConvs)),
+            // Доля передач — разница в процентных пунктах
+            change:
+              activeConvs && Number(prevMsg?.activeConvs ?? 0)
+                ? { pct: Math.round((handoffConvs / activeConvs) * 100 - (Number(prevMsg?.handoffConvs ?? 0) / Number(prevMsg?.activeConvs)) * 100), better: "down", label: vs, unit: t.analytics.pp }
+                : undefined,
           },
           { label: t.analytics.avgResponse, value: p50 !== null ? `${p50.toFixed(1)} ${t.analytics.sec}` : "—", hint: p95 !== null ? `p50 · p95 ${p95.toFixed(1)} ${t.analytics.sec}` : undefined },
-          { label: t.analytics.spend, value: money(totalCost), hint: totalConvs ? `${money(totalCost / totalConvs)} ${t.analytics.perConversation}` : undefined },
+          { label: t.analytics.spend, value: money(totalCost), hint: totalConvs ? `${money(totalCost / totalConvs)} ${t.analytics.perConversation}` : undefined, change: { pct: growth(totalCost, Number(prevUsage?.cost ?? 0)), better: "down", label: vs } },
         ]}
         extra={[
           `${t.analytics.agentReplies}: ${Number(msgTotals?.agent ?? 0).toLocaleString()}`,
@@ -271,18 +304,32 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
           <table className="w-full min-w-[560px] text-sm">
             <thead>
               <tr className="border-b border-border text-left text-xs text-muted">
-                <th className="py-2 pr-3 font-medium">{t.analytics.agent}</th>
-                <th className="py-2 pr-3 text-right font-medium">{t.analytics.conversations}</th>
-                <th className="py-2 pr-3 text-right font-medium">{t.analytics.agentReplies}</th>
-                <th className="py-2 pr-3 text-right font-medium">{t.analytics.handoffs}</th>
-                <th className="py-2 pr-3 text-right font-medium">{R.short}</th>
-                <th className="py-2 pr-3 text-right font-medium">{t.analytics.spend}</th>
-                <th className="py-2 text-right font-medium">{t.analytics.monthBudget}</th>
+                <SortTh label={t.analytics.agent} col="agent" {...agentSort} href={sortHref} />
+                <SortTh label={t.analytics.conversations} col="conv" {...agentSort} href={sortHref} align="right" />
+                <SortTh label={t.analytics.agentReplies} col="replies" {...agentSort} href={sortHref} align="right" />
+                <SortTh label={t.analytics.handoffs} col="handoffs" {...agentSort} href={sortHref} align="right" />
+                <SortTh label={R.short} col="resolved" {...agentSort} href={sortHref} align="right" />
+                <SortTh label={t.analytics.spend} col="spend" {...agentSort} href={sortHref} align="right" />
+                <SortTh label={t.analytics.monthBudget} col="month" {...agentSort} href={sortHref} align="right" className="pr-0" />
               </tr>
             </thead>
             <tbody>
               {agentRows
-                .sort((a, b) => (usageByAgent.get(b.id) ?? 0) - (usageByAgent.get(a.id) ?? 0) || b.conversations - a.conversations)
+                .sort(
+                  byKey(
+                    (a) =>
+                      ({
+                        agent: a.name,
+                        conv: Number(a.conversations),
+                        replies: Number(a.replies),
+                        handoffs: Number(a.handoffs),
+                        resolved: resolution.byAgent.get(a.id)?.rate ?? -1,
+                        spend: usageByAgent.get(a.id) ?? 0,
+                        month: monthByAgent.get(a.id) ?? 0,
+                      })[agentSort.sort],
+                    agentSort.dir,
+                  ),
+                )
                 .map((a) => {
                   const cfg = a.config as { icon?: string; model?: string; monthlyBudgetUsd?: number | null };
                   const month = monthByAgent.get(a.id) ?? 0;

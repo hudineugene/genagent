@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { ViewTransition } from "react";
 import { InfoHint } from "./hint";
 import type {
   ButtonHTMLAttributes,
@@ -144,12 +145,21 @@ export function Spinner({ className }: { className?: string }) {
 }
 
 /** Аватар клиента: с id — логотип с его сайта (или буква на цвете клиента, если значка нет), без id — буква. */
-export function ClientAvatar({ name, color, size = 40, id, v }: { name: string; color: string; size?: number; id?: string; v?: number }) {
-  if (id)
-    return (
+export function ClientAvatar({ name, color, size = 40, id, v, morph }: { name: string; color: string; size?: number; id?: string; v?: number; morph?: boolean }) {
+  if (id) {
+    const img = (
       // eslint-disable-next-line @next/next/no-img-element -- значок сайта клиента, отдаёт наш маршрут
       <img src={`/api/client-logo/${id}${v ? `?v=${v}` : ""}`} alt="" width={size} height={size} className="shrink-0 rounded-xl bg-white object-contain ring-1 ring-border" style={{ width: size, height: size }} />
     );
+    // morph — логотип «перелетает» между карточкой в списке и шапкой клиента (одна пара на страницу)
+    return morph ? (
+      <ViewTransition name={`client-${id}`} share="morph" default="none">
+        {img}
+      </ViewTransition>
+    ) : (
+      img
+    );
+  }
   return (
     <span
       className="inline-flex shrink-0 items-center justify-center rounded-xl font-semibold text-white"
@@ -264,5 +274,35 @@ export function SwitchButton({ checked, onChange, disabled, label }: { checked: 
     >
       <span className={cx("absolute top-0.5 size-4 rounded-full bg-white shadow transition-all", checked ? "left-[18px]" : "left-0.5")} />
     </button>
+  );
+}
+
+/**
+ * Аватар агента: его значок (эмодзи из настроек) на плитке в цвете клиента — одинаково в меню, шапке и списках,
+ * чтобы агентов разных клиентов было легко различать.
+ */
+export function AgentAvatar({ icon, color, size = 36, className, morph }: { icon?: string; color?: string; size?: number; className?: string; morph?: string }) {
+  const c = color && /^#[0-9a-f]{3,8}$/i.test(color) ? color : "var(--accent)";
+  const tile = (
+    <span
+      className={cx("grid shrink-0 place-items-center leading-none", size >= 40 ? "rounded-2xl" : "rounded-lg", className)}
+      style={{
+        width: size,
+        height: size,
+        fontSize: Math.round(size * 0.5),
+        background: `color-mix(in srgb, ${c} 16%, var(--surface))`,
+        boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${c} 35%, transparent)`,
+      }}
+    >
+      {icon || "🤖"}
+    </span>
+  );
+  // morph — id агента: значок «перелетает» из карточки агента в его шапку
+  return morph ? (
+    <ViewTransition name={`agent-${morph}`} share="morph" default="none">
+      {tile}
+    </ViewTransition>
+  ) : (
+    tile
   );
 }

@@ -7,6 +7,7 @@ import { deleteMeeting, emailMeeting, reanalyzeMeeting, sendMeeting } from "@/ap
 import { useI18n } from "@/lib/i18n/client";
 import { Badge, Button, Card, EmptyState, Field, Input, Select, Spinner, Textarea } from "@/components/ui";
 import type { MeetingTask } from "@/db/schema";
+import { ask } from "@/components/confirm-dialog";
 
 type Kind = "protocol" | "interview" | "sales" | "custom";
 export type MeetingRow = {
@@ -248,7 +249,7 @@ function MeetingCard({ row, when, mailChannels }: { row: MeetingRow; when: strin
               <Send className="size-4" />
             </Button>
           )}
-          <Button variant="ghost" size="sm" disabled={pending} title={m.delete} onClick={() => confirm(m.confirmDelete) && start(() => deleteMeeting(row.id))}>
+          <Button variant="ghost" size="sm" disabled={pending} title={m.delete} onClick={async () => await ask(m.confirmDelete) && start(() => deleteMeeting(row.id))}>
             <Trash2 className="size-4" />
           </Button>
         </div>
