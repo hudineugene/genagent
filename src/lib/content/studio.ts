@@ -2,11 +2,15 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { and, eq, lte } from "drizzle-orm";
 import { db } from "@/db";
-import { channels, clients, contentItems, type ContentItem, type TelegramConfig } from "@/db/schema";
+import { channels, clients, contentItems, type ContentItem, type TelegramConfig, type ThreadsConfig } from "@/db/schema";
 import { loadKnowledge } from "@/lib/kb/store";
 import { generateJson } from "@/lib/llm/anthropic";
 import { logUsage } from "@/lib/usage";
-import { callTelegram } from "@/lib/channels/telegram-api";
+import { callTelegram, sendPhoto } from "@/lib/channels/telegram-api";
+import { publishPost } from "@/lib/channels/meta/threads";
+import { toPlainText } from "@/lib/conversations";
+import { publicUrl } from "@/lib/settings";
+import { readContentImage } from "./images";
 import { toTelegramHtml } from "@/lib/routines/engine";
 
 /**
@@ -88,6 +92,15 @@ export async function generateContent(clientId: string, input: GenerateInput) {
 }
 
 /** Опубликовать в Telegram-канал от имени бота клиента. Бот должен быть администратором канала. */
+/** Telegram: подпись к фото — до 1024 знаков, текстом — до 4096; Threads — до 500. */
+const CAPTION_LIMIT = 1024;
+const THREADS_LIMIT = 500;
+
+/**
+ * Опубликовать: в Telegram-канал от имени бота клиента (бот — администратор канала) или в Threads от имени
+ * подключённого аккаунта. С картинкой: в Telegram — фото с подписью (длинный текст — следом отдельным сообщением),
+ * в Threads — по публичной ссылке /m/<имя>.
+ */
 export async function publishItem(id: string): Promise<{ ok: boolean; url?: string; error?: string }> {
   const [item] = await db.select().from(contentItems).where(eq(contentItems.id, id));
   if (!item) return { ok: false, error: "not_found" };
@@ -95,21 +108,41 @@ export async function publishItem(id: string): Promise<{ ok: boolean; url?: stri
     await db.update(contentItems).set({ status: "failed", error: error.slice(0, 500), updatedAt: new Date() }).where(eq(contentItems.id, id));
     return { ok: false, error };
   };
-  if (!item.channelId || !item.target.trim()) return fail("no_target");
+  if (!item.channelId) return fail("no_target");
   const [ch] = await db.select().from(channels).where(and(eq(channels.id, item.channelId), eq(channels.clientId, item.clientId)));
-  if (!ch || ch.type !== "telegram") return fail("no_target");
-  const html = toTelegramHtml(item.text);
-  if (html.length > 4096) return fail("too_long");
-  try {
-    const r = await callTelegram<{ message_id: number; chat: { username?: string } }>((ch.config as TelegramConfig).token, "sendMessage", {
-      chat_id: item.target.trim(),
-      text: html,
-      parse_mode: "HTML",
-      link_preview_options: { is_disabled: true },
-    });
-    const url = r.chat.username ? `https://t.me/${r.chat.username}/${r.message_id}` : "";
+  if (!ch || (ch.type !== "telegram" && ch.type !== "threads")) return fail("no_target");
+  const done = async (url: string) => {
     await db.update(contentItems).set({ status: "published", publishedAt: new Date(), url, error: null, updatedAt: new Date() }).where(eq(contentItems.id, id));
     return { ok: true, url };
+  };
+  try {
+    if (ch.type === "threads") {
+      const text = toPlainText(item.text);
+      if (text.length > THREADS_LIMIT) return fail("too_long_threads");
+      let imageUrl: string | undefined;
+      if (item.image) {
+        const base = publicUrl();
+        if (!base) return fail("no_public_url");
+        imageUrl = `${base}/m/${item.image}`;
+      }
+      const r = await publishPost((ch.config as ThreadsConfig).token, text, imageUrl);
+      return done(r.permalink);
+    }
+    if (!item.target.trim()) return fail("no_target");
+    const token = (ch.config as TelegramConfig).token;
+    const html = toTelegramHtml(item.text);
+    if (html.length > 4096) return fail("too_long");
+    const img = item.image ? readContentImage(item.image) : null;
+    if (item.image && !img) return fail("image_missing");
+    let r: { message_id: number; chat: { username?: string } };
+    if (img) {
+      const fits = html.length <= CAPTION_LIMIT;
+      r = await sendPhoto(token, item.target.trim(), { ...img, name: item.image }, fits ? html : undefined);
+      if (!fits) await callTelegram(token, "sendMessage", { chat_id: item.target.trim(), text: html, parse_mode: "HTML", link_preview_options: { is_disabled: true } });
+    } else {
+      r = await callTelegram(token, "sendMessage", { chat_id: item.target.trim(), text: html, parse_mode: "HTML", link_preview_options: { is_disabled: true } });
+    }
+    return done(r.chat.username ? `https://t.me/${r.chat.username}/${r.message_id}` : "");
   } catch (e) {
     return fail(e instanceof Error ? e.message : String(e));
   }

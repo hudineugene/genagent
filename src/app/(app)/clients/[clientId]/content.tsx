@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { CalendarClock, Copy, ExternalLink, Pencil, PenLine, Send, Sparkles, Trash2 } from "lucide-react";
-import { deleteContentItem, generateContentAction, saveContentItem, scheduleContent, unscheduleContent } from "@/app/actions/content";
+import { useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { CalendarClock, Copy, ExternalLink, ImageIcon, ImagePlus, Pencil, PenLine, Send, Sparkles, Trash2, Upload } from "lucide-react";
+import { deleteContentItem, generateContentAction, generateImageAction, removeImageAction, saveContentItem, scheduleContent, unscheduleContent } from "@/app/actions/content";
 import { useI18n } from "@/lib/i18n/client";
 import { Badge, Button, Card, EmptyState, Field, Input, Select, Spinner, Textarea } from "@/components/ui";
 import { CONTENT_KINDS, CONTENT_PLATFORMS } from "@/lib/content/kinds";
@@ -17,6 +18,8 @@ export type ContentRow = {
   brief: string;
   title: string;
   text: string;
+  image: string;
+  imagePrompt: string;
   status: "draft" | "scheduled" | "published" | "failed";
   channelId: string | null;
   target: string;
@@ -26,9 +29,9 @@ export type ContentRow = {
   error: string | null;
   at: number;
 };
-export type ContentBot = { id: string; name: string };
+export type ContentBot = { id: string; name: string; type: "telegram" | "threads" };
 
-export function ContentStudio({ clientId, rows, bots }: { clientId: string; rows: ContentRow[]; bots: ContentBot[] }) {
+export function ContentStudio({ clientId, rows, bots, openai }: { clientId: string; rows: ContentRow[]; bots: ContentBot[]; openai: boolean }) {
   const { t, locale } = useI18n();
   const c = t.content;
   const fmt = new Intl.DateTimeFormat(locale === "uk" ? "uk-UA" : "ru-RU", { dateStyle: "short", timeStyle: "short" });
@@ -44,7 +47,7 @@ export function ContentStudio({ clientId, rows, bots }: { clientId: string; rows
             {fmt.format(items[0].at)} · {c.kinds[items[0].kind]} · {c.platforms[items[0].platform]} · «{items[0].brief.slice(0, 140)}»
           </div>
           {items.map((r, i) => (
-            <ItemCard key={r.id} clientId={clientId} row={r} bots={bots} label={items.length > 1 ? `${c.variant} ${String.fromCharCode(65 + i)}` : ""} fmt={fmt} />
+            <ItemCard key={r.id} clientId={clientId} row={r} bots={bots} openai={openai} label={items.length > 1 ? `${c.variant} ${String.fromCharCode(65 + i)}` : ""} fmt={fmt} />
           ))}
         </section>
       ))}
@@ -135,7 +138,9 @@ const localInput = (ms: number) => {
   return d.toISOString().slice(0, 16);
 };
 
-function ItemCard({ clientId, row, bots, label, fmt }: { clientId: string; row: ContentRow; bots: ContentBot[]; label: string; fmt: Intl.DateTimeFormat }) {
+function ItemCard({ clientId, row, bots: allBots, openai, label, fmt }: { clientId: string; row: ContentRow; bots: ContentBot[]; openai: boolean; label: string; fmt: Intl.DateTimeFormat }) {
+  // Публикуем туда, для чего текст: в Telegram — ботом в канал, в Threads — от имени аккаунта
+  const bots = allBots.filter((b) => b.type === (row.platform === "threads" ? "threads" : "telegram"));
   const { t } = useI18n();
   const c = t.content;
   const [editing, setEditing] = useState(false);
@@ -144,7 +149,9 @@ function ItemCard({ clientId, row, bots, label, fmt }: { clientId: string; row: 
   const [msg, setMsg] = useState<{ error?: boolean; text: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const [pending, start] = useTransition();
-  const canPublish = row.platform === "telegram" && bots.length > 0;
+  const publishable = row.platform === "telegram" || row.platform === "threads";
+  const canPublish = publishable && bots.length > 0;
+  const needsTarget = bots.find((b) => b.id === draft.channelId)?.type === "telegram";
   const save = (then?: () => Promise<void>) =>
     start(async () => {
       const r = await saveContentItem(clientId, row.id, draft);
@@ -209,10 +216,11 @@ function ItemCard({ clientId, row, bots, label, fmt }: { clientId: string; row: 
       ) : (
         <p className="mt-3 whitespace-pre-wrap text-sm">{row.text}</p>
       )}
-      {row.platform === "telegram" && row.status !== "published" && (
+      {row.kind !== "seo" && <ImageBlock clientId={clientId} row={row} openai={openai} />}
+      {publishable && row.status !== "published" && (
         <div className="mt-4 space-y-2 border-t border-border pt-3">
           {!canPublish ? (
-            <p className="text-xs text-muted">{c.noBots}</p>
+            <p className="text-xs text-muted">{row.platform === "threads" ? c.noThreads : c.noBots}</p>
           ) : (
             <>
               <div className="flex flex-wrap items-end gap-2">
@@ -225,13 +233,15 @@ function ItemCard({ clientId, row, bots, label, fmt }: { clientId: string; row: 
                     ))}
                   </Select>
                 </Field>
-                <Field label={c.target}>
-                  <Input className="w-52 font-mono text-[13px]" value={draft.target} maxLength={200} placeholder="@my_channel" onChange={(e) => setDraft({ ...draft, target: e.target.value })} />
-                </Field>
+                {needsTarget && (
+                  <Field label={c.target}>
+                    <Input className="w-52 font-mono text-[13px]" value={draft.target} maxLength={200} placeholder="@my_channel" onChange={(e) => setDraft({ ...draft, target: e.target.value })} />
+                  </Field>
+                )}
               </div>
-              <p className="text-xs text-muted">{c.targetHint}</p>
+              {needsTarget ? <p className="text-xs text-muted">{c.targetHint}</p> : <p className="text-xs text-muted">{c.threadsHint}</p>}
               <div className="flex flex-wrap items-center gap-2">
-                <Button size="sm" disabled={pending || !draft.target.trim()} onClick={() => confirm(c.confirmPublish) && publish(null)}>
+                <Button size="sm" disabled={pending || (needsTarget && !draft.target.trim())} onClick={() => confirm(c.confirmPublish) && publish(null)}>
                   {pending ? <Spinner /> : <Send className="size-4" />}
                   {c.publishNow}
                 </Button>
@@ -242,7 +252,7 @@ function ItemCard({ clientId, row, bots, label, fmt }: { clientId: string; row: 
                 ) : (
                   <>
                     <Input type="datetime-local" className="w-56" value={when} onChange={(e) => setWhen(e.target.value)} />
-                    <Button size="sm" variant="secondary" disabled={pending || !draft.target.trim() || !when} onClick={() => publish(new Date(when).getTime())}>
+                    <Button size="sm" variant="secondary" disabled={pending || (needsTarget && !draft.target.trim()) || !when} onClick={() => publish(new Date(when).getTime())}>
                       <CalendarClock className="size-4" />
                       {c.schedule}
                     </Button>
@@ -255,5 +265,86 @@ function ItemCard({ clientId, row, bots, label, fmt }: { clientId: string; row: 
       )}
       {msg && <p className={msg.error ? "mt-2 text-sm text-danger" : "mt-2 text-sm text-success"}>{msg.text}</p>}
     </Card>
+  );
+}
+
+/** Картинка к посту: своя или сгенерированная; меняется и убирается до публикации. */
+function ImageBlock({ clientId, row, openai }: { clientId: string; row: ContentRow; openai: boolean }) {
+  const { t } = useI18n();
+  const c = t.content;
+  const router = useRouter();
+  const file = useRef<HTMLInputElement>(null);
+  const [open, setOpen] = useState(false);
+  const [prompt, setPrompt] = useState(row.imagePrompt);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  const locked = row.status === "published";
+  const generate = () =>
+    start(async () => {
+      setError(null);
+      const r = await generateImageAction(clientId, row.id, prompt);
+      if (r.error) setError((c.errors as Record<string, string>)[r.error] ?? r.error);
+      else setOpen(false);
+    });
+  const upload = (f: File) =>
+    start(async () => {
+      setError(null);
+      const body = new FormData();
+      body.set("file", f);
+      const res = await fetch(`/api/content/${row.id}/image`, { method: "POST", body });
+      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok || json.error) setError((c.errors as Record<string, string>)[json.error ?? ""] ?? c.errors.failed);
+      else router.refresh();
+    });
+  return (
+    <div className="mt-3 space-y-2">
+      {row.image ? (
+        // eslint-disable-next-line @next/next/no-img-element -- своя картинка из media, без оптимизатора
+        <img src={`/m/${row.image}`} alt="" className="max-h-72 rounded-lg border border-border object-contain" />
+      ) : null}
+      {!locked && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="secondary" disabled={pending} onClick={() => setOpen(!open)} title={openai ? undefined : c.noOpenaiImage}>
+            {pending ? <Spinner /> : row.image ? <Sparkles className="size-4" /> : <ImagePlus className="size-4" />}
+            {row.image ? c.regenerateImage : c.generateImage}
+          </Button>
+          <Button size="sm" variant="ghost" disabled={pending} onClick={() => file.current?.click()}>
+            <Upload className="size-4" />
+            {c.uploadImage}
+          </Button>
+          {row.image && (
+            <Button size="sm" variant="ghost" disabled={pending} onClick={() => start(() => removeImageAction(row.id))}>
+              <Trash2 className="size-4" />
+              {c.removeImage}
+            </Button>
+          )}
+          <input
+            ref={file}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) upload(f);
+              e.target.value = "";
+            }}
+          />
+        </div>
+      )}
+      {open && !locked && (
+        <div className="space-y-2 rounded-lg bg-surface-2/60 p-3">
+          <div className="flex items-center gap-2 text-xs text-muted">
+            <ImageIcon className="size-3.5" />
+            {openai ? c.imageHint : c.noOpenaiImage}
+          </div>
+          <Textarea rows={2} value={prompt} maxLength={4000} placeholder={c.imagePromptPlaceholder} onChange={(e) => setPrompt(e.target.value)} />
+          <Button size="sm" disabled={pending || !openai} onClick={generate}>
+            {pending ? <Spinner /> : <Sparkles className="size-4" />}
+            {pending ? c.generatingImage : c.generate}
+          </Button>
+        </div>
+      )}
+      {error && <p className="text-sm text-danger">{error}</p>}
+    </div>
   );
 }

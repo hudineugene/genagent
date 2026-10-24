@@ -106,3 +106,26 @@ export async function publishReply(token: string, replyToId: string, text: strin
   }
   throw lastError;
 }
+
+/**
+ * Новый пост от имени аккаунта: текст (до 500 знаков) и, если есть, картинка по публичной ссылке.
+ * Картинку Threads сначала обрабатывает — ждём статус FINISHED, затем публикуем. Возвращает ссылку на пост.
+ */
+export async function publishPost(token: string, text: string, imageUrl?: string): Promise<{ id: string; permalink: string }> {
+  const container = await metaFetch<{ id: string }>(`${GRAPH()}/${V}/me/threads`, {
+    method: "POST",
+    token,
+    body: new URLSearchParams(imageUrl ? { media_type: "IMAGE", image_url: imageUrl, text } : { media_type: "TEXT", text }),
+  });
+  if (imageUrl) {
+    for (const wait of [1000, 2000, 3000, 5000, 8000, 10000]) {
+      await new Promise((r) => setTimeout(r, Number(process.env.THREADS_WAIT_SCALE ?? 1) * wait));
+      const st = await metaFetch<{ status?: string; error_message?: string }>(`${GRAPH()}/${V}/${container.id}?fields=status,error_message`, { token });
+      if (st.status === "FINISHED") break;
+      if (st.status === "ERROR" || st.status === "EXPIRED") throw new Error(st.error_message || "Threads не принял картинку");
+    }
+  }
+  const r = await metaFetch<{ id: string }>(`${GRAPH()}/${V}/me/threads_publish`, { method: "POST", token, body: new URLSearchParams({ creation_id: container.id }) });
+  const info = await metaFetch<{ permalink?: string }>(`${GRAPH()}/${V}/${r.id}?fields=permalink`, { token }).catch(() => ({ permalink: "" }));
+  return { id: r.id, permalink: info.permalink ?? "" };
+}

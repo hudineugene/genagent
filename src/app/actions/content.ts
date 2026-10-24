@@ -4,7 +4,8 @@ import { refresh } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { channels, contentItems } from "@/db/schema";
+import { channels, clients, contentItems } from "@/db/schema";
+import { defaultImagePrompt, generateContentImage, removeContentImage } from "@/lib/content/images";
 import { CONTENT_KINDS, CONTENT_PLATFORMS } from "@/lib/content/kinds";
 import { requireUser } from "@/lib/auth";
 import { generateContent, publishItem } from "@/lib/content/studio";
@@ -49,7 +50,7 @@ export async function saveContentItem(clientId: string, id: string, input: z.inp
   const d = parsed.data;
   if (d.channelId) {
     const [ch] = await db.select({ type: channels.type }).from(channels).where(and(eq(channels.id, d.channelId), eq(channels.clientId, clientId)));
-    if (ch?.type !== "telegram") return { error: "invalid" };
+    if (ch?.type !== "telegram" && ch?.type !== "threads") return { error: "invalid" };
   }
   await db
     .update(contentItems)
@@ -64,7 +65,9 @@ export async function scheduleContent(clientId: string, id: string, at: number |
   await requireUser();
   const [item] = await db.select().from(contentItems).where(and(eq(contentItems.id, id), eq(contentItems.clientId, clientId)));
   if (!item) return { error: "not_found" };
-  if (!item.channelId || !item.target.trim()) return { error: "no_target" };
+  if (!item.channelId) return { error: "no_target" };
+  const [ch] = await db.select({ type: channels.type }).from(channels).where(eq(channels.id, item.channelId));
+  if (ch?.type === "telegram" && !item.target.trim()) return { error: "no_target" };
   if (at == null) {
     const r = await publishItem(id);
     refresh();
@@ -84,6 +87,38 @@ export async function unscheduleContent(id: string) {
 
 export async function deleteContentItem(id: string) {
   await requireUser();
-  await db.delete(contentItems).where(eq(contentItems.id, id));
+  const [row] = await db.delete(contentItems).where(eq(contentItems.id, id)).returning({ image: contentItems.image });
+  if (row?.image) removeContentImage(row.image);
+  refresh();
+}
+
+/** Сгенерировать картинку к посту (заменяет прежнюю). Пустая подсказка — по теме поста. */
+export async function generateImageAction(clientId: string, id: string, prompt: string): Promise<{ error?: string }> {
+  await requireUser();
+  const [row] = await db
+    .select({ item: contentItems, client: clients.name, industry: clients.industry })
+    .from(contentItems)
+    .innerJoin(clients, eq(clients.id, contentItems.clientId))
+    .where(and(eq(contentItems.id, id), eq(contentItems.clientId, clientId)));
+  if (!row) return { error: "not_found" };
+  const text = prompt.trim().slice(0, 4000) || defaultImagePrompt({ title: row.item.title, brief: row.item.brief, client: row.client, industry: row.industry });
+  try {
+    const name = await generateContentImage(text);
+    if (row.item.image) removeContentImage(row.item.image);
+    await db.update(contentItems).set({ image: name, imagePrompt: text, updatedAt: new Date() }).where(eq(contentItems.id, id));
+    refresh();
+    return {};
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    if (m !== "no_openai") console.error("image generation failed", m);
+    return { error: m === "no_openai" ? m : "image_failed" };
+  }
+}
+
+export async function removeImageAction(id: string) {
+  await requireUser();
+  const [row] = await db.select({ image: contentItems.image }).from(contentItems).where(eq(contentItems.id, id));
+  if (row?.image) removeContentImage(row.image);
+  await db.update(contentItems).set({ image: "", updatedAt: new Date() }).where(eq(contentItems.id, id));
   refresh();
 }

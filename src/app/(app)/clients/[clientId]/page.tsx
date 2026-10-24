@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { and, asc, count, desc, eq } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray } from "drizzle-orm";
 import { BarChart3, Blocks, BookOpen, Bot, LayoutDashboard, ClipboardList, ClipboardCheck, FileBarChart2, FileText, Gift, Mic, PenLine, Truck, Table2, Megaphone, Plus, Settings, Wrench } from "lucide-react";
 import { db } from "@/db";
 import { agents, approvals, campaigns, channels, clientLogistics, contentItems, loyaltyAccounts, loyaltyPrograms, loyaltyTx, meetings, clientDocTypes, clientDocuments, clientForms, dataTables, clientIntegrations, clientTools, clients, conversations, docTemplates, formResponses, generatedDocs, kbSources, knowledgeGaps, routines } from "@/db/schema";
@@ -317,12 +317,13 @@ async function MeetingsTab({ clientId }: { clientId: string }) {
 async function ContentTab({ clientId }: { clientId: string }) {
   const [rows, bots] = await Promise.all([
     db.select().from(contentItems).where(eq(contentItems.clientId, clientId)).orderBy(desc(contentItems.createdAt)).limit(150),
-    db.select({ id: channels.id, name: channels.name }).from(channels).where(and(eq(channels.clientId, clientId), eq(channels.type, "telegram"))),
+    db.select({ id: channels.id, name: channels.name, type: channels.type }).from(channels).where(and(eq(channels.clientId, clientId), inArray(channels.type, ["telegram", "threads"]))),
   ]);
   return (
     <ContentStudio
       clientId={clientId}
-      bots={bots}
+      openai={Boolean(process.env.OPENAI_API_KEY)}
+      bots={bots.map((b) => ({ id: b.id, name: b.type === "threads" ? `Threads · ${b.name}` : b.name, type: b.type === "threads" ? ("threads" as const) : ("telegram" as const) }))}
       rows={rows.map((r) => ({
         id: r.id,
         batch: r.batch,
@@ -331,6 +332,8 @@ async function ContentTab({ clientId }: { clientId: string }) {
         brief: r.brief,
         title: r.title,
         text: r.text,
+        image: r.image,
+        imagePrompt: r.imagePrompt,
         status: r.status,
         channelId: r.channelId,
         target: r.target,

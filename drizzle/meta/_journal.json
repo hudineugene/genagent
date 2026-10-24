@@ -204,6 +204,13 @@
       "when": 1792820000000,
       "tag": "0028_logistics",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "6",
+      "when": 1792830000000,
+      "tag": "0029_content_image",
+      "breakpoints": true
     }
   ]
 }

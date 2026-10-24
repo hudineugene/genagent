@@ -486,8 +486,11 @@ export const contentItems = sqliteTable(
     brief: text("brief").notNull().default(""),
     title: text("title").notNull().default(""),
     text: text("text").notNull().default(""),
+    /** Картинка к посту: файл в media (c_<случайное>.png), открывается публично по /m/<имя> */
+    image: text("image").notNull().default(""),
+    imagePrompt: text("image_prompt").notNull().default(""),
     status: text("status", { enum: ["draft", "scheduled", "published", "failed"] }).notNull().default("draft"),
-    /** Бот клиента (канал типа telegram), от имени которого публикуем */
+    /** Канал клиента, через который публикуем: бот Telegram (в target — @канал) или аккаунт Threads */
     channelId: text("channel_id").references(() => channels.id, { onDelete: "set null" }),
     /** Куда: @канал или id чата */
     target: text("target").notNull().default(""),
