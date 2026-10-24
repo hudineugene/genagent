@@ -69,7 +69,8 @@ function anthropicKey() {
 
 /** timing у ответа агента: сколько клиент ждал (черновик, проверка, переписывание), мс */
 type Timing = { replyMs: number; checkMs?: number; rewriteMs?: number; rewritten?: boolean; skipped?: boolean; problems?: string[] };
-type Transcript = { role: "user" | "assistant"; content: string; timing?: Timing }[];
+/** tools — инструменты, которые агент вызвал в ответе; kb — нашёл фрагменты базы знаний (покрытие модулей на карте агента) */
+type Transcript = { role: "user" | "assistant"; content: string; timing?: Timing; tools?: string[]; kb?: boolean }[];
 
 /**
  * Справка для генератора и судьи — всё, что агент знает: описание компании (из карточки клиента),
@@ -222,7 +223,8 @@ async function loadAgent(agentId: string) {
 
 /** Ответ агента на текущий диалог — тем же путём, что в каналах. */
 async function agentReply(config: AgentConfig, client: ClientContext & { id: string }, agentId: string, t: Transcript) {
-  const { system, messages, tools, webSearch } = await prepareChat(config, client, t as ChatMessage[], { mode: "dry" });
+  const { system, messages, tools, webSearch, kb } = await prepareChat(config, client, t as ChatMessage[], { mode: "dry" });
+  const used: string[] = [];
   // Что агент видел при ответе (инструкция с документами, найденные фрагменты, дата и время) — судья сверяет факты с этим
   const last = messages.at(-1);
   const seen = [
@@ -236,6 +238,7 @@ async function agentReply(config: AgentConfig, client: ClientContext & { id: str
   for await (const ev of streamChat({ model: config.model, effort: config.effort, system, messages, tools, webSearch })) {
     if (ev.type === "text") text += ev.text;
     else if (ev.type === "tool") {
+      used.push(ev.name);
       if (ev.name === "book_appointment" && !ev.error && ev.result.startsWith("Booked:")) notes.push("[создал запись в календаре]");
     } else {
       cost =
@@ -262,7 +265,7 @@ async function agentReply(config: AgentConfig, client: ClientContext & { id: str
   if (handoff) notes.push("[передал диалог менеджеру]");
   // Действия для своего бота (например, кнопка «проверить препарат в аптеке») — судье видны как пометка.
   for (const a of actions) notes.push(`[действие для бота: ${a.type} — ${a.value}]`);
-  return { text: [clean, ...notes].filter(Boolean).join("\n\n"), cost, seen, timing };
+  return { text: [clean, ...notes].filter(Boolean).join("\n\n"), cost, seen, timing, tools: [...new Set(used)], kb: Boolean(kb?.sources?.length) };
 }
 
 /** Следующая реплика клиента в режиме симуляции (или null — клиент закончил). */
@@ -389,7 +392,7 @@ async function execute(runId: string, agentId: string, scenarios: TestScenario[]
               const r = await agentReply(config, client, agentId, t);
               cost += r.cost;
               seen.add(r.seen);
-              t.push({ role: "assistant", content: r.text, timing: r.timing });
+              t.push({ role: "assistant", content: r.text, timing: r.timing, ...(r.tools.length ? { tools: r.tools } : {}), ...(r.kb ? { kb: true } : {}) });
             }
           } else {
             for (let i = 0; i < Math.min(s.maxTurns, 6); i++) {
@@ -400,7 +403,7 @@ async function execute(runId: string, agentId: string, scenarios: TestScenario[]
               const r = await agentReply(config, client, agentId, t);
               cost += r.cost;
               seen.add(r.seen);
-              t.push({ role: "assistant", content: r.text, timing: r.timing });
+              t.push({ role: "assistant", content: r.text, timing: r.timing, ...(r.tools.length ? { tools: r.tools } : {}), ...(r.kb ? { kb: true } : {}) });
             }
           }
           const j = await judge(config, [brief, ...seen].join("\n\n"), s, t, agentId, client.id);

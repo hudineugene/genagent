@@ -26,7 +26,7 @@ import { getServices } from "@/lib/services";
 import { withKeys } from "@/lib/keys";
 import { speechAvailable } from "@/lib/speech";
 import { MODELS } from "@/lib/models";
-import { agentMapStats } from "@/lib/agent/map-stats";
+import { agentMapStats, moduleHistory, testCoverage } from "@/lib/agent/map-stats";
 import { studioTz } from "@/lib/general";
 import { AgentMap } from "./map";
 
@@ -60,9 +60,11 @@ export default async function AgentMapPage({ params }: { params: Promise<{ agent
   const config = parsed.success ? parsed.data : agentConfigSchema.parse({ ...agent.config, model: agent.config.model || "anthropic:claude-haiku-5-5" });
   // Голосовые ответы — ключ OpenAI студии или свой ключ клиента
   const voice = await withKeys({ clientId: cid }, async () => speechAvailable());
-  const [stats, versionRows] = await Promise.all([
+  const [stats, versionRows, history, coverage] = await Promise.all([
     agentMapStats(agentId, chs.map((c) => c.id)),
     db.select({ version: agentVersions.version, config: agentVersions.config, createdAt: agentVersions.createdAt }).from(agentVersions).where(eq(agentVersions.agentId, agentId)).orderBy(desc(agentVersions.version)).limit(20),
+    moduleHistory(agentId),
+    testCoverage(agentId),
   ]);
   const fmt = new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: studioTz() });
   const versions = versionRows.flatMap((v) => {
@@ -89,6 +91,8 @@ export default async function AgentMapPage({ params }: { params: Promise<{ agent
       models={MODELS.map((m) => ({ id: m.id, label: m.label }))}
       stats={stats}
       versions={versions}
+      history={history}
+      coverage={coverage}
     />
   );
 }

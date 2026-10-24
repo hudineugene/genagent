@@ -378,6 +378,8 @@ export type MapStats = {
   /** stale — неделю (или ни разу) без сообщений клиентов */
   channels: Record<string, { conversations: number; errors: number; lastInbound: number | null; stale: boolean }>;
   modules: Record<string, { uses: number; errors: number }>;
+  /** За 30 дней по дням (старые → новые): разговоры по каналам, срабатывания модулей, ответы агента */
+  daily: { channels: Record<string, number[]>; modules: Record<string, number[]>; replies: number[] };
 };
 
 /** К какому модулю карты относится вызванный инструмент агента (свои инструменты, CRM и MCP — «tools»). */
@@ -487,3 +489,81 @@ export function modulesDiff(now: AgentConfig, other: AgentConfig): Record<string
   }
   return out;
 }
+
+/** Изменение модуля между версиями агента (история модуля). */
+export type ModuleChange = { version: number; at: number; by: string | null; on: boolean };
+/** Покрытие тестами по последнему прогону: модули, сработавшие хотя бы в одном сценарии. */
+export type MapCoverage = { version: number; at: number | null; total: number; passed: number; modules: string[]; recorded: boolean };
+/** Шаг повтора разговора. */
+export type ReplayStep = {
+  role: "customer" | "agent" | "manager" | "bot" | "event";
+  text: string;
+  at: number;
+  modules: { key: string; error: boolean }[];
+  sources?: string[];
+  tools?: string[];
+  check?: { ok: boolean; problems: string[]; rewritten: boolean };
+  unverified?: string[];
+  cost?: number;
+  ms?: number;
+  handoff?: boolean;
+  error?: boolean;
+};
+/** Событие живого режима. */
+export type LiveEvent = { kind: "in" | "reply" | "error"; channelId: string | null; modules?: { key: string; error: boolean }[] };
+
+/** Модули, которые проверяются тестами по вызову инструментов (у остальных покрытие не определить). */
+export const TESTABLE = new Set(["kb", "tools", "tables", "forms", "procedures", "docs", "calendar", "logistics", "payments", "pricing", "loyalty", "learning", "web", "team"]);
+
+/**
+ * Связи модулей: one — модуль, другой нужен ему (или усиливает его). Показываются линией при выборе модуля
+ * и подсказкой в панели, если связка неполная.
+ */
+export const DEPENDENCIES: { from: string; to: string; why: L; required?: boolean }[] = [
+  { from: "payments", to: "pricing", why: { ru: "Сумму оплаты агент берёт из прайса или расчёта КП", uk: "Суму оплати агент бере з прайсу або розрахунку КП" } },
+  { from: "payments", to: "kb", why: { ru: "Без прайса в базе знаний агенту неоткуда взять сумму", uk: "Без прайсу в базі знань агенту нема звідки взяти суму" } },
+  { from: "pricing", to: "tables", why: { ru: "Расчёт КП берёт цены из таблицы прайса", uk: "Розрахунок КП бере ціни з таблиці прайсу" }, required: true },
+  { from: "procedures", to: "tools", why: { ru: "Шаги процедуры могут смотреть данные в CRM и инструментах", uk: "Кроки процедури можуть дивитися дані в CRM та інструментах" } },
+  { from: "loyalty", to: "tools", why: { ru: "Баллы за покупки могут приходить из CRM", uk: "Бали за покупки можуть надходити з CRM" } },
+  { from: "learning", to: "loyalty", why: { ru: "Баллы за уроки начисляются в программу лояльности", uk: "Бали за уроки нараховуються в програму лояльності" } },
+  { from: "answerCheck", to: "kb", why: { ru: "Проверка сверяет ответ с базой знаний", uk: "Перевірка звіряє відповідь із базою знань" } },
+  { from: "factGuard", to: "kb", why: { ru: "Проверка фактов ищет цены и телефоны в базе знаний", uk: "Перевірка фактів шукає ціни й телефони в базі знань" }, required: true },
+  { from: "calendar", to: "quickReplies", why: { ru: "Свободные окна удобно предлагать кнопками", uk: "Вільні вікна зручно пропонувати кнопками" } },
+  { from: "voiceReplies", to: "brandVoice", why: { ru: "Голосом звучит тот же стиль бренда", uk: "Голосом звучить той самий стиль бренду" } },
+];
+
+/** Связи, которые сейчас не выполнены: модуль включён, а нужный ему — нет (required — без него не работает). */
+export function brokenLinks(c: AgentConfig): typeof DEPENDENCIES {
+  const on = (k: string) => MODULES.find((m) => m.key === k)?.on(c) ?? false;
+  return DEPENDENCIES.filter((d) => on(d.from) && !on(d.to));
+}
+
+/** «Что будет, если…»: последствия изменения модуля по данным за 7 дней. */
+export function whatIf(key: string, turnOn: boolean, s: MapStats | null): L | null {
+  const m = s?.modules[key];
+  const cost = moduleCost(key, s);
+  const costText = cost ? cost.ru.split(" · ")[0].replace("≈ ", "") : null;
+  const costTextUk = cost ? cost.uk.split(" · ")[0].replace("≈ ", "") : null;
+  if (!turnOn) {
+    if (key === "answerCheck") return { ru: `Экономия ${costText ?? "—"}, но за 7 дней проверка нашла проблемы в ${m?.errors ?? 0} ответах — клиенты получили бы их без исправления`, uk: `Економія ${costTextUk ?? "—"}, але за 7 днів перевірка знайшла проблеми в ${m?.errors ?? 0} відповідях — клієнти отримали б їх без виправлення` };
+    if (key === "factGuard") return { ru: `За 7 дней помечено ответов с непроверенными фактами: ${m?.uses ?? 0} — без проверки их никто не увидит`, uk: `За 7 днів позначено відповідей із неперевіреними фактами: ${m?.uses ?? 0} — без перевірки їх ніхто не побачить` };
+    if (m?.uses) return { ru: `За 7 дней модуль сработал ${m.uses} раз — эти действия агент больше делать не сможет`, uk: `За 7 днів модуль спрацював ${m.uses} разів — ці дії агент більше робити не зможе` };
+    return costText ? { ru: `Экономия ${costText}; за 7 дней модуль не срабатывал`, uk: `Економія ${costTextUk}; за 7 днів модуль не спрацьовував` } : { ru: "За 7 дней модуль не срабатывал — потерь не видно", uk: "За 7 днів модуль не спрацьовував — втрат не видно" };
+  }
+  return cost ? { ru: `Добавит ${costText}`, uk: `Додасть ${costTextUk}` } : null;
+}
+
+/** Фирменные цвета и короткие метки каналов для значков на карте. */
+export const CHANNEL_BRAND: Record<string, { color: string; short: string }> = {
+  telegram: { color: "#229ED9", short: "TG" },
+  whatsapp: { color: "#25D366", short: "WA" },
+  instagram: { color: "#E1306C", short: "IG" },
+  threads: { color: "#111111", short: "@" },
+  viber: { color: "#7360F2", short: "Vb" },
+  messenger: { color: "#0084FF", short: "M" },
+  sms: { color: "#64748B", short: "SMS" },
+  email: { color: "#F59E0B", short: "@" },
+  widget: { color: "#6366F1", short: "W" },
+  voice: { color: "#F97316", short: "☎" },
+  api: { color: "#475569", short: "API" },
+};

@@ -16,6 +16,7 @@ import { agentConfigSchema } from "@/lib/agent/types";
 import { agentMapStats } from "@/lib/agent/map-stats";
 import { MODELS } from "@/lib/models";
 import { PortalAgentMap } from "./agent-map";
+import { AgentReport } from "@/components/agent-map/report";
 
 const TABS = ["overview", "leads", "chats", "gaps", "agent"] as const;
 
@@ -23,13 +24,18 @@ const TABS = ["overview", "leads", "chats", "gaps", "agent"] as const;
  * Кабинет клиента (владельца бизнеса): итоги месяца, заявки, разговоры с ответом от себя, вопросы без ответа
  * (ответ — в базу знаний агента). Шапка — в бренде студии. Сотрудник студии видит кабинет по ?client=.
  */
-export default async function PortalPage({ searchParams }: { searchParams: Promise<{ tab?: string; c?: string; client?: string }> }) {
+export default async function PortalPage({ searchParams }: { searchParams: Promise<{ tab?: string; c?: string; client?: string; report?: string }> }) {
   const sp = await searchParams;
   const { clientId, staff } = await requirePortalUser(sp.client);
   const { t } = await getT();
   const p = t.portal;
   const brand = await getBrand();
   const tab = TABS.find((x) => x === sp.tab) ?? "overview";
+  // Отчёт-страница агента для печати в PDF (адрес /portal открыт снаружи — отдельный путь не нужен)
+  if (sp.report) {
+    const [own] = await db.select({ id: agents.id }).from(agents).where(and(eq(agents.id, sp.report), eq(agents.clientId, clientId)));
+    if (own) return <AgentReport agentId={own.id} owner brand={{ name: brand.name, color: brand.color }} locale={(await getT()).locale} />;
+  }
   const q = (patch: Record<string, string>) => `/portal?${new URLSearchParams({ ...(staff ? { client: clientId } : {}), ...patch })}`;
   const [client] = await db.select({ name: clients.name }).from(clients).where(eq(clients.id, clientId));
   const month = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
@@ -149,7 +155,7 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
             {brand.support && <p className="text-center text-xs text-muted">{p.support}: {brand.support}</p>}
           </>
         ) : tab === "agent" ? (
-          <PortalAgents clientId={clientId} />
+          <PortalAgents clientId={clientId} clientParam={staff ? clientId : undefined} />
         ) : tab === "gaps" ? (
           <div className="space-y-3">
             <p className="text-sm text-muted">{p.gapsHint}</p>
@@ -183,7 +189,7 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
 }
 
 /** «Ваш агент»: карта каждого работающего агента клиента (черновики не показываем), только просмотр. */
-async function PortalAgents({ clientId }: { clientId: string }) {
+async function PortalAgents({ clientId, clientParam }: { clientId: string; clientParam?: string }) {
   const rows = await db.select({ id: agents.id, name: agents.name, status: agents.status, config: agents.config }).from(agents).where(eq(agents.clientId, clientId)).orderBy(asc(agents.createdAt));
   const list = rows.filter((a) => a.status !== "draft");
   const chs = await db.select({ id: channels.id, agentId: channels.agentId, type: channels.type, name: channels.name, enabled: channels.enabled }).from(channels).where(eq(channels.clientId, clientId));
@@ -201,7 +207,7 @@ async function PortalAgents({ clientId }: { clientId: string }) {
         (m) =>
           m && (
             <Card key={m.a.id} className="p-4">
-              <PortalAgentMap name={m.a.name} config={m.config} channels={m.channels} stats={m.stats} modelLabel={MODELS.find((x) => x.id === m.config.model)?.label ?? m.config.model} />
+              <PortalAgentMap reportHref={`/portal?${new URLSearchParams({ report: m.a.id, ...(clientParam ? { client: clientParam } : {}) })}`} name={m.a.name} config={m.config} channels={m.channels} stats={m.stats} modelLabel={MODELS.find((x) => x.id === m.config.model)?.label ?? m.config.model} />
             </Card>
           ),
       )}
