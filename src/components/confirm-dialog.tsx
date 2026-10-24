@@ -65,7 +65,7 @@ export function ConfirmHost() {
           <Button variant="secondary" onClick={() => close(false)}>
             {t.common.cancel}
           </Button>
-          <Button autoFocus className={danger ? "bg-danger text-white hover:brightness-110" : undefined} onClick={() => close(true)}>
+          <Button autoFocus className={danger ? "bg-danger text-on-danger hover:brightness-110" : undefined} onClick={() => close(true)}>
             {danger ? t.common.delete : t.common.confirm}
           </Button>
         </div>

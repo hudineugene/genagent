@@ -6,6 +6,8 @@ import { Card, PageHeader, buttonClass } from "@/components/ui";
 import { LocaleSwitch, ThemeSwitch } from "@/components/sidebar";
 import { ProfileForms } from "./forms";
 import { TwoFactor } from "./two-factor";
+import { AvatarCard } from "./avatar";
+import { avatarVersions } from "@/lib/avatar";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";
@@ -17,6 +19,7 @@ export default async function ProfilePage() {
   return (
     <div className="mx-auto max-w-2xl">
       <PageHeader title={t.profile.title} />
+      <AvatarCard userId={me.id} name={me.name} version={(await avatarVersions()).get(me.id) ?? 0} />
       <ProfileForms name={me.name} email={me.email} />
       <div className="mt-6">
         <TwoFactor enabled={Boolean(u?.totp)} />

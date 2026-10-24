@@ -27,7 +27,7 @@ export function RoutingManager({ clientId, rules, people }: { clientId: string; 
         </Button>
       )}
       {editing === "new" && <RuleEditor clientId={clientId} people={people} initial={{ name: "", description: "", chatIds: [] }} onDone={() => setEditing(null)} />}
-      {rules.length === 0 && editing !== "new" && <EmptyState icon={<Route />} text={r.empty} />}
+      {rules.length === 0 && editing !== "new" && <EmptyState icon={<Route />} text={r.empty} action={<Button variant="secondary" onClick={() => setEditing("new")}><Plus className="size-4" />{r.new}</Button>} />}
       {rules.map((x) =>
         editing === x.id ? (
           <RuleEditor key={x.id} clientId={clientId} id={x.id} people={people} initial={x} onDone={() => setEditing(null)} />

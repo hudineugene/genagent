@@ -738,7 +738,7 @@ function QuickReplies({ text, onPick }: { text: string; onPick: (q: string) => v
             aria-label={t.shell.quickRemove}
             title={t.shell.quickRemove}
             onClick={() => saveQuick(list.filter((x) => x !== q))}
-            className="absolute -top-1 -right-1 hidden size-4 place-items-center rounded-full bg-text text-[10px] leading-none text-bg group-hover/q:grid"
+            className="absolute -top-1 -right-1 hidden size-4 place-items-center rounded-full bg-text text-[11px] leading-none text-bg group-hover/q:grid"
           >
             ×
           </button>

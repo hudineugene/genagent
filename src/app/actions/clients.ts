@@ -28,7 +28,8 @@ function parse(formData: FormData) {
 export async function createClient(formData: FormData) {
   await requireUnscoped();
   const [c] = await db.insert(clients).values(parse(formData)).returning({ id: clients.id });
-  redirect(`/clients/${c.id}`);
+  // Мастер нового клиента: «Сразу создать агента» — на мастер агента этого клиента
+  redirect(formData.get("next") === "agent" ? `/clients/${c.id}/agents/new` : `/clients/${c.id}`);
 }
 
 export async function updateClient(id: string, formData: FormData) {

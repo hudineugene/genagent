@@ -140,7 +140,7 @@ export default async function ClientPage({
                   </span>
                   <span className="flex-1">{label}</span>
                   {alert ? (
-                    <span className="min-w-5 rounded-full bg-danger px-1.5 text-center text-[11px] leading-5 font-semibold text-white">{alert}</span>
+                    <span className="min-w-5 rounded-full bg-danger px-1.5 text-center text-[11px] leading-5 font-semibold text-on-danger">{alert}</span>
                   ) : n ? (
                     <span className="text-xs text-muted">{n}</span>
                   ) : null}

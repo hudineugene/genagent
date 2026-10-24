@@ -166,7 +166,7 @@ export default async function InboxPage({
             <span
               className={cx(
                 "min-w-5 rounded-full px-1.5 text-center text-xs leading-5 font-semibold tabular-nums",
-                f === "attention" && counts.attention > 0 ? "bg-danger text-white" : "bg-surface-2 text-muted",
+                f === "attention" && counts.attention > 0 ? "bg-danger text-on-danger" : "bg-surface-2 text-muted",
               )}
             >
               {counts[f]}

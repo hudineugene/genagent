@@ -75,7 +75,7 @@ export function CampaignsManager({ clientId, rows, agents }: { clientId: string;
       {(editing === "broadcast" || editing === "sequence") && (
         <CampaignForm clientId={clientId} agents={agents} initial={empty(editing)} onDone={() => setEditing(null)} />
       )}
-      {rows.length === 0 && editing === null && <EmptyState icon={<Megaphone />} text={c.empty} />}
+      {rows.length === 0 && editing === null && <EmptyState icon={<Megaphone />} text={c.empty} action={<Button variant="secondary" onClick={() => setEditing("broadcast")}><Megaphone className="size-4" />{c.kinds.broadcast}</Button>} />}
       {rows.map((r) =>
         editing === r.id ? (
           <CampaignForm key={r.id} clientId={clientId} id={r.id} agents={agents} initial={r} onDone={() => setEditing(null)} />

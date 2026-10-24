@@ -51,7 +51,7 @@ export function LearningManager({
       {editing === "new" && (
         <CourseForm clientId={clientId} programs={programs} initial={{ title: "", description: "", level: "beginner", topics: "", points: 0, programId: programs[0]?.id ?? null, enabled: true, position: rows.length }} onDone={() => setEditing(null)} />
       )}
-      {rows.length === 0 && editing !== "new" && <EmptyState icon={<GraduationCap />} text={l.empty} />}
+      {rows.length === 0 && editing !== "new" && <EmptyState icon={<GraduationCap />} text={l.empty} action={<Button variant="secondary" onClick={() => setEditing("new")}><Plus className="size-4" />{l.newCourse}</Button>} />}
       {rows.map((c) =>
         editing === c.id ? <CourseForm key={c.id} clientId={clientId} programs={programs} id={c.id} initial={c} onDone={() => setEditing(null)} /> : <CourseCard key={c.id} clientId={clientId} row={c} onEdit={() => setEditing(c.id)} />,
       )}

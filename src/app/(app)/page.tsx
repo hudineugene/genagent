@@ -285,7 +285,7 @@ function SectionHead({ title, count, tone, link }: { title: string; count: numbe
     <div className="flex items-center gap-2 border-b border-border px-5 py-3.5">
       <h2 className="min-w-0 truncate font-semibold tracking-tight">{title}</h2>
       {count > 0 && (
-        <span className={cx("rounded-full px-2 text-xs leading-5 font-semibold", tone === "danger" ? "bg-danger text-white" : "bg-accent-soft text-accent")}>{count}</span>
+        <span className={cx("rounded-full px-2 text-xs leading-5 font-semibold", tone === "danger" ? "bg-danger text-on-danger" : "bg-accent-soft text-accent")}>{count}</span>
       )}
       {link && (
         <Link href={link.href} className="ml-auto inline-flex shrink-0 items-center gap-1 text-sm font-medium whitespace-nowrap text-accent hover:underline">

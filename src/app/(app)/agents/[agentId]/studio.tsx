@@ -201,7 +201,7 @@ export function AgentStudio({
                 <Button size="sm" onClick={save} disabled={!dirty || saving}>
                   {saving ? <Spinner /> : <Save className="size-4" />}
                   {saving ? t.common.saving : t.common.save}
-                  <kbd className="ml-1 hidden rounded bg-white/20 px-1 text-[10px] font-medium sm:inline">{t.agentHeader.saveHint}</kbd>
+                  <kbd className="ml-1 hidden rounded bg-white/20 px-1 text-[11px] font-medium sm:inline">{t.agentHeader.saveHint}</kbd>
                 </Button>
               </div>
             </div>

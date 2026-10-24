@@ -64,7 +64,7 @@ export function ToolsManager({ clientId, tools, googleEmail, children }: { clien
       {editing === "new" && <ToolForm clientId={clientId} initial={EMPTY} googleEmail={googleEmail} onDone={() => setEditing(null)} />}
 
       {tools.length === 0 && editing !== "new" ? (
-        <EmptyState icon={<Wrench />} text={tt.empty} />
+        <EmptyState icon={<Wrench />} text={tt.empty} action={<Button variant="secondary" onClick={() => setEditing("new")}><Plus className="size-4" />{tt.add}</Button>} />
       ) : (
         tools.map((r) =>
           editing === r.id ? (

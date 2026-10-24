@@ -61,7 +61,7 @@ export function RoutinesManager({ clientId, rows, tables = [] }: { clientId: str
         </Button>
       )}
       {editing === "new" && <RoutineForm clientId={clientId} tables={tables} initial={EMPTY} onDone={() => setEditing(null)} />}
-      {rows.length === 0 && editing !== "new" && <EmptyState icon={<BarChart3 />} text={r.empty} />}
+      {rows.length === 0 && editing !== "new" && <EmptyState icon={<BarChart3 />} text={r.empty} action={<Button variant="secondary" onClick={() => setEditing("new")}><Plus className="size-4" />{r.new}</Button>} />}
       {rows.map((x) =>
         editing === x.id ? (
           <RoutineForm key={x.id} clientId={clientId} tables={tables} id={x.id} initial={x} onDone={() => setEditing(null)} />

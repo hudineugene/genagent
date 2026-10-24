@@ -116,7 +116,7 @@ export function NotifyCard({ notify }: { notify: NotifyView }) {
                 {notify.subscribers.map((sub) => (
                   <li key={sub.chatId} className="flex items-center gap-3 px-3 py-2 text-sm">
                     <span className="min-w-0 flex-1 truncate">{sub.name}</span>
-                    <span className="text-xs text-muted">{fmt.format(new Date(sub.since))}</span>
+                    <span className="text-xs text-muted">{Number.isFinite(new Date(sub.since).getTime()) ? fmt.format(new Date(sub.since)) : "—"}</span>
                     <button
                       type="button"
                       className="rounded-lg p-1 text-muted hover:text-danger"

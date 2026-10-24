@@ -18,3 +18,6 @@ export default async function SettingsPage() {
     </div>
   );
 }
+
+// Страница зависит от сессии и свежих данных — собирается по запросу.
+export const instant = false;

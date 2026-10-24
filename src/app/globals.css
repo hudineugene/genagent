@@ -16,6 +16,8 @@
   --accent-soft: #fdeee4;
   --accent-text: #ffffff;
   --danger: #e11d48;
+  /* Текст на красной заливке (счётчики): белый в светлой теме, тёмный в тёмной — контраст не ниже 4.5 */
+  --on-danger: #ffffff;
   --success: #17864c;
   /* Металл: поверхности с мягким бликом (ядро карты, главные карточки, плитка логотипа) */
   --metal: linear-gradient(135deg, #ffffff 0%, #eef1f5 38%, #fbfcfd 52%, #e4e8ee 100%);
@@ -38,6 +40,7 @@
     --accent-soft: #3a1f0e;
     --accent-text: #1a0d04;
     --danger: #fb7185;
+  --on-danger: #2a0710;
     --success: #3ccf7f;
     --metal: linear-gradient(135deg, #22252b 0%, #15171b 40%, #262a31 55%, #111316 100%);
     --metal-edge: #343942;
@@ -56,6 +59,7 @@
   --accent-soft: #3a1f0e;
   --accent-text: #1a0d04;
   --danger: #fb7185;
+  --on-danger: #2a0710;
   --success: #3ccf7f;
   --metal: linear-gradient(135deg, #22252b 0%, #15171b 40%, #262a31 55%, #111316 100%);
   --metal-edge: #343942;
@@ -76,6 +80,7 @@
   --color-accent-soft: var(--accent-soft);
   --color-accent-text: var(--accent-text);
   --color-danger: var(--danger);
+  --color-on-danger: var(--on-danger);
   --color-success: var(--success);
   --color-metal-edge: var(--metal-edge);
   --font-sans: var(--font-inter), system-ui, sans-serif;

@@ -45,15 +45,21 @@ import { SwitchButton, cx } from "./ui";
 import { toast } from "./toast";
 import { NOTIFY_EVENT, chime, notifyRaw, setNotify } from "./shell/notify";
 import { BrandMark } from "./brand";
+import { UserAvatar } from "./user-avatar";
 import { useShell } from "./shell/frame";
 
 type NavItem = PalettePage & { active: boolean; badge?: number };
 
 export function Sidebar({
+  userId,
+  avatarV,
   userName,
   isAdmin,
   inboxBadge,
 }: {
+  userId: string;
+  /** Версия фото профиля (0 — фото нет) */
+  avatarV: number;
   userName: string;
   isAdmin: boolean;
   inboxBadge: number;
@@ -119,7 +125,7 @@ export function Sidebar({
             {panel ? <PanelLeftClose className="size-[18px]" /> : <PanelLeftOpen className="size-[18px]" />}
             <RailTip>{panel ? t.shell.collapse : t.shell.expand}</RailTip>
           </button>
-          <ProfileMenu userName={userName} initial={initial} active={pathname.startsWith("/profile")} />
+          <ProfileMenu userId={userId} avatarV={avatarV} userName={userName} active={pathname.startsWith("/profile")} />
         </div>
       </aside>
       {/* Телефон: нижняя панель — главные разделы и «Ещё» со всеми остальными (вне aside: у него размытие фона,
@@ -139,7 +145,7 @@ function RailTip({ children }: { children: ReactNode }) {
 }
 
 /** Меню профиля в рельсе: имя, «Мой профиль», язык, тема, плотность таблиц, выход. Закрывается кликом мимо и Esc. */
-function ProfileMenu({ userName, initial, active }: { userName: string; initial: string; active: boolean }) {
+function ProfileMenu({ userId, avatarV, userName, active }: { userId: string; avatarV: number; userName: string; active: boolean }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -164,17 +170,17 @@ function ProfileMenu({ userName, initial, active }: { userName: string; initial:
         aria-label={t.shell.profileMenu}
         data-tour="profile"
         className={cx(
-          "group/rail relative grid size-10 place-items-center rounded-full bg-accent-soft text-sm font-semibold text-accent ring-2 ring-transparent transition hover:ring-accent/30",
+          "group/rail relative grid size-10 place-items-center rounded-full ring-2 ring-transparent transition hover:ring-accent/30",
           (open || active) && "ring-accent/40",
         )}
       >
-        {initial}
+        <UserAvatar id={userId} name={userName} v={avatarV} size={40} />
         {!open && <RailTip>{userName}</RailTip>}
       </button>
       {open && (
         <div className="animate-pop-in absolute bottom-0 left-full z-50 ml-3 w-64 space-y-3 rounded-2xl border border-border bg-surface p-3 shadow-2xl shadow-black/15">
           <Link href="/profile" onClick={() => setOpen(false)} className="flex items-center gap-2.5 rounded-xl px-1.5 py-1.5 transition hover:bg-surface-2">
-            <span className="grid size-8 shrink-0 place-items-center rounded-full bg-accent-soft text-sm font-semibold text-accent">{initial}</span>
+            <UserAvatar id={userId} name={userName} v={avatarV} size={32} />
             <span className="min-w-0">
               <span className="block truncate text-sm font-medium">{userName}</span>
               <span className="block text-xs text-muted">{t.nav.profile}</span>
@@ -239,7 +245,7 @@ function RailGroup({ items, tone }: { items: NavItem[]; tone: keyof typeof TONES
         >
           {active && <span className="absolute top-2 bottom-2 -left-2.5 w-[3px] rounded-r-full bg-current" />}
           <Icon className="size-[18px]" />
-          {badge ? <span className="absolute -top-0.5 -right-0.5 min-w-4 rounded-full bg-danger px-1 text-center text-[10px] leading-4 font-semibold text-white ring-2 ring-surface">{badge > 99 ? "99+" : badge}</span> : null}
+          {badge ? <span className="absolute -top-0.5 -right-0.5 min-w-4 rounded-full bg-danger px-1 text-center text-[11px] leading-4 font-semibold text-on-danger ring-2 ring-surface">{badge > 99 ? "99+" : badge}</span> : null}
           <RailTip>{label}</RailTip>
         </Link>
       ))}
@@ -477,7 +483,7 @@ function MobileTabs({
             <span className="relative">
               <Icon className="size-5" />
               {badge ? (
-                <span className="absolute -top-1.5 -right-2.5 rounded-full bg-danger px-1 text-[10px] leading-4 font-semibold text-white">
+                <span className="absolute -top-1.5 -right-2.5 rounded-full bg-danger px-1 text-[11px] leading-4 font-semibold text-on-danger">
                   {badge}
                 </span>
               ) : null}

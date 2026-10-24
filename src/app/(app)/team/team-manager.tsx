@@ -14,12 +14,13 @@ import {
 import { useI18n } from "@/lib/i18n/client";
 import { Badge, Button, Card, Field, Input, Select, Spinner, cx } from "@/components/ui";
 import { ask } from "@/components/confirm-dialog";
+import { UserAvatar } from "@/components/user-avatar";
 
 type Role = "admin" | "member";
 type Member = { id: string; name: string; email: string; role: Role | "client"; createdAt: Date; clientIds: string[] | null; totp: boolean };
 type ErrorKey = keyof ReturnType<typeof useI18n>["t"]["team"]["errors"];
 
-export function TeamManager({ members, meId, clients }: { members: Member[]; meId: string; clients: { id: string; name: string }[] }) {
+export function TeamManager({ members, meId, clients, avatars = {} }: { members: Member[]; meId: string; clients: { id: string; name: string }[]; avatars?: Record<string, number> }) {
   const { t, locale } = useI18n();
   const [creds, setCreds] = useState<{ title: string; email: string; password: string } | null>(null);
   const [addState, addAction, adding] = useActionState(
@@ -93,9 +94,7 @@ export function TeamManager({ members, meId, clients }: { members: Member[]; meI
           const busy = busyId === m.id;
           return (
             <div key={m.id} className="flex flex-wrap items-center gap-3 px-5 py-4">
-              <span className="grid size-10 shrink-0 place-items-center rounded-full bg-accent-soft font-semibold text-accent">
-                {m.name.trim().charAt(0).toUpperCase() || "?"}
-              </span>
+              <UserAvatar id={m.id} name={m.name} v={avatars[m.id]} size={40} />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 font-medium">
                   <span className="truncate">{m.name}</span>

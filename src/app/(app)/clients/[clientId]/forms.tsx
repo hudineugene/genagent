@@ -52,7 +52,7 @@ export function FormsManager({ clientId, rows }: { clientId: string; rows: FormR
         </div>
       )}
       {(editing === "form" || editing === "quiz") && <FormEditor clientId={clientId} initial={empty(editing)} onDone={() => setEditing(null)} />}
-      {rows.length === 0 && editing === null && <EmptyState icon={<ClipboardList />} text={f.empty} />}
+      {rows.length === 0 && editing === null && <EmptyState icon={<ClipboardList />} text={f.empty} action={<Button variant="secondary" onClick={() => setEditing("form")}><ClipboardList className="size-4" />{f.newForm}</Button>} />}
       {rows.map((r) =>
         editing === r.id ? (
           <FormEditor key={r.id} clientId={clientId} id={r.id} initial={r} onDone={() => setEditing(null)} />

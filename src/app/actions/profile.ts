@@ -92,3 +92,25 @@ export async function disableTwoFactor(code: string): Promise<{ error?: string }
   refresh();
   return {};
 }
+
+/** Фото профиля: PNG, JPEG или WEBP до 1 МБ (тип — по содержимому файла). Коды ошибок: empty, too_big, type. */
+export async function uploadAvatar(formData: FormData): Promise<{ error?: "empty" | "too_big" | "type" }> {
+  const me = await requireUser();
+  const f = formData.get("photo");
+  if (!(f instanceof File) || f.size === 0) return { error: "empty" };
+  const { MAX_AVATAR_BYTES, saveAvatar } = await import("@/lib/avatar");
+  if (f.size > MAX_AVATAR_BYTES) return { error: "too_big" };
+  const data = Buffer.from(await f.arrayBuffer());
+  const { imageType } = await import("@/lib/client-logo");
+  if (!imageType(data)) return { error: "type" };
+  await saveAvatar(me.id, data);
+  refresh();
+  return {};
+}
+
+export async function removeAvatarAction() {
+  const me = await requireUser();
+  const { removeAvatar } = await import("@/lib/avatar");
+  await removeAvatar(me.id);
+  refresh();
+}

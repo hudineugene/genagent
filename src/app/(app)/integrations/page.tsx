@@ -112,7 +112,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
           {tab === "notify" && (
             <NotifyCard
               notify={
-                notify?.token
+                notify?.token && notify.botUsername
                   ? { botUsername: notify.botUsername, link: `https://t.me/${notify.botUsername}?start=${notify.linkCode}`, subscribers: notify.subscribers }
                   : null
               }

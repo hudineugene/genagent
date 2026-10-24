@@ -51,3 +51,21 @@ export async function saveCustomLogo(clientId: string, data: Buffer) {
 export async function removeCustomLogo(clientId: string) {
   await fs.rm(custom(clientId), { force: true });
 }
+
+/**
+ * Логотип клиента, встроенный в страницу (data:-адрес) — для кабинета владельца: на открытом домене адрес
+ * /api/client-logo закрыт. Свой логотип, иначе сохранённый значок сайта; нет ни того, ни другого — null (буква).
+ */
+export async function logoDataUri(clientId: string): Promise<string | null> {
+  const own = await readCustomLogo(clientId);
+  if (own) return `data:${own.type};base64,${own.data.toString("base64")}`;
+  try {
+    const file = path.join(LOGO_DIR, clientId);
+    const meta = JSON.parse(await fs.readFile(`${file}.json`, "utf8")) as { type: string | null };
+    if (!meta.type || !/^image\/(png|jpeg|gif|webp|x-icon|vnd\.microsoft\.icon)$/.test(meta.type)) return null;
+    const data = await fs.readFile(file);
+    return data.length <= 300_000 ? `data:${meta.type};base64,${data.toString("base64")}` : null;
+  } catch {
+    return null;
+  }
+}

@@ -171,7 +171,7 @@ function ClientRow({ c, pinned, onPin }: { c: NavClient; pinned?: boolean; onPin
       </Link>
       <span className="absolute top-1/2 right-1.5 flex -translate-y-1/2 items-center gap-1">
         {c.waiting > 0 && (
-          <span title={`${c.waiting} ${t.shell.waiting}`} className="min-w-5 rounded-full bg-danger px-1.5 text-center text-[11px] leading-5 font-semibold text-white">
+          <span title={`${c.waiting} ${t.shell.waiting}`} className="min-w-5 rounded-full bg-danger px-1.5 text-center text-[11px] leading-5 font-semibold text-on-danger">
             {c.waiting}
           </span>
         )}
@@ -260,7 +260,7 @@ function SectionLink({ href, label, icon, tone, active, n, alert, replace }: { h
         <Icon className="size-3.5" />
       </span>
       <span className="min-w-0 flex-1 truncate">{label}</span>
-      {alert ? <span className="min-w-5 rounded-full bg-danger px-1.5 text-center text-[11px] leading-5 font-semibold text-white">{alert}</span> : n ? <span className="text-xs text-muted tabular-nums">{n}</span> : null}
+      {alert ? <span className="min-w-5 rounded-full bg-danger px-1.5 text-center text-[11px] leading-5 font-semibold text-on-danger">{alert}</span> : n ? <span className="text-xs text-muted tabular-nums">{n}</span> : null}
     </Link>
   );
 }

@@ -1,6 +1,6 @@
 import { createClient } from "@/app/actions/clients";
 import { getT } from "@/lib/i18n/server";
-import { ClientForm } from "@/components/client-form";
+import { NewClientWizard } from "@/components/new-client-wizard";
 import { BackLink } from "@/components/back-link";
 import { PageHeader } from "@/components/ui";
 
@@ -10,7 +10,7 @@ export default async function NewClientPage() {
     <div className="mx-auto max-w-3xl">
       <BackLink href="/clients" label={t.nav.clients} />
       <PageHeader title={t.clients.createTitle} />
-      <ClientForm action={createClient} />
+      <NewClientWizard action={createClient} />
     </div>
   );
 }

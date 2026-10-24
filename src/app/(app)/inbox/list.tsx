@@ -78,7 +78,7 @@ export function ConversationList({ items, selectedId }: { items: ListItem[]; sel
                   <span className="size-1.5 shrink-0 rounded-full" style={{ background: c.clientColor }} title={`${c.clientName} · ${c.agentName}`} />
                   <span className={cx("truncate text-sm", c.unread > 0 ? "font-semibold" : "font-medium")}>{label}</span>
                   {c.mode === "human" && c.status !== "closed" && (
-                    <span className="shrink-0 rounded bg-amber-500/15 px-1 text-[10px] leading-4 text-amber-600 dark:text-amber-400">{t.inbox.humanMode}</span>
+                    <span className="shrink-0 rounded bg-amber-500/15 px-1 text-[11px] leading-4 text-amber-600 dark:text-amber-400">{t.inbox.humanMode}</span>
                   )}
                   {c.lead === "hot" && c.status !== "closed" && (
                     <span className="shrink-0 text-[11px]" title={t.inbox.leadTemp.hot}>

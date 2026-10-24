@@ -72,7 +72,7 @@ export function RemindersManager({ clientId, rows, tables, channels }: { clientI
             </Button>
           )}
           {editing === "new" && <ReminderForm clientId={clientId} tables={tables} channels={channels} initial={emptyDraft(tables, channels)} onDone={() => setEditing(null)} />}
-          {rows.length === 0 && editing !== "new" && <EmptyState icon={<BellRing />} text={r.empty} />}
+          {rows.length === 0 && editing !== "new" && <EmptyState icon={<BellRing />} text={r.empty} action={<Button variant="secondary" onClick={() => setEditing("new")}><Plus className="size-4" />{r.new}</Button>} />}
           {rows.map((x) =>
             editing === x.id ? (
               <ReminderForm key={x.id} clientId={clientId} tables={tables} channels={channels} id={x.id} initial={x} onDone={() => setEditing(null)} />

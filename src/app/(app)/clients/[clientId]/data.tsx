@@ -51,7 +51,7 @@ export function DataManager({ clientId, tables }: { clientId: string; tables: Da
         )}
         {adding === "file" && <UploadForm clientId={clientId} onDone={() => setAdding(null)} />}
         {adding === "sheet" && <SheetForm clientId={clientId} onDone={() => setAdding(null)} />}
-        {tables.length === 0 && adding === null && <EmptyState icon={<Table2 />} text={d.empty} />}
+        {tables.length === 0 && adding === null && <EmptyState icon={<Table2 />} text={d.empty} action={<Button variant="secondary" onClick={() => setAdding("file")}><Upload className="size-4" />{d.uploadFile}</Button>} />}
         {tables.map((x) => (
           <TableCard key={x.id} clientId={clientId} row={x} refreshed={x.refreshedAt ? fmt.format(x.refreshedAt) : "—"} />
         ))}

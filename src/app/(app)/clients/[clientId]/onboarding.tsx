@@ -336,7 +336,7 @@ export function HiringManager({ clientId, rows }: { clientId: string; rows: Vaca
         </Button>
       )}
       {editing === "new" && <VacancyForm clientId={clientId} initial={{ title: "", requirements: "" }} onDone={() => setEditing(null)} />}
-      {rows.length === 0 && editing !== "new" && <EmptyState icon={<Users />} text={h.empty} />}
+      {rows.length === 0 && editing !== "new" && <EmptyState icon={<Users />} text={h.empty} action={<Button variant="secondary" onClick={() => setEditing("new")}><Plus className="size-4" />{h.newVacancy}</Button>} />}
       {rows.map((v) =>
         editing === v.id ? <VacancyForm key={v.id} clientId={clientId} id={v.id} initial={v} onDone={() => setEditing(null)} /> : <VacancyCard key={v.id} row={v} onEdit={() => setEditing(v.id)} />,
       )}

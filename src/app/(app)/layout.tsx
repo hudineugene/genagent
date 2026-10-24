@@ -7,6 +7,7 @@ import { getLocale } from "@/lib/i18n/server";
 import { I18nProvider } from "@/lib/i18n/client";
 import { cookies } from "next/headers";
 import { Sidebar } from "@/components/sidebar";
+import { avatarVersions } from "@/lib/avatar";
 import { ShellFrame } from "@/components/shell/frame";
 import { ContextPanel } from "@/components/shell/context-panel";
 import { Topbar } from "@/components/shell/topbar";
@@ -47,7 +48,7 @@ async function Shell({ children }: { children: ReactNode }) {
   return (
     <I18nProvider locale={locale} timeZone={general.timeZone}>
       <ShellFrame initialPanel={panel}>
-        <Sidebar userName={user.name} isAdmin={user.role === "admin"} inboxBadge={attention} />
+        <Sidebar userId={user.id} avatarV={(await avatarVersions()).get(user.id) ?? 0} userName={user.name} isAdmin={user.role === "admin"} inboxBadge={attention} />
         <ContextPanel studioName={general.studioName || "GenAgent"} />
         <div className="flex min-w-0 flex-1 flex-col">
           <Topbar />

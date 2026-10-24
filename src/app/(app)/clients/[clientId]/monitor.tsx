@@ -54,7 +54,7 @@ export function MonitorManager({ clientId, rows, incidents, apiBase }: { clientI
           </Button>
         )}
         {editing === "new" && <MonitorForm clientId={clientId} initial={EMPTY} onDone={() => setEditing(null)} />}
-        {rows.length === 0 && editing !== "new" && <EmptyState icon={<Activity />} text={m.empty} />}
+        {rows.length === 0 && editing !== "new" && <EmptyState icon={<Activity />} text={m.empty} action={<Button variant="secondary" onClick={() => setEditing("new")}><Plus className="size-4" />{m.new}</Button>} />}
         {rows.map((r) =>
           editing === r.id ? <MonitorForm key={r.id} clientId={clientId} id={r.id} initial={r} onDone={() => setEditing(null)} /> : <MonitorCard key={r.id} row={r} apiBase={apiBase} onEdit={() => setEditing(r.id)} />,
         )}

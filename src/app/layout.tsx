@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, Montserrat } from "next/font/google";
 import "./globals.css";
 
@@ -9,6 +9,14 @@ const montserrat = Montserrat({ subsets: ["latin", "cyrillic"], weight: ["600", 
 // Тема до первой отрисовки (без мигания): выбор из localStorage («light» / «dark»), иначе — как в системе.
 // Переключатель в меню меняет localStorage и data-theme; системную смену ловим здесь же. Здесь же — плотность таблиц.
 const THEME_SCRIPT = `(function(){try{var d=document.documentElement,m=matchMedia('(prefers-color-scheme: dark)');function a(){var t=localStorage.getItem('theme');d.dataset.theme=t==='light'||t==='dark'?t:(m.matches?'dark':'light')}a();m.addEventListener('change',a);window.__applyTheme=a;if(localStorage.getItem('density')==='compact')d.dataset.density='compact'}catch(e){}})()`;
+
+/** Цвет окна установленного приложения и строки браузера на телефоне — под тему. */
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f4f5f7" },
+    { media: "(prefers-color-scheme: dark)", color: "#0b0c0f" },
+  ],
+};
 
 export const metadata: Metadata = {
   title: "GenAgent — студия ИИ-агентов",
