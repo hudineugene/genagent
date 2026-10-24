@@ -15,6 +15,7 @@ import { getProgram, loyaltyNote, loyaltyTools } from "@/lib/loyalty/engine";
 import { deliveryTool } from "@/lib/logistics/routes";
 import { pricingTool } from "@/lib/pricing";
 import { credentialsReady, getPayments, paymentTools, paymentsNote } from "@/lib/payments";
+import { loadProcedures, procedureTool, proceduresNote } from "./procedures";
 import { hasActiveOnboardings, onboardingNote, onboardingTools } from "@/lib/onboarding";
 import { hasCourses, learningNote, learningTools } from "@/lib/learning";
 import { hasActiveTrips, tripTools } from "@/lib/logistics/trips";
@@ -86,9 +87,10 @@ export async function prepareChat(
   // Обучение: курсы клиента; логистика: рейсы на сегодня (водители отмечают точки, клиенты спрашивают «где заказ»)
   const learning = config.learning ? await hasCourses(client.id).catch(() => false) : false;
   const tripsToday = config.logistics ? await hasActiveTrips(client.id).catch(() => false) : false;
+  const procs = config.procedureIds?.length ? await loadProcedures(client.id, config.procedureIds).catch(() => []) : [];
   // Оплата: ссылка на оплату и проверка — если у клиента настроен эквайринг
   const pay = config.payments ? await getPayments(client.id).then((p) => (p?.enabled && credentialsReady(p) ? p : null)).catch(() => null) : null;
-  const fullSystem = [system, examples, formsNote(forms), docsNote(templates), tablesNote(tables), teamNote(config.team), loyaltyNote(loyalty), onboarding ? onboardingNote : "", learning ? learningNote : "", pay ? paymentsNote : "", channelNote].filter(Boolean).join("\n\n");
+  const fullSystem = [system, examples, formsNote(forms), docsNote(templates), tablesNote(tables), teamNote(config.team), loyaltyNote(loyalty), onboarding ? onboardingNote : "", learning ? learningNote : "", pay ? paymentsNote : "", proceduresNote(procs), channelNote].filter(Boolean).join("\n\n");
   const own = await loadAgentTools(client.id, config.toolIds ?? [], tools).catch((e) => {
     console.error("load agent tools failed", e);
     return [];
@@ -106,6 +108,7 @@ export async function prepareChat(
     ...(learning ? learningTools({ ...tools, clientId: client.id }) : []),
     ...(tripsToday ? tripTools({ ...tools, clientId: client.id }) : []),
     ...(pay ? paymentTools(pay, { ...tools, clientId: client.id }) : []),
+    ...(procs.length ? [procedureTool(procs, { ...tools, clientId: client.id })] : []),
     ...(config.team?.enabled && config.team.approvals ? [approvalTool(config.team, { ...tools, clientId: client.id })] : []),
   ];
   const agentTools = all.length ? all : undefined;

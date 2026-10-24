@@ -78,6 +78,7 @@ const DIRECT = {
   loyaltyProgram: s.loyaltyPrograms,
   kbSource: s.kbSources,
   gap: s.knowledgeGaps,
+  procedure: s.procedures,
 } satisfies Record<string, Table>;
 
 export type Kind = keyof typeof DIRECT | "message" | "lesson" | "loyaltyAccount" | "outreachMessage" | "scenario";

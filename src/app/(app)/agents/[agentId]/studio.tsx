@@ -11,7 +11,7 @@ import { Button, Input, Select, Spinner, cx } from "@/components/ui";
 import { BUILDER_GROUPS, Builder, BuilderGroupContext, groupOf, type BuilderGroup } from "./builder";
 import { Playground } from "./playground";
 import { VersionsPanel } from "./versions";
-import type { BuilderDocTemplate, BuilderProgram, BuilderTable, BuilderForm, BuilderSource, BuilderTool, ExampleItem } from "./builder";
+import type { BuilderDocTemplate, BuilderProgram, BuilderTable, BuilderForm, BuilderProcedure, BuilderSource, BuilderTool, ExampleItem } from "./builder";
 
 type Status = "draft" | "active" | "paused";
 
@@ -27,6 +27,7 @@ export function AgentStudio({
   examples,
   tools,
   forms,
+  procedures,
   docTemplates,
   tables,
   programs,
@@ -38,6 +39,7 @@ export function AgentStudio({
   examples: ExampleItem[];
   tools: BuilderTool[];
   forms: BuilderForm[];
+  procedures: BuilderProcedure[];
   docTemplates: BuilderDocTemplate[];
   tables: BuilderTable[];
   programs: BuilderProgram[];
@@ -177,7 +179,7 @@ export function AgentStudio({
           <GroupNav group={group} onChange={setGroup} config={config} />
 
           <BuilderGroupContext.Provider value={group}>
-          <Builder config={config} onChange={setConfig} client={client} sources={sources} googleEmail={googleEmail} agentId={agent.id} examples={examples} tools={tools} forms={forms} docTemplates={docTemplates} tables={tables} programs={programs} />
+          <Builder config={config} onChange={setConfig} client={client} sources={sources} googleEmail={googleEmail} agentId={agent.id} examples={examples} tools={tools} forms={forms} procedures={procedures} docTemplates={docTemplates} tables={tables} programs={programs} />
           </BuilderGroupContext.Provider>
 
           {/* Панель сохранения — только когда есть изменения, прилипает к низу экрана */}

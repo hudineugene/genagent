@@ -98,8 +98,11 @@ export const clientTools = sqliteTable(
     clientId: text("client_id")
       .notNull()
       .references(() => clients.id, { onDelete: "cascade" }),
-    /** http — запрос к API; sheet — поиск строк в Google Таблице (url — ссылка на таблицу, sheet — лист) */
-    kind: text("kind", { enum: ["http", "sheet"] }).notNull().default("http"),
+    /** http — запрос к API; sheet — поиск строк в Google Таблице (url — ссылка на таблицу, sheet — лист);
+     *  mcp — MCP-сервер (url, авторизация в headers): агенту доступны все его инструменты; crm — готовое подключение к CRM */
+    kind: text("kind", { enum: ["http", "sheet", "mcp", "crm"] }).notNull().default("http"),
+    /** CRM: система, ключи, домен, передавать ли заявки из диалогов (секреты не уходят в браузер) */
+    config: text("config", { mode: "json" }).$type<Record<string, unknown>>().notNull().default({}),
     sheet: text("sheet"),
     /** Имя для модели: латиница, snake_case */
     name: text("name").notNull(),
@@ -488,6 +491,40 @@ export const approvals = sqliteTable(
   (t) => [index("approvals_client_idx").on(t.clientId, t.createdAt)],
 );
 export type Approval = typeof approvals.$inferSelect;
+
+/** Шаг процедуры: вопрос с проверкой ответа, запрос к инструменту, согласование руководителем, сообщение, передача менеджеру. */
+export type ProcedureStep =
+  | { kind: "ask"; key: string; question: string; type: "text" | "phone" | "email" | "number" | "date" | "choice"; options?: string[] }
+  | { kind: "tool"; toolId: string; action?: "find" | "order"; args: Record<string, string>; saveAs: string }
+  | { kind: "approval"; subject: string; details: string; amount?: string; rejected: string }
+  | { kind: "say"; text: string }
+  | { kind: "handoff"; text: string };
+/**
+ * Процедура с обязательными шагами (возврат, рекламация, оформление заказа…): агент только распознаёт ситуацию и
+ * запускает её, дальше программа ведёт клиента по шагам дословно — без пропусков и выдумок.
+ */
+export const procedures = sqliteTable(
+  "procedures",
+  {
+    id: id(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    /** Когда запускать — читает агент («клиент хочет вернуть товар») */
+    trigger: text("trigger").notNull().default(""),
+    steps: text("steps", { mode: "json" }).$type<ProcedureStep[]>().notNull().default([]),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    createdAt: createdAt(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [index("procedures_client_idx").on(t.clientId)],
+);
+export type Procedure = typeof procedures.$inferSelect;
+/** Идущая процедура в разговоре: шаг, собранные ответы, ожидание согласования */
+export type ProcedureState = { id: string; step: number; data: Record<string, string>; at: number; waiting?: string; retries?: number };
 
 /**
  * Контент-студия: тексты в стиле бренда (посты, статьи, реклама, SEO-брифы, вакансии), варианты для A/B
@@ -1641,6 +1678,10 @@ export type ConversationContext = {
   /** Разговор продолжен в боте (id разговора там) / пришёл с сайта (id разговора виджета) */
   linkedTo?: string;
   linkedFrom?: string;
+  /** Процедура с обязательными шагами, которая сейчас идёт в разговоре */
+  procedure?: ProcedureState;
+  /** Лиды, созданные в CRM из этого разговора: id подключения → id в CRM */
+  crmLeads?: Record<string, string>;
   /** Откуда пришёл клиент (реклама, история, комментарий, ссылка с меткой) — агент учитывает, аналитика считает */
   source?: ConversationSource;
 };
@@ -1678,6 +1719,8 @@ export type MessageMeta = {
   orderNote?: boolean;
   /** Ответ агента ушёл и голосовым */
   spoken?: boolean;
+  /** Сообщение написала процедура с обязательными шагами (не модель) */
+  procedure?: boolean;
   /** Кнопки быстрых ответов под сообщением (Telegram, Viber) */
   buttons?: string[];
   /** Агент дословно пересказывал служебные инструкции — ответ заменён отказом */

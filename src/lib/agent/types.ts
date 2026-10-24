@@ -68,6 +68,8 @@ export const agentConfigSchema = z.object({
   tableIds: z.array(z.string()).max(20).optional(),
   /** Расчёт КП по правилам цен клиента (прайс, скидки, НДС) */
   pricing: z.boolean().optional(),
+  /** Процедуры с обязательными шагами (procedures), которые агент запускает */
+  procedureIds: z.array(z.string()).max(20).optional(),
   /** Ссылки на оплату в диалоге (эквайринг клиента: LiqPay, WayForPay, Monobank) и проверка оплаты */
   payments: z.boolean().optional(),
   /** Обучение: курсы клиента в чате (уроки, тесты, баллы, личная программа) */

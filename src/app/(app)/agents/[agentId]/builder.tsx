@@ -32,6 +32,7 @@ export type BuilderSource = {
 export type BuilderTool = { id: string; title: string; name: string; enabled: boolean; readOnly: boolean };
 /** Анкета клиента — для выбора в агенте */
 export type BuilderForm = { id: string; name: string; kind: "form" | "quiz"; enabled: boolean };
+export type BuilderProcedure = { id: string; name: string; enabled: boolean };
 export type BuilderDocTemplate = { id: string; name: string; enabled: boolean };
 export type BuilderTable = { id: string; name: string; enabled: boolean; rowCount: number };
 export type BuilderProgram = { id: string; name: string; enabled: boolean };
@@ -46,6 +47,7 @@ export function Builder({
   examples = [],
   tools = [],
   forms = [],
+  procedures = [],
   docTemplates = [],
   tables = [],
   programs = [],
@@ -59,6 +61,7 @@ export function Builder({
   examples?: ExampleItem[];
   tools?: BuilderTool[];
   forms?: BuilderForm[];
+  procedures?: BuilderProcedure[];
   docTemplates?: BuilderDocTemplate[];
   tables?: BuilderTable[];
   programs?: BuilderProgram[];
@@ -514,6 +517,27 @@ export function Builder({
         <Link href={`/clients/${client.id}?tab=forms`} className="text-sm text-accent hover:underline">
           {t.builder.formsManage}
         </Link>
+        <div className="space-y-1.5 border-t border-border pt-3">
+          <div className="text-sm font-medium">{t.builder.procedures}</div>
+          <p className="text-xs text-muted">{t.builder.proceduresHint}</p>
+          {procedures.map((x) => {
+            const on = (config.procedureIds ?? []).includes(x.id);
+            return (
+              <label key={x.id} className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm hover:bg-surface-2">
+                <input
+                  type="checkbox"
+                  checked={on}
+                  onChange={() => set("procedureIds", on ? (config.procedureIds ?? []).filter((i) => i !== x.id) : [...(config.procedureIds ?? []), x.id])}
+                  className="size-4 accent-[var(--accent)]"
+                />
+                <span className={cx("min-w-0 flex-1 truncate", !x.enabled && "text-muted line-through")}>{x.name}</span>
+              </label>
+            );
+          })}
+          <Link href={`/clients/${client.id}?tab=procedures`} className="text-sm text-accent hover:underline">
+            {t.builder.proceduresManage}
+          </Link>
+        </div>
       </Section>
 
       <Section icon={<FileText />} id="docs" title={t.builder.sections.docs} badge={(config.docTemplateIds ?? []).length || undefined}>

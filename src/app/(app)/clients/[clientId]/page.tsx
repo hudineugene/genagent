@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, asc, count, desc, eq, inArray } from "drizzle-orm";
-import { Activity, BarChart3, BellRing, BookOpenCheck, GraduationCap, Repeat, Users, Blocks, BookOpen, Bot, Calculator, CreditCard, LayoutDashboard, ClipboardList, ClipboardCheck, FileBarChart2, FileText, Gift, Mail, Mic, PenLine, Route, Truck, Table2, Megaphone, Plus, Settings, Wrench } from "lucide-react";
+import { Activity, BarChart3, BellRing, BookOpenCheck, GraduationCap, Repeat, Users, Blocks, BookOpen, Bot, Calculator, CreditCard, ListChecks, LayoutDashboard, ClipboardList, ClipboardCheck, FileBarChart2, FileText, Gift, Mail, Mic, PenLine, Route, Truck, Table2, Megaphone, Plus, Settings, Wrench } from "lucide-react";
 import { db } from "@/db";
-import { agents, approvals, campaigns, candidates, courses, incidents, learners, lessons, monitors, trips, clientRepeat, onboardingPlans, onboardings, reminders, vacancies, clientPricing, clientPayments, payments, routingRules, contactLists, contacts, outreach, outreachMessages, channels, clientLogistics, contentItems, loyaltyAccounts, loyaltyPrograms, loyaltyTx, meetings, clientDocTypes, clientDocuments, clientForms, dataTables, clientIntegrations, clientTools, clients, conversations, docTemplates, formResponses, generatedDocs, kbSources, knowledgeGaps, routines } from "@/db/schema";
+import { agents, approvals, campaigns, candidates, courses, incidents, learners, lessons, monitors, trips, clientRepeat, onboardingPlans, onboardings, reminders, vacancies, clientPricing, clientPayments, payments, procedures, routingRules, contactLists, contacts, outreach, outreachMessages, channels, clientLogistics, contentItems, loyaltyAccounts, loyaltyPrograms, loyaltyTx, meetings, clientDocTypes, clientDocuments, clientForms, dataTables, clientIntegrations, clientTools, clients, conversations, docTemplates, formResponses, generatedDocs, kbSources, knowledgeGaps, routines } from "@/db/schema";
 import { getT } from "@/lib/i18n/server";
 import { findModel } from "@/lib/models";
 import type { Dict, Locale } from "@/lib/i18n";
@@ -11,6 +11,7 @@ import { BackLink } from "@/components/back-link";
 import { Badge, Card, ClientAvatar, EmptyState, PageHeader, buttonClass, cx } from "@/components/ui";
 import { KnowledgeBase } from "./knowledge-base";
 import { ToolsManager } from "./tools";
+import { ConnectorsManager } from "./connectors";
 import { IntegrationsOut } from "./integrations-out";
 import { CampaignsManager } from "./campaigns";
 import { FormsManager } from "./forms";
@@ -26,6 +27,7 @@ import { OutreachManager } from "./outreach";
 import { RoutingManager } from "./routing";
 import { PricingManager } from "./pricing";
 import { PaymentsManager } from "./payments";
+import { ProceduresManager } from "./procedures";
 import { RemindersManager, RepeatManager } from "./reminders";
 import { HiringManager, OnboardingManager } from "./onboarding";
 import { MonitorManager } from "./monitor";
@@ -54,9 +56,9 @@ export default async function ClientPage({
   const [client] = await db.select().from(clients).where(eq(clients.id, clientId));
   if (!client) notFound();
 
-  const SECTIONS = ["kb", "data", "modules", "outreach", "routing", "pricing", "payments", "reminders", "repeat", "onboarding", "hiring", "monitor", "learning", "tools", "forms", "documents", "loyalty", "logistics", "approvals", "campaigns", "content", "meetings", "routines"] as const;
+  const SECTIONS = ["kb", "data", "modules", "outreach", "routing", "pricing", "payments", "reminders", "repeat", "onboarding", "hiring", "monitor", "learning", "tools", "forms", "procedures", "documents", "loyalty", "logistics", "approvals", "campaigns", "content", "meetings", "routines"] as const;
   const active = (SECTIONS as readonly string[]).includes(tab ?? "") ? (tab as (typeof SECTIONS)[number]) : "agents";
-  const [[{ agentsCount }], [{ kbCount }], [{ toolsCount }], [{ campaignsCount }], [{ formsCount }], [{ routinesCount }], [{ docTypesCount }], [{ templatesCount }], [{ tablesCount }], [{ pendingApprovals }], [{ approvalsCount }], teamAgents, [{ contentCount }], [{ meetingsCount }], [{ programsCount }], [{ outsCount }], [logistics], agentConfigs, [{ routingCount }], [pricingRow], [{ remindersCount }], [{ onboardingCount }], [{ vacanciesCount }], [{ monitorsCount }], [{ openIncidents }], [{ coursesCount }], [{ outreachCount }], [repeatRow], [payRow]] = await Promise.all([
+  const [[{ agentsCount }], [{ kbCount }], [{ toolsCount }], [{ campaignsCount }], [{ formsCount }], [{ routinesCount }], [{ docTypesCount }], [{ templatesCount }], [{ tablesCount }], [{ pendingApprovals }], [{ approvalsCount }], teamAgents, [{ contentCount }], [{ meetingsCount }], [{ programsCount }], [{ outsCount }], [logistics], agentConfigs, [{ routingCount }], [pricingRow], [{ remindersCount }], [{ onboardingCount }], [{ vacanciesCount }], [{ monitorsCount }], [{ openIncidents }], [{ coursesCount }], [{ outreachCount }], [repeatRow], [payRow], [{ procCount }]] = await Promise.all([
     db.select({ agentsCount: count() }).from(agents).where(eq(agents.clientId, clientId)),
     db.select({ kbCount: count() }).from(kbSources).where(eq(kbSources.clientId, clientId)),
     db.select({ toolsCount: count() }).from(clientTools).where(eq(clientTools.clientId, clientId)),
@@ -86,6 +88,7 @@ export default async function ClientPage({
     db.select({ outreachCount: count() }).from(contactLists).where(eq(contactLists.clientId, clientId)),
     db.select({ tableId: clientRepeat.tableId }).from(clientRepeat).where(eq(clientRepeat.clientId, clientId)),
     db.select({ provider: clientPayments.provider }).from(clientPayments).where(eq(clientPayments.clientId, clientId)),
+    db.select({ procCount: count() }).from(procedures).where(eq(procedures.clientId, clientId)),
   ]);
 
   const base = `/clients/${client.id}`;
@@ -94,6 +97,7 @@ export default async function ClientPage({
   const sections: ModuleCard[] = [
     { group: "agent", key: "tools", icon: Wrench, title: t.tools.tab, text: t.ws.mod.tools, n: toolsCount + outsCount, used: used((c) => Boolean(c.toolIds?.length)) },
     { group: "agent", key: "forms", icon: ClipboardList, title: t.forms.tab, text: t.ws.mod.forms, n: formsCount, used: used((c) => Boolean(c.formIds?.length)) },
+    { group: "agent", key: "procedures", icon: ListChecks, title: t.procedures.tab, text: t.ws.mod.procedures, n: procCount, used: used((c) => Boolean(c.procedureIds?.length)) },
     { group: "agent", key: "documents", icon: FileText, title: t.documents.tab, text: t.ws.mod.documents, n: docTypesCount + templatesCount, used: used((c) => Boolean(c.docTemplateIds?.length)) },
     { group: "agent", key: "loyalty", icon: Gift, title: t.loyalty.tab, text: t.ws.mod.loyalty, n: programsCount, used: used((c) => Boolean(c.loyaltyProgramId)) },
     { group: "agent", key: "pricing", icon: Calculator, title: t.pricing.tab, text: t.ws.mod.pricing, n: pricingRow?.tableId ? 1 : 0, used: used((c) => Boolean(c.pricing)) },
@@ -197,6 +201,8 @@ export default async function ClientPage({
         <ToolsTab clientId={client.id} />
       ) : active === "campaigns" ? (
         <CampaignsTab clientId={client.id} />
+      ) : active === "procedures" ? (
+        <ProceduresTab clientId={client.id} />
       ) : active === "forms" ? (
         <FormsTab clientId={client.id} />
       ) : active === "monitor" ? (
@@ -903,6 +909,23 @@ async function RoutinesTab({ clientId }: { clientId: string }) {
   );
 }
 
+async function ProceduresTab({ clientId }: { clientId: string }) {
+  const [rows, list, tools] = await Promise.all([
+    db.select().from(procedures).where(eq(procedures.clientId, clientId)).orderBy(desc(procedures.createdAt)),
+    db.select({ name: agents.name, config: agents.config }).from(agents).where(eq(agents.clientId, clientId)),
+    db.select({ id: clientTools.id, title: clientTools.title, kind: clientTools.kind, params: clientTools.params }).from(clientTools).where(eq(clientTools.clientId, clientId)),
+  ]);
+  return (
+    <ProceduresManager
+      clientId={clientId}
+      rows={rows.map((r) => ({ id: r.id, name: r.name, trigger: r.trigger, steps: r.steps, enabled: r.enabled, usedBy: list.filter((a) => a.config.procedureIds?.includes(r.id)).map((a) => a.name) }))}
+      tools={tools
+        .filter((x) => x.kind !== "mcp")
+        .map((x) => ({ id: x.id, title: x.title, kind: x.kind, params: x.kind === "crm" ? ["order", "phone", "email"] : x.kind === "sheet" ? ["query"] : x.params.map((p) => p.name) }))}
+    />
+  );
+}
+
 async function FormsTab({ clientId }: { clientId: string }) {
   const [rows, list] = await Promise.all([
     db.select().from(clientForms).where(eq(clientForms.clientId, clientId)).orderBy(desc(clientForms.createdAt)),
@@ -968,9 +991,30 @@ async function ToolsTab({ clientId }: { clientId: string }) {
     db.select().from(clientIntegrations).where(eq(clientIntegrations.clientId, clientId)).orderBy(desc(clientIntegrations.createdAt)),
     getGoogleSettings(),
   ]);
-  const tools = rows.map((r) => ({
+  const { maskKey } = await import("@/lib/keys");
+  const m = (v: unknown) => (typeof v === "string" && v ? maskKey(v) : "");
+  const connectors = rows
+    .filter((r) => r.kind === "crm" || r.kind === "mcp")
+    .map((r) => ({
+      id: r.id,
+      kind: r.kind as "crm" | "mcp",
+      title: r.title,
+      name: r.name,
+      enabled: r.enabled,
+      provider: String(r.config.provider ?? ""),
+      domain: String(r.config.domain ?? ""),
+      url: r.url,
+      keyMask: m(r.config.key),
+      secretMask: m(r.config.secret),
+      webhookMask: m(r.config.webhook),
+      tokenMask: m(r.headers.authorization?.replace(/^Bearer /, "")),
+      pushLeads: Boolean(r.config.pushLeads),
+      lastStatus: r.lastStatus,
+      usedBy: list.filter((a) => a.config.toolIds?.includes(r.id)).map((a) => a.name),
+    }));
+  const tools = rows.filter((r) => r.kind === "http" || r.kind === "sheet").map((r) => ({
     id: r.id,
-    kind: r.kind,
+    kind: r.kind as "http" | "sheet",
     sheet: r.sheet,
     title: r.title,
     name: r.name,
@@ -1000,6 +1044,7 @@ async function ToolsTab({ clientId }: { clientId: string }) {
   }));
   return (
     <ToolsManager clientId={clientId} tools={tools} googleEmail={googleEmail}>
+      <ConnectorsManager clientId={clientId} rows={connectors} />
       <IntegrationsOut clientId={clientId} rows={integrations} googleEmail={googleEmail} />
     </ToolsManager>
   );

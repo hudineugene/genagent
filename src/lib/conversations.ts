@@ -237,6 +237,15 @@ async function respond__(conversationId: string): Promise<void> {
         return;
       }
     }
+    // Идёт процедура с обязательными шагами — отвечает программа, без модели
+    if (conversation.context?.procedure && !conversation.context.procedure.waiting) {
+      const { handleProcedureMessage } = await import("@/lib/agent/procedures");
+      const out = await handleProcedureMessage(conversation, history.at(-1)?.text ?? "");
+      if (out) {
+        await sendProcedureOutput(channel, conversation, out);
+        return;
+      }
+    }
     // Месячный лимит расходов агента: превышен — молчим и зовём менеджера.
     if (config.monthlyBudgetUsd != null && (await agentMonthSpend(agent.id)) >= config.monthlyBudgetUsd) {
       await flag(conversationId, "budget_exceeded");
@@ -330,6 +339,16 @@ async function respond__(conversationId: string): Promise<void> {
       if (r.check) meta = { ...meta, check: r.check, cost: (meta.cost ?? 0) + r.cost };
     }
 
+    // Агент запустил процедуру — первый шаг пишет программа (вместо текста агента)
+    if (used.some((u) => u.name === "start_procedure" && !u.error)) {
+      const { startedProcedureOutput } = await import("@/lib/agent/procedures");
+      const out = await startedProcedureOutput(conversation);
+      if (out) {
+        await addMessage(conversationId, "system", "procedure_started", { meta });
+        await sendProcedureOutput(channel, conversation, out);
+        return;
+      }
+    }
     // Запись уже создана в календаре — отмечаем это в переписке, что бы ни было дальше с ответом.
     if (booked) await addMessage(conversationId, "system", "booking_created");
 
@@ -743,6 +762,26 @@ export async function deliver(
     }
     default:
       return null;
+  }
+}
+
+/** Ответы процедуры клиенту (по одному сообщению); «передать менеджеру» — разговор переходит к людям. */
+export async function sendProcedureOutput(
+  channel: Pick<Channel, "type" | "config">,
+  conversation: Pick<Conversation, "id" | "externalId" | "kind" | "context" | "clientId" | "agentId">,
+  out: { messages: string[]; handoff?: boolean },
+) {
+  for (const text of out.messages.filter((m) => m.trim())) {
+    const externalId = await deliver(channel, conversation, text).catch((e) => {
+      console.error("procedure deliver failed", e);
+      return null;
+    });
+    await addMessage(conversation.id, "assistant", text, { externalId: externalId ?? undefined, meta: { procedure: true } });
+  }
+  if (out.handoff) {
+    await db.update(conversations).set(channel.type === "api" ? { needsAttention: true } : { mode: "human", needsAttention: true }).where(eq(conversations.id, conversation.id));
+    await addMessage(conversation.id, "system", "handoff", { meta: { reason: "procedure" } });
+    void notify().then((n) => n.notifyHandoff(conversation.id, "Процедура: клиенту нужна помощь менеджера", { reason: "procedure" }));
   }
 }
 

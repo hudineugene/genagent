@@ -177,6 +177,39 @@ export function toAgentTool(tool: ClientTool, ctx: Pick<ToolContext, "mode">): A
   };
 }
 
+/** MCP-сервер: все его инструменты (имена с префиксом подключения); недоступен — без них, ответ не падает. */
+async function mcpAgentTools(tool: ClientTool, ctx: Pick<ToolContext, "mode">): Promise<AgentTool[]> {
+  const { callMcpTool, listMcpTools, mcpToolName } = await import("./mcp");
+  let list;
+  try {
+    list = await listMcpTools(tool.id, tool.url, tool.headers);
+    void db.update(clientTools).set({ lastStatus: `ok: ${list.length}`, lastUsedAt: new Date() }).where(eq(clientTools.id, tool.id)).catch(() => {});
+  } catch (e) {
+    const code = e instanceof Error ? e.message : String(e);
+    console.error("mcp list failed", tool.id, code);
+    void db.update(clientTools).set({ lastStatus: code.slice(0, 120), lastUsedAt: new Date() }).where(eq(clientTools.id, tool.id)).catch(() => {});
+    return [];
+  }
+  return list.map((t) => {
+    const readOnly = t.annotations?.readOnlyHint === true;
+    return {
+      name: mcpToolName(tool.name, t.name),
+      description: `${tool.title}: ${t.description ?? t.name}`.slice(0, 1500),
+      inputSchema: t.inputSchema && typeof t.inputSchema === "object" ? t.inputSchema : { type: "object", properties: {} },
+      parse: z.record(z.string(), z.unknown()),
+      run: async (input) => {
+        if (ctx.mode === "dry" && !readOnly) return `[Тестовый режим: ${t.name} не вызван, потому что может менять данные. Аргументы: ${JSON.stringify(input).slice(0, 500)}. Считай, что вызов прошёл успешно.]`;
+        try {
+          return await callMcpTool(tool.id, tool.url, tool.headers, t.name, input as Record<string, unknown>);
+        } catch (e) {
+          const code = e instanceof Error ? e.message : String(e);
+          throw new Error(`The external system "${tool.title}" is unavailable right now (${code}). Do not invent its data: tell the customer you will check with a manager.`);
+        }
+      },
+    } satisfies AgentTool;
+  });
+}
+
 /** Включённые инструменты агента. */
 export async function loadAgentTools(clientId: string, ids: string[], ctx: Pick<ToolContext, "mode">): Promise<AgentTool[]> {
   if (!ids.length) return [];
@@ -184,5 +217,15 @@ export async function loadAgentTools(clientId: string, ids: string[], ctx: Pick<
     .select()
     .from(clientTools)
     .where(and(eq(clientTools.clientId, clientId), inArray(clientTools.id, ids), eq(clientTools.enabled, true)));
-  return rows.map((r) => toAgentTool(r, ctx));
+  const out = await Promise.all(
+    rows.map(async (r) => {
+      if (r.kind === "mcp") return mcpAgentTools(r, ctx);
+      if (r.kind === "crm") {
+        const { crmTools } = await import("@/lib/crm");
+        return crmTools(r.name, r.title, r.config as unknown as import("@/lib/crm").CrmConfig, ctx);
+      }
+      return [toAgentTool(r, ctx)];
+    }),
+  );
+  return out.flat();
 }

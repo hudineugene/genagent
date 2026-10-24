@@ -125,6 +125,17 @@ export async function decideApproval(id: string, approve: boolean, by: string, c
     if (row) {
       const text = `${approve ? "✅ Согласовано" : "❌ Не согласовано"}: заявка №${a.number} «${a.subject}»${by ? ` (${by})` : ""}.${comment ? `\n${comment}` : ""}`;
       const { addMessage, deliver } = await import("@/lib/conversations");
+      // Заявка из процедуры: процедура продолжается сама (или сообщает отказ) — без общего текста решения
+      const { resumeAfterApproval } = await import("@/lib/agent/procedures");
+      const out = await resumeAfterApproval(row.conversation.id, a.id, approve).catch((e) => {
+        console.error("procedure resume failed", e);
+        return null;
+      });
+      if (out) {
+        const { sendProcedureOutput } = await import("@/lib/conversations");
+        await sendProcedureOutput(row.channel, row.conversation, out);
+        return a;
+      }
       try {
         const externalId = await deliver(row.channel, row.conversation, text);
         await addMessage(row.conversation.id, "assistant", text, { externalId: externalId ?? undefined });

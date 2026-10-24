@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { agents, clientForms, dataTables, docTemplates, loyaltyPrograms, clientTools, clients, kbSources } from "@/db/schema";
+import { agents, procedures, clientForms, dataTables, docTemplates, loyaltyPrograms, clientTools, clients, kbSources } from "@/db/schema";
 import { agentConfigSchema } from "@/lib/agent/types";
 import { getGoogleSettings } from "@/lib/google/calendar";
 import { AgentStudio } from "./studio";
@@ -40,6 +40,12 @@ export default async function AgentPage({ params }: { params: Promise<{ agentId:
     .from(clientForms)
     .where(eq(clientForms.clientId, client.id))
     .orderBy(asc(clientForms.createdAt));
+
+  const procs = await db
+    .select({ id: procedures.id, name: procedures.name, enabled: procedures.enabled })
+    .from(procedures)
+    .where(eq(procedures.clientId, client.id))
+    .orderBy(asc(procedures.createdAt));
 
   const docs = await db
     .select({ id: docTemplates.id, name: docTemplates.name, enabled: docTemplates.enabled })
@@ -82,6 +88,7 @@ export default async function AgentPage({ params }: { params: Promise<{ agentId:
         examples={await getExamples(agent.id)}
         tools={tools}
         forms={forms}
+        procedures={procs}
         docTemplates={docs}
         tables={tables}
         programs={programs}

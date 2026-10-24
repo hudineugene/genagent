@@ -225,6 +225,10 @@ export async function deliver(integ: ClientIntegration, p: EventPayload, opts: {
 
 /** Событие клиента — во все его включённые интеграции, подписанные на этот тип. Возвращает число успешных отправок. */
 export async function emitEvent(event: IntegrationEventType, input: EventInput): Promise<number> {
+  // Готовые подключения к CRM: передача менеджеру или «горячий» клиент — лид в CRM (один на разговор)
+  if (event === "handoff" || (event === "lead" && input.lead?.temperature === "hot")) {
+    void import("@/lib/crm").then((m) => m.pushLeadToCrm({ clientId: input.clientId, conversationId: input.conversationId, summary: input.summary, reason: input.reason })).catch((e) => console.error("crm push failed", e));
+  }
   try {
     const list = (await db
       .select()

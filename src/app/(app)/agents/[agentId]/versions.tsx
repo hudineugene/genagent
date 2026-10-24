@@ -43,6 +43,7 @@ const FIELDS: Field[] = [
   "webSearch",
   "operatorReview",
   "formIds",
+  "procedureIds",
   "docTemplateIds",
   "tableIds",
   "team",
@@ -122,6 +123,7 @@ export function VersionsPanel({
       webSearch: b.webSearch,
       operatorReview: b.operatorReview,
       formIds: b.sections.forms,
+      procedureIds: b.procedures,
       docTemplateIds: b.sections.docs,
       tableIds: b.sections.data,
       team: b.sections.team,
@@ -161,6 +163,8 @@ export function VersionsPanel({
         return String((c.toolIds ?? []).length || "—");
       case "formIds":
         return String((c.formIds ?? []).length || "—");
+      case "procedureIds":
+        return String((c.procedureIds ?? []).length || "—");
       case "docTemplateIds":
         return String((c.docTemplateIds ?? []).length || "—");
       case "aiDisclosure":
