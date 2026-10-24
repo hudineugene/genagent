@@ -114,6 +114,8 @@ export type WaMessage = {
   audio?: { id?: string; mime_type?: string; voice?: boolean };
   document?: { caption?: string; filename?: string };
   location?: { latitude: number; longitude: number; name?: string; address?: string };
+  /** Клиент нажал рекламу «Написать в WhatsApp» (Click-to-WhatsApp) */
+  referral?: { source_url?: string; source_id?: string; source_type?: string; headline?: string; body?: string };
 };
 
 /** Текст входящего: обычный текст, нажатая кнопка, подпись к вложению или пометка вложения. */

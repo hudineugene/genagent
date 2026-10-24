@@ -88,6 +88,8 @@ import { getSetting, setSetting } from "@/lib/settings";
   await n.notifyHandoff(other.id, "Вопрос", { reason: "вопрос" });
   const afterPlain = tg.splice(0);
 
+  // Каналы заведены на чужого агента — удаляем явно (иначе остаются пустые виджеты)
+  for (const x of [sales, service, other]) await db.delete(channels).where(eq(channels.id, x.channelId));
   await db.delete(clients).where(eq(clients.id, c.id));
   await db.delete(clients).where(eq(clients.id, plain.id));
   if (notify === undefined) await db.delete(settings).where(eq(settings.key, "notify"));

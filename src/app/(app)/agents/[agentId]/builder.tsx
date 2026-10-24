@@ -253,6 +253,20 @@ export function Builder({
         ) : (
           <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-sm">{t.builder.aiDisclosureOff}</p>
         )}
+        <Field label={t.builder.streaming} hint={t.builder.streamingHint}>
+          <Segmented
+            value={config.streaming ? "on" : "off"}
+            options={(["on", "off"] as const).map((v) => ({ value: v, label: t.builder.answerCheckModes[v] }))}
+            onChange={(v) => set("streaming", v === "on")}
+          />
+        </Field>
+        <Field label={t.builder.quickReplies} hint={t.builder.quickRepliesHint}>
+          <Segmented
+            value={config.quickReplies ? "on" : "off"}
+            options={(["on", "off"] as const).map((v) => ({ value: v, label: t.builder.answerCheckModes[v] }))}
+            onChange={(v) => set("quickReplies", v === "on")}
+          />
+        </Field>
         <Field label={t.builder.answerCheck} hint={t.builder.answerCheckHint}>
           <Segmented
             value={config.answerCheck ? "on" : "off"}
@@ -557,6 +571,18 @@ export function Builder({
           <span>
             <span className="font-medium">{t.builder.pricingCalc}</span>
             <span className="block text-xs text-muted">{t.builder.pricingCalcHint}</span>
+          </span>
+        </label>
+        <label className="flex items-start gap-2.5 text-sm">
+          <input type="checkbox" className="mt-0.5 size-4 accent-[var(--accent)]" checked={Boolean(config.payments)} onChange={(e) => set("payments", e.target.checked)} />
+          <span>
+            <span className="font-medium">{t.builder.payments}</span>
+            <span className="block text-xs text-muted">
+              {t.builder.paymentsHint}{" "}
+              <Link href={`/clients/${client.id}?tab=payments`} className="text-accent hover:underline">
+                {t.builder.paymentsSetup}
+              </Link>
+            </span>
           </span>
         </label>
         <label className="flex items-start gap-2.5 text-sm">

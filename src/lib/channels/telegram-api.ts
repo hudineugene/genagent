@@ -114,7 +114,17 @@ export const sendChatAction = (token: string, chatId: string) =>
   call<boolean>(token, "sendChatAction", { chat_id: chatId, action: "typing" }).catch(() => false);
 
 /** Отправляет текст, разбивая на части по 4000 символов (лимит Telegram — 4096). */
-export async function sendText(token: string, chatId: string, text: string) {
+/** Черновик ответа, пока агент пишет (Bot API: живёт ~30 с, итог нужно отправить sendMessage). Пустой текст — «Думает…». */
+export async function sendMessageDraft(token: string, chatId: string, draftId: number, text: string) {
+  await call(token, "sendMessageDraft", { chat_id: Number(chatId), draft_id: draftId, text: text.slice(0, 4096) });
+}
+
+/** Кнопки быстрых ответов: нажатие отправляет текст кнопки как сообщение клиента; после нажатия прячутся. */
+export function replyKeyboard(buttons: string[]) {
+  return { keyboard: buttons.map((b) => [{ text: b }]), resize_keyboard: true, one_time_keyboard: true };
+}
+
+export async function sendText(token: string, chatId: string, text: string, buttons?: string[]) {
   const parts: string[] = [];
   let rest = text;
   while (rest.length > 4000) {
@@ -123,7 +133,10 @@ export async function sendText(token: string, chatId: string, text: string) {
     rest = rest.slice(cut).trimStart();
   }
   if (rest) parts.push(rest);
-  for (const p of parts) await call(token, "sendMessage", { chat_id: chatId, text: p });
+  for (const [i, p] of parts.entries()) {
+    const last = i === parts.length - 1;
+    await call(token, "sendMessage", { chat_id: chatId, text: p, ...(last && buttons?.length ? { reply_markup: replyKeyboard(buttons) } : {}) });
+  }
 }
 
 /** Ответ в группе на конкретное сообщение (комментарий под постом канала). Возвращает id первой части ответа. */

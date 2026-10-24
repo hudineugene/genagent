@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { and, asc, count, eq, gte, like, sum } from "drizzle-orm";
 import { db } from "@/db";
-import { agents, channels, clients, usageLog } from "@/db/schema";
+import { agents, channels, clients, usageLog, type InstagramConfig, type TelegramConfig, type ViberConfig } from "@/db/schema";
 import { isPolling } from "@/lib/channels/telegram-poller";
 import { requireUser } from "@/lib/auth";
 import { getMetaSettings, publicUrl } from "@/lib/settings";
@@ -62,13 +62,15 @@ export default async function AgentChannelsPage({ params }: { params: Promise<{ 
             comments: "comments" in c.config ? c.config.comments : undefined,
             approval: "approval" in c.config ? Boolean(c.config.approval) : false,
             tokenExpiresAt: "tokenExpiresAt" in c.config ? c.config.tokenExpiresAt : 0,
+            triggers: c.type === "instagram" ? ((c.config as InstagramConfig).triggers ?? []) : [],
           }
         : null,
     api: c.type === "api" && "key" in c.config ? { key: c.config.key, label: c.config.label, approval: c.config.approval ?? true, botNote: c.config.botNote ?? "", followUps: Boolean(c.config.followUps), orderNotes: Boolean(c.config.orderNotes), ratingInvite: Boolean(c.config.ratingInvite) } : null,
     telegram:
-      c.type === "telegram" && "botName" in c.config
-        ? { comments: Boolean(c.config.comments), approval: c.config.approval ?? true, group: c.config.group ?? null }
+      c.type === "telegram"
+        ? { comments: Boolean((c.config as TelegramConfig).comments), approval: (c.config as TelegramConfig).approval ?? true, group: (c.config as TelegramConfig).group ?? null }
         : null,
+    viber: c.type === "viber" && "botName" in c.config ? { uri: (c.config as ViberConfig).uri ?? "", welcome: (c.config as ViberConfig).welcome ?? "" } : null,
     email:
       c.type === "email" && "address" in c.config
         ? { address: c.config.address, approval: c.config.approval, fromName: c.config.fromName }

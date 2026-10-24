@@ -13,6 +13,8 @@ import { type ApiConfig,
   type MessageMeta,
   type InstagramConfig,
   type TelegramConfig,
+  type ViberConfig,
+  type ConversationSource,
   type ThreadsConfig,
   type EmailConfig,
   type ClientMemory,
@@ -257,6 +259,8 @@ async function respond__(conversationId: string): Promise<void> {
             : channel.type === "api"
             ? apiNote(conversation.context?.language, conversation.context?.botContext, (channel.config as ApiConfig).botNote, botActivity(history), ordersNote(conversation.context?.orders), handoffEtaNote(conversation.context?.team, await measuredReplyMinutes(channel.id)))
             : undefined,
+        conversation.kind === "dm" ? sourceNote(conversation.context?.source) : undefined,
+        config.quickReplies && conversation.kind === "dm" && (channel.type === "telegram" || channel.type === "viber") ? BUTTONS_NOTE : undefined,
         pendingHandoff ? handoffPendingNote(pendingHandoff.createdAt) : undefined,
         channel.type === "api" && (channel.config as ApiConfig).ratingInvite && !conversation.context?.ratingAskedAt ? RATING_NOTE : undefined,
         ].filter(Boolean).join("\n\n") || undefined,
@@ -264,7 +268,18 @@ async function respond__(conversationId: string): Promise<void> {
       { recentRepeat: recentRepeat(history) },
     );
 
-    if (channel.type === "telegram" && conversation.kind !== "comment") {
+    // Telegram: ответ по мере написания (если включено и ответ не проверяется перед отправкой)
+    const lastUserMsg = [...history].reverse().find((m) => m.role === "user");
+    const stream =
+      channel.type === "telegram" && conversation.kind === "dm" && config.streaming && !config.answerCheck && config.factGuard !== "block" && !needsApproval(channel, conversation) && !(config.voiceReplies && lastUserMsg?.meta?.kind === "voice")
+        ? await import("@/lib/channels/telegram-stream").then(async (m) => {
+            const { leaksInstructions } = await import("@/lib/agent/guard");
+            const core = compileSystemPrompt({ ...config, rules: "", extraInstructions: "", handoff: "", knowledge: "", greeting: "", description: "" }, { ...client, description: "", brandVoice: "" });
+            return m.telegramStream((channel.config as TelegramConfig).token, conversation.externalId, (d) => !leaksInstructions(d, core));
+          })
+        : null;
+    if (stream) stream.start();
+    else if (channel.type === "telegram" && conversation.kind !== "comment") {
       void sendChatAction((channel.config as TelegramConfig).token, conversation.externalId);
     }
 
@@ -275,8 +290,10 @@ async function respond__(conversationId: string): Promise<void> {
     const toolResults: string[] = [];
     let booked = false;
     for await (const ev of streamChat({ model: config.model, effort: config.effort, system, messages: prepared, tools, webSearch })) {
-      if (ev.type === "text") text += ev.text;
-      else if (ev.type === "tool") {
+      if (ev.type === "text") {
+        text += ev.text;
+        stream?.push(text);
+      } else if (ev.type === "tool") {
         used.push({ name: ev.name, ...(ev.error ? { error: true } : {}) });
         toolResults.push(ev.result);
         if (ev.name === "book_appointment" && !ev.error && ev.result.startsWith("Booked:")) booked = true;
@@ -324,7 +341,11 @@ async function respond__(conversationId: string): Promise<void> {
       const [cur] = await db.select({ context: conversations.context }).from(conversations).where(eq(conversations.id, conversationId));
       await db.update(conversations).set({ context: { ...cur?.context, ratingAskedAt: Date.now() } }).where(eq(conversations.id, conversationId));
     }
-    const actions = all.filter((a) => a.type !== "reason" && a.type !== "ask_rating");
+    // Кнопки быстрых ответов (Telegram, Viber) — под сообщением, не в тексте
+    const buttons = config.quickReplies && (channel.type === "telegram" || channel.type === "viber") ? [...new Set(all.filter((a) => a.type === "button").map((a) => a.value.slice(0, 30)))].slice(0, 4) : [];
+    const actions = all.filter((a) => a.type !== "reason" && a.type !== "ask_rating" && !(buttons.length && a.type === "button"));
+    if (buttons.length) meta = { ...meta, buttons };
+    if (stream) await stream.done();
     if (actions.length) meta = { ...meta, actions };
     // Комментарий, на который не нужно отвечать (реакция, эмодзи, разговор людей между собой), — молчим.
     if (conversation.kind === "comment" && SKIP_RE.test(clean.trim())) {
@@ -386,7 +407,7 @@ async function respond__(conversationId: string): Promise<void> {
             return null;
           })
         : null;
-      const externalId = spoken ? spoken.externalId : await deliver(channel, conversation, reply);
+      const externalId = spoken ? spoken.externalId : await deliver(channel, conversation, reply, { buttons });
       await addMessage(conversationId, "assistant", reply, { meta: { ...meta, handoff, ...(spoken ? { spoken: true } : {}) }, externalId: externalId ?? undefined });
     }
     if (handoff && pendingHandoff) {
@@ -623,6 +644,23 @@ function needsApproval(channel: Pick<Channel, "type" | "config">, conversation: 
 const SKIP_RE = /^\[?SKIP\]?\.?$/i;
 const PLATFORMS: Record<string, string> = { telegram: "Telegram-канале", instagram: "Instagram", threads: "Threads" };
 
+const BUTTONS_NOTE =
+  "# Кнопки\nКогда клиенту удобно выбрать из вариантов (услуга, время, «Да / Нет», следующий шаг), добавь в конце ответа 2–4 метки [[ACTION button: Текст кнопки]] — до 30 знаков каждая. Клиент увидит их кнопками; нажатие придёт тебе его сообщением. Не дублируй варианты списком в тексте и не ставь кнопки в каждый ответ.";
+
+/** Откуда пришёл клиент: реклама, история, кодовое слово, ссылка с меткой — агент начинает с того, что человек уже видел. */
+export function sourceNote(s: ConversationSource | undefined) {
+  if (!s) return undefined;
+  const what =
+    s.kind === "ad"
+      ? `после рекламы${s.title ? ` «${s.title}»` : ""}`
+      : s.kind === "story"
+        ? "ответом на историю компании"
+        : s.kind === "comment"
+          ? `после комментария с кодовым словом «${s.title ?? ""}» (ему уже отправили ответ — он в истории)`
+          : `по ссылке с меткой «${s.ref ?? ""}»`;
+  return `# Откуда клиент\nКлиент написал ${what}. Продолжай с того, что он видел: не спрашивай, откуда он узнал о компании.`;
+}
+
 /** Публичный комментарий под постом: ответ видят все, пост — тема разговора. */
 function commentNote(type: string, postText?: string) {
   return [
@@ -670,6 +708,7 @@ export async function deliver(
   channel: Pick<Channel, "type" | "config">,
   conversation: Pick<Conversation, "externalId" | "kind" | "context">,
   text: string,
+  opts: { buttons?: string[] } = {},
 ): Promise<string | null> {
   switch (channel.type) {
     case "telegram": {
@@ -677,7 +716,7 @@ export async function deliver(
       if (conversation.kind === "comment") {
         return replyInGroup(token, conversation.context?.chatId ?? "", conversation.context?.replyToId ?? "", text);
       }
-      await sendText(token, conversation.externalId, text);
+      await sendText(token, conversation.externalId, text, opts.buttons);
       return null;
     }
     case "instagram": {
@@ -693,6 +732,11 @@ export async function deliver(
     }
     case "email":
       return sendEmailReply(channel.config as EmailConfig, conversation, text);
+    case "viber": {
+      const cfg = channel.config as ViberConfig;
+      const { sendText: viberText } = await import("@/lib/channels/viber");
+      return viberText(cfg.token, conversation.externalId, toPlainText(text), { name: cfg.botName, avatar: cfg.avatar }, opts.buttons?.map((b) => ({ text: b })));
+    }
     case "whatsapp": {
       const { sendWhatsApp } = await import("@/lib/channels/meta/wa-send");
       return sendWhatsApp(channel as Channel, conversation as Conversation, toPlainText(text));

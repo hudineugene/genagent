@@ -6,7 +6,7 @@ import { refresh } from "next/cache";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { agents, channels, clients, type ApiConfig, type EmailConfig, type InstagramConfig, type TelegramConfig, type ThreadsConfig, type WidgetConfig, WIDGET_LANGS, type WhatsAppConfig } from "@/db/schema";
+import { agents, channels, clients, type ApiConfig, type EmailConfig, type InstagramConfig, type TelegramConfig, type ThreadsConfig, type WidgetConfig, WIDGET_LANGS, type WhatsAppConfig, type ViberConfig } from "@/db/schema";
 import { EmailError, GMAIL, pollNow, verifyEmail } from "@/lib/channels/email";
 import { createAuthorizeUrl } from "@/lib/channels/meta/connect";
 import { requireUser } from "@/lib/auth";
@@ -163,6 +163,12 @@ export async function setChannelEnabled(channelId: string, enabled: boolean): Pr
 export async function deleteChannel(channelId: string): Promise<ChannelResult> {
   await requireUser();
   stopPoller(channelId);
+  // Viber: снять вебхук, чтобы бот перестал слать сообщения на удалённый канал
+  const [ch] = await db.select({ type: channels.type, config: channels.config }).from(channels).where(eq(channels.id, channelId));
+  if (ch?.type === "viber") {
+    const { setWebhook } = await import("@/lib/channels/viber");
+    await setWebhook((ch.config as ViberConfig).token, "").catch(() => {});
+  }
   await db.delete(channels).where(eq(channels.id, channelId));
   refresh();
   return { ok: true };
@@ -202,6 +208,22 @@ export async function updateSocialChannel(
     (config as InstagramConfig).since = Math.floor(Date.now() / 1000);
   }
   await db.update(channels).set({ config }).where(eq(channels.id, channelId));
+  refresh();
+  return { ok: true };
+}
+
+const triggerSchema = z
+  .array(z.object({ keyword: z.string().trim().min(1).max(40), dm: z.string().trim().min(1).max(1000), reply: z.string().trim().max(300).default(""), postId: z.string().trim().max(40).optional() }))
+  .max(20);
+
+/** Кодовые слова в комментариях Instagram → личное сообщение автору. */
+export async function saveInstagramTriggers(channelId: string, triggers: z.input<typeof triggerSchema>): Promise<ChannelResult> {
+  await requireUser();
+  const parsed = triggerSchema.safeParse(triggers.filter((t) => t.keyword.trim() || t.dm.trim()));
+  if (!parsed.success) return { error: "invalid" };
+  const [ch] = await db.select().from(channels).where(eq(channels.id, channelId));
+  if (!ch || ch.type !== "instagram") return { error: "not_found" };
+  await db.update(channels).set({ config: { ...(ch.config as InstagramConfig), triggers: parsed.data.map((t) => ({ ...t, postId: t.postId || undefined })) } }).where(eq(channels.id, channelId));
   refresh();
   return { ok: true };
 }
@@ -293,6 +315,46 @@ export async function addWhatsAppChannel(agentId: string, phoneNumberId: string,
   }
   const config: WhatsAppConfig = { phoneNumberId: id, displayPhone: phone.display_phone_number, verifiedName: phone.verified_name, token: tok };
   await db.insert(channels).values({ agentId, clientId: row.client.id, type: "whatsapp", name: phone.display_phone_number, config });
+  refresh();
+  return { ok: true };
+}
+
+/** Viber: бот по токену из партнёрского кабинета; вебхук регистрируется сразу (Viber проверяет адрес). */
+export async function addViberChannel(agentId: string, token: string, welcome: string): Promise<ChannelResult> {
+  await requireUser();
+  const row = await loadAgent(agentId);
+  if (!row) return { error: "not_found" };
+  const tok = token.trim();
+  if (!/^[\w-]{20,80}$/.test(tok)) return { error: "viber_token_format" };
+  const { publicUrl } = await import("@/lib/settings");
+  const base = publicUrl();
+  if (!base) return { error: "no_public_url" };
+  const existing = await db.select({ config: channels.config }).from(channels).where(eq(channels.type, "viber"));
+  if (existing.some((c) => (c.config as ViberConfig).token === tok)) return { error: "viber_token_used" };
+  const v = await import("@/lib/channels/viber");
+  let info: Awaited<ReturnType<typeof v.getAccountInfo>>;
+  try {
+    info = await v.getAccountInfo(tok);
+  } catch (e) {
+    return { error: e instanceof v.ViberError && e.status === 2 ? "viber_token_invalid" : "viber_unreachable" };
+  }
+  const config: ViberConfig = { token: tok, botName: info.name, avatar: info.icon, uri: info.uri, welcome: welcome.trim().slice(0, 500) };
+  const [ch] = await db.insert(channels).values({ agentId, clientId: row.client.id, type: "viber", name: info.name, config }).returning({ id: channels.id });
+  try {
+    await v.setWebhook(tok, `${base}/api/webhooks/viber/${ch.id}`);
+  } catch (e) {
+    await db.delete(channels).where(eq(channels.id, ch.id));
+    return { error: e instanceof Error ? `viber: ${e.message.slice(0, 150)}` : "viber_unreachable" };
+  }
+  refresh();
+  return { ok: true };
+}
+
+export async function updateViberChannel(channelId: string, welcome: string): Promise<ChannelResult> {
+  await requireUser();
+  const [ch] = await db.select().from(channels).where(eq(channels.id, channelId));
+  if (!ch || ch.type !== "viber") return { error: "not_found" };
+  await db.update(channels).set({ config: { ...(ch.config as ViberConfig), welcome: welcome.trim().slice(0, 500) } }).where(eq(channels.id, channelId));
   refresh();
   return { ok: true };
 }

@@ -35,6 +35,8 @@ export function emptyConfig(): AgentConfig {
     answerCheck: true,
     // Раскрытие ИИ обязательно в ЕС со 02.08.2026 — у новых агентов включено
     aiDisclosure: { enabled: true, text: "" },
+    streaming: true,
+    quickReplies: true,
     rules: "",
     handoff: "",
     greeting: "",

@@ -49,8 +49,11 @@ const FIELDS: Field[] = [
   "loyaltyProgramId",
   "logistics",
   "pricing",
+  "payments",
   "learning",
   "aiDisclosure",
+  "streaming",
+  "quickReplies",
 ];
 
 export function VersionsPanel({
@@ -112,6 +115,8 @@ export function VersionsPanel({
       factGuard: b.factGuard,
       answerCheck: b.answerCheck,
       aiDisclosure: b.aiDisclosure,
+      streaming: b.streaming,
+      quickReplies: b.quickReplies,
       calendar: b.sections.calendar,
       toolIds: b.sections.tools,
       webSearch: b.webSearch,
@@ -123,6 +128,7 @@ export function VersionsPanel({
       loyaltyProgramId: b.sections.loyalty,
       logistics: b.deliveryEstimate,
       pricing: b.pricingCalc,
+      payments: b.payments,
       learning: b.learning,
     };
     return map[f];
@@ -159,10 +165,16 @@ export function VersionsPanel({
         return String((c.docTemplateIds ?? []).length || "—");
       case "aiDisclosure":
         return c.aiDisclosure?.enabled ? t.versions.on : t.versions.off;
+      case "streaming":
+        return c.streaming ? t.versions.on : t.versions.off;
+      case "quickReplies":
+        return c.quickReplies ? t.versions.on : t.versions.off;
       case "learning":
         return c.learning ? t.versions.on : t.versions.off;
       case "pricing":
         return c.pricing ? t.versions.on : t.versions.off;
+      case "payments":
+        return c.payments ? t.versions.on : t.versions.off;
       case "logistics":
         return c.logistics ? t.versions.on : t.versions.off;
       case "loyaltyProgramId":

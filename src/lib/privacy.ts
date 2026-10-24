@@ -17,6 +17,7 @@ import {
   loyaltyAccounts,
   loyaltyTx,
   messages,
+  payments,
   reminderLog,
   type Conversation,
 } from "@/db/schema";
@@ -69,7 +70,7 @@ export async function exportPerson(conversationId: string) {
   const [client] = await db.select({ name: clients.name }).from(clients).where(eq(clients.id, person.clientId));
   const chans = await db.select({ id: channels.id, type: channels.type, name: channels.name }).from(channels).where(inArray(channels.id, [...new Set(list.map((c) => c.channelId))]));
   const msgs = ids.length ? await db.select().from(messages).where(inArray(messages.conversationId, ids)).orderBy(asc(messages.createdAt)) : [];
-  const [forms, docs, gen, books, accs, learn, lists, appr] = await Promise.all([
+  const [forms, docs, gen, books, accs, learn, lists, appr, pays] = await Promise.all([
     ids.length ? db.select().from(formResponses).where(inArray(formResponses.conversationId, ids)) : [],
     ids.length ? db.select().from(clientDocuments).where(inArray(clientDocuments.conversationId, ids)) : [],
     ids.length ? db.select().from(generatedDocs).where(inArray(generatedDocs.conversationId, ids)) : [],
@@ -78,6 +79,7 @@ export async function exportPerson(conversationId: string) {
     db.select().from(learners).where(and(eq(learners.clientId, person.clientId), or(...(ids.length ? [inArray(learners.conversationId, ids)] : []), ...(keys.length ? [inArray(learners.contact, keys)] : [])))),
     contactRows(person.clientId, keys),
     ids.length ? db.select().from(approvals).where(inArray(approvals.conversationId, ids)) : [],
+    ids.length ? db.select().from(payments).where(inArray(payments.conversationId, ids)) : [],
   ]);
   const tx = accs.length ? await db.select().from(loyaltyTx).where(inArray(loyaltyTx.accountId, accs.map((a) => a.id))) : [];
   const chanName = new Map(chans.map((c) => [c.id, `${c.type}: ${c.name}`]));
@@ -105,6 +107,7 @@ export async function exportPerson(conversationId: string) {
     learning: learn.map((l) => ({ goal: l.goal, level: l.level, points: l.points, results: l.results })),
     contactLists: lists.map((x) => ({ name: x.name, email: x.email, telegram: x.telegram, phone: x.phone, company: x.company, fields: x.fields, unsubscribed: x.unsubscribed })),
     requests: appr.map((a) => ({ at: a.createdAt.toISOString(), subject: a.subject, status: a.status })),
+    payments: pays.map((x) => ({ at: x.createdAt.toISOString(), amount: x.amount, currency: x.currency, description: x.description, status: x.status })),
   };
 }
 

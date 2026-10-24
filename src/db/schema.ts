@@ -703,6 +703,57 @@ export const clientPricing = sqliteTable("client_pricing", {
 });
 export type ClientPricing = typeof clientPricing.$inferSelect;
 
+export const PAY_PROVIDERS = ["liqpay", "wayforpay", "monobank"] as const;
+export type PayProvider = (typeof PAY_PROVIDERS)[number];
+/** Ключи эквайринга клиента: LiqPay — publicKey/privateKey, WayForPay — merchant/secret/domain, Monobank — token. */
+export type PayCredentials = { publicKey?: string; privateKey?: string; merchant?: string; secret?: string; domain?: string; token?: string };
+/** Приём оплат в диалоге: агент выдаёт ссылку на оплату, банк сообщает о результате. */
+export const clientPayments = sqliteTable("client_payments", {
+  clientId: text("client_id")
+    .primaryKey()
+    .references(() => clients.id, { onDelete: "cascade" }),
+  provider: text("provider", { enum: PAY_PROVIDERS }).notNull(),
+  credentials: text("credentials", { mode: "json" }).$type<PayCredentials>().notNull().default({}),
+  currency: text("currency").notNull().default("UAH"),
+  /** Больше этой суммы агент ссылку не выдаёт (передаёт менеджеру); null — без ограничения */
+  maxAmount: real("max_amount"),
+  /** Сообщение клиенту после оплаты; пусто — стандартное */
+  paidText: text("paid_text").notNull().default(""),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+export type ClientPayments = typeof clientPayments.$inferSelect;
+
+export const PAYMENT_STATUSES = ["created", "paid", "failed", "expired", "refunded"] as const;
+export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
+export const payments = sqliteTable(
+  "payments",
+  {
+    id: id(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    conversationId: text("conversation_id").references(() => conversations.id, { onDelete: "set null" }),
+    agentId: text("agent_id"),
+    provider: text("provider", { enum: PAY_PROVIDERS }).notNull(),
+    /** Номер заказа у банка (наш) */
+    orderId: text("order_id").notNull(),
+    /** Номер счёта у банка (Monobank invoiceId) */
+    externalId: text("external_id"),
+    amount: real("amount").notNull(),
+    currency: text("currency").notNull(),
+    description: text("description").notNull(),
+    status: text("status", { enum: PAYMENT_STATUSES }).notNull().default("created"),
+    url: text("url").notNull(),
+    createdAt: createdAt(),
+    paidAt: integer("paid_at", { mode: "timestamp_ms" }),
+  },
+  (t) => [uniqueIndex("payments_order_idx").on(t.orderId), index("payments_client_idx").on(t.clientId, t.createdAt), index("payments_conv_idx").on(t.conversationId)],
+);
+export type Payment = typeof payments.$inferSelect;
+
 export type ReminderKind = "date" | "status";
 /**
  * Напоминания по таблице из «Данных»: по дате (оплата, доставка, продление — за N дней) или при смене статуса
@@ -1347,7 +1398,13 @@ export type InstagramConfig = {
   approval: boolean;
   /** Время последней проверки комментариев (секунды), для опроса без вебхуков. */
   since?: number;
+  /** Кодовые слова в комментариях → личное сообщение автору (и короткий публичный ответ под комментарием) */
+  triggers?: IgTrigger[];
 };
+/** «Напишите ПРАЙС в комментариях»: слово → сообщение в директ; postId — только под этим постом (пусто — под любым). */
+export type IgTrigger = { keyword: string; dm: string; reply: string; postId?: string };
+/** Откуда пришёл клиент: реклама (Instagram, WhatsApp), ответ на историю, кодовое слово в комментарии, ссылка с меткой */
+export type ConversationSource = { kind: "ad" | "story" | "comment" | "link"; title?: string; ref?: string; url?: string; at: number };
 /** Аккаунт Threads: ответы на реплаи к постам аккаунта. */
 export type ThreadsConfig = {
   threadsUserId: string;
@@ -1415,8 +1472,19 @@ export type WhatsAppConfig = {
   price?: { service: number; template: number };
 };
 export type WaTemplate = { name: string; language: string; category: string; body: string; params: number };
-export type ChannelConfig = TelegramConfig | WidgetConfig | InstagramConfig | ThreadsConfig | EmailConfig | ApiConfig | WhatsAppConfig;
-export const CHANNEL_TYPES = ["telegram", "widget", "instagram", "threads", "email", "api", "whatsapp"] as const;
+/** Viber: бот (Viber Bot API) — токен из кабинета партнёра; вебхук регистрируется при подключении. */
+export type ViberConfig = {
+  token: string;
+  /** Имя и аватар отправителя в сообщениях бота */
+  botName: string;
+  avatar?: string;
+  /** Адрес бота: viber://pa?chatURI=… */
+  uri?: string;
+  /** Приветствие при открытии чата (событие conversation_started) */
+  welcome?: string;
+};
+export type ChannelConfig = TelegramConfig | WidgetConfig | InstagramConfig | ThreadsConfig | EmailConfig | ApiConfig | WhatsAppConfig | ViberConfig;
+export const CHANNEL_TYPES = ["telegram", "widget", "instagram", "threads", "email", "api", "whatsapp", "viber"] as const;
 export type ChannelType = (typeof CHANNEL_TYPES)[number];
 
 /** Канал, через который агент общается с клиентами: Telegram-бот или виджет на сайте. */
@@ -1567,6 +1635,8 @@ export type ConversationContext = {
   /** Разговор продолжен в боте (id разговора там) / пришёл с сайта (id разговора виджета) */
   linkedTo?: string;
   linkedFrom?: string;
+  /** Откуда пришёл клиент (реклама, история, комментарий, ссылка с меткой) — агент учитывает, аналитика считает */
+  source?: ConversationSource;
 };
 
 export type MessageMeta = {
@@ -1602,6 +1672,8 @@ export type MessageMeta = {
   orderNote?: boolean;
   /** Ответ агента ушёл и голосовым */
   spoken?: boolean;
+  /** Кнопки быстрых ответов под сообщением (Telegram, Viber) */
+  buttons?: string[];
   /** Агент дословно пересказывал служебные инструкции — ответ заменён отказом */
   leakBlocked?: boolean;
   /** Утренняя проверка качества: замечание к ответу (или ok — проверен, в порядке) */

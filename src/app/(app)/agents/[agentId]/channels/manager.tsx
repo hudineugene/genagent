@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useState, useSyncExternalStore, useTransition } from "react";
 import Link from "next/link";
-import { AlertTriangle, AtSign, Bot, Camera, Check, Copy, ExternalLink, Eye, Globe, Mail, MessageCircle, Plus, Power, RefreshCw, Send, Trash2 } from "lucide-react";
+import { AlertTriangle, AtSign, Bot, Camera, Check, Copy, ExternalLink, Eye, Globe, Mail, MessageCircle, Phone, Plus, Power, RefreshCw, Send, Trash2 } from "lucide-react";
 import {
   addApiChannel,
   addEmailChannel,
@@ -16,7 +16,7 @@ import {
   updateApiChannel,
   updateSocialChannel,
   updateTelegramChannel,
-  updateWidget, addWhatsAppChannel, saveWhatsAppSettings, syncWhatsAppTemplates } from "@/app/actions/channels";
+  updateWidget, addWhatsAppChannel, saveWhatsAppSettings, syncWhatsAppTemplates, addViberChannel, updateViberChannel, saveInstagramTriggers } from "@/app/actions/channels";
 import { WIDGET_LANGS, type ChannelType, type WidgetConfig } from "@/db/schema";
 import { useI18n } from "@/lib/i18n/client";
 import { Badge, Button, Card, Field, Input, Select, Spinner, Textarea, cx } from "@/components/ui";
@@ -45,10 +45,11 @@ export type ChannelItem = {
     price: { service: number; template: number };
     month: { messages: number; cost: number };
   } | null;
-  social: { dm?: boolean; comments?: boolean; approval: boolean; tokenExpiresAt: number } | null;
+  social: { dm?: boolean; comments?: boolean; approval: boolean; tokenExpiresAt: number; triggers?: { keyword: string; dm: string; reply: string; postId?: string }[] } | null;
   email: { address: string; approval: boolean; fromName: string } | null;
   api: { key: string; label: string; approval: boolean; botNote: string; followUps: boolean; orderNotes: boolean; ratingInvite: boolean } | null;
   telegram: { comments: boolean; approval: boolean; group: { id: number; title: string; channel?: string } | null } | null;
+  viber?: { uri: string; welcome: string } | null;
 };
 
 type SocialReady = { publicUrl: boolean; instagram: boolean; threads: boolean; whatsapp: boolean };
@@ -71,7 +72,7 @@ export function ChannelsManager({
   isAdmin: boolean;
 }) {
   const { t } = useI18n();
-  const [adding, setAdding] = useState<"telegram" | "instagram" | "threads" | "email" | "api" | "whatsapp" | null>(null);
+  const [adding, setAdding] = useState<"telegram" | "instagram" | "threads" | "email" | "api" | "whatsapp" | "viber" | null>(null);
   const [pending, start] = useTransition();
   const errText = (code: string | null | undefined) =>
     code ? (t.channels.errors[code as ErrKey] ?? code) : null;
@@ -96,6 +97,8 @@ export function ChannelsManager({
           <ApiCard key={c.id} c={c} publicUrl={publicUrl} />
         ) : c.type === "whatsapp" ? (
           <WhatsAppCard key={c.id} c={c} />
+        ) : c.type === "viber" ? (
+          <ViberCard key={c.id} c={c} />
         ) : (
           <SocialCard key={c.id} c={c} agentId={agentId} errText={errText} />
         ),
@@ -146,6 +149,13 @@ export function ChannelsManager({
             onClick={() => setAdding(adding === "whatsapp" ? null : "whatsapp")}
           />
           <AddCard
+            icon={<Phone className="size-5" />}
+            title="Viber"
+            desc={t.channels.viberDesc}
+            active={adding === "viber"}
+            onClick={() => setAdding(adding === "viber" ? null : "viber")}
+          />
+          <AddCard
             icon={<Bot className="size-5" />}
             title={t.channels.api}
             desc={t.channels.apiDesc}
@@ -155,6 +165,7 @@ export function ChannelsManager({
         </div>
         {adding === "api" && <ApiForm agentId={agentId} onDone={() => setAdding(null)} />}
         {adding === "whatsapp" && <WhatsAppForm agentId={agentId} ready={socialReady.whatsapp && socialReady.publicUrl} onDone={() => setAdding(null)} />}
+        {adding === "viber" && <ViberForm agentId={agentId} onDone={() => setAdding(null)} errText={errText} />}
         {adding === "email" && <EmailForm agentId={agentId} onDone={() => setAdding(null)} errText={errText} />}
         {adding === "telegram" && <TelegramForm agentId={agentId} onDone={() => setAdding(null)} errText={errText} />}
         {(adding === "instagram" || adding === "threads") && (
@@ -614,6 +625,58 @@ function Toggle({
   );
 }
 
+type Trigger = { keyword: string; dm: string; reply: string; postId?: string };
+
+/** «Напишите ПРАЙС в комментариях» — слово → сообщение в директ автору и короткий ответ под комментарием. */
+function IgTriggers({ id, initial }: { id: string; initial: Trigger[] }) {
+  const { t } = useI18n();
+  const ch = t.channels;
+  const [list, setList] = useState<Trigger[]>(initial);
+  const [msg, setMsg] = useState<{ error?: boolean; text: string } | null>(null);
+  const [pending, start] = useTransition();
+  const upd = (i: number, patch: Partial<Trigger>) => (setList(list.map((x, j) => (j === i ? { ...x, ...patch } : x))), setMsg(null));
+  return (
+    <div className="space-y-3 rounded-xl border border-border p-4">
+      <div>
+        <div className="text-sm font-semibold">{ch.igTriggers}</div>
+        <p className="text-xs text-muted">{ch.igTriggersHint}</p>
+      </div>
+      {list.map((x, i) => (
+        <div key={i} className="grid gap-2 rounded-lg bg-surface-2/50 p-3 sm:grid-cols-[160px_minmax(0,1fr)_auto]">
+          <Input placeholder={ch.igTriggerKeyword} value={x.keyword} maxLength={40} onChange={(e) => upd(i, { keyword: e.target.value })} />
+          <div className="space-y-2">
+            <Textarea rows={2} placeholder={ch.igTriggerDm} value={x.dm} maxLength={1000} onChange={(e) => upd(i, { dm: e.target.value })} />
+            <Input placeholder={ch.igTriggerReply} value={x.reply} maxLength={300} onChange={(e) => upd(i, { reply: e.target.value })} />
+            <Input placeholder={ch.igTriggerPost} value={x.postId ?? ""} maxLength={40} onChange={(e) => upd(i, { postId: e.target.value })} />
+          </div>
+          <Button size="sm" variant="ghost" className="hover:text-danger" onClick={() => setList(list.filter((_, j) => j !== i))}>
+            <Trash2 className="size-4" />
+          </Button>
+        </div>
+      ))}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" variant="secondary" onClick={() => setList([...list, { keyword: "", dm: "", reply: ch.igTriggerReplyDefault }])}>
+          <Plus className="size-4" />
+          {ch.igTriggerAdd}
+        </Button>
+        <Button
+          size="sm"
+          disabled={pending}
+          onClick={() =>
+            start(async () => {
+              const r = await saveInstagramTriggers(id, list);
+              setMsg(r.ok ? { text: t.common.saved } : { error: true, text: ch.igTriggerInvalid });
+            })
+          }
+        >
+          {t.common.save}
+        </Button>
+        {msg && <span className={msg.error ? "text-sm text-danger" : "text-sm text-success"}>{msg.text}</span>}
+      </div>
+    </div>
+  );
+}
+
 function SocialCard({
   c,
   agentId,
@@ -664,6 +727,7 @@ function SocialCard({
         {!isIg && <Toggle label={ch.threadsReplies} hint={ch.threadsRepliesHint} checked disabled onChange={() => {}} />}
         <Toggle label={ch.approval} hint={ch.approvalHint} checked={s.approval} disabled={pending} onChange={(v) => set({ approval: v })} />
       </div>
+      {isIg && <IgTriggers id={c.id} initial={s.triggers ?? []} />}
       <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted">
         <span className={cx(days !== null && days < 7 && "text-danger")}>
           {ch.tokenUntil} {s.tokenExpiresAt ? fmt.format(new Date(s.tokenExpiresAt)) : "—"}
@@ -806,6 +870,74 @@ function WhatsAppForm({ agentId, ready, onDone }: { agentId: string; ready: bool
           </Button>
         </div>
       </form>
+    </Card>
+  );
+}
+
+function ViberForm({ agentId, onDone, errText }: { agentId: string; onDone: () => void; errText: (c: string | null | undefined) => string | null }) {
+  const { t } = useI18n();
+  const ch = t.channels;
+  const [token, setToken] = useState("");
+  const [welcome, setWelcome] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  return (
+    <Card className="mt-3 p-5">
+      <form
+        className="space-y-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          setError(null);
+          start(async () => {
+            const r = await addViberChannel(agentId, token, welcome);
+            if (r.ok) onDone();
+            else setError(r.error ?? "error");
+          });
+        }}
+      >
+        <p className="text-sm text-muted">{ch.viberHow}</p>
+        <Field label={ch.viberToken}>
+          <Input value={token} onChange={(e) => setToken(e.target.value)} type="password" autoComplete="new-password" className="font-mono" required />
+        </Field>
+        <Field label={ch.viberWelcome} hint={ch.viberWelcomeHint}>
+          <Textarea rows={2} maxLength={500} value={welcome} onChange={(e) => setWelcome(e.target.value)} />
+        </Field>
+        <div className="flex items-center justify-end gap-3">
+          {error && <p className="text-sm text-danger">{errText(error)}</p>}
+          <Button disabled={pending || !token.trim()}>
+            {pending ? <Spinner /> : <Plus className="size-4" />}
+            {ch.viberConnect}
+          </Button>
+        </div>
+      </form>
+    </Card>
+  );
+}
+
+function ViberCard({ c }: { c: ChannelItem }) {
+  const { t } = useI18n();
+  const ch = t.channels;
+  const [welcome, setWelcome] = useState(c.viber?.welcome ?? "");
+  const [saved, setSaved] = useState(false);
+  const [pending, start] = useTransition();
+  return (
+    <Card className="space-y-3 p-5">
+      <ChannelHeader c={c} icon={<Phone className="size-5" />} title={`Viber · ${c.name}`} />
+      {c.viber?.uri && (
+        <a href={`viber://pa?chatURI=${encodeURIComponent(c.viber.uri)}`} className="inline-flex items-center gap-1 text-sm text-accent hover:underline">
+          <ExternalLink className="size-3.5" />
+          {ch.viberOpen}
+        </a>
+      )}
+      <Field label={ch.viberWelcome} hint={ch.viberWelcomeHint}>
+        <Textarea rows={2} maxLength={500} value={welcome} onChange={(e) => (setWelcome(e.target.value), setSaved(false))} />
+      </Field>
+      <div className="flex items-center gap-3">
+        <Button size="sm" variant="secondary" disabled={pending} onClick={() => start(async () => setSaved(Boolean((await updateViberChannel(c.id, welcome)).ok)))}>
+          {ch.viberSave}
+        </Button>
+        {saved && <Check className="size-4 text-success" />}
+      </div>
     </Card>
   );
 }

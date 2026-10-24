@@ -88,6 +88,10 @@ export async function handleWhatsApp(body: { entry?: { changes?: Change[] }[] })
             if (seen) continue;
             const name = change.value.contacts?.find((c) => c.wa_id === m.from)?.profile?.name ?? "";
             const { conversation } = await upsertConversation(channel, m.from, { name, handle: `+${m.from}` });
+            if (m.referral) {
+              const { setSource } = await import("@/lib/channels/meta/inbound");
+              await setSource(conversation, { kind: m.referral.source_type === "ad" ? "ad" : "link", title: m.referral.headline, ref: m.referral.source_id, url: m.referral.source_url, at: Date.now() });
+            }
             const msg = await addMessage(conversation.id, "user", text.slice(0, 4000), { externalId: `wa:${m.id}` });
             void markRead(cfg.token, cfg.phoneNumberId, m.id);
             await readMedia(cfg, m, msg.id, conversation).catch((e) => console.error("whatsapp media failed", e));

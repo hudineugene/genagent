@@ -10,6 +10,7 @@ import { AnalyticsCharts } from "./charts";
 import { ClientSelect } from "@/components/client-select";
 import { agentFunnels } from "@/lib/agent/funnel";
 import { InfoHint } from "@/components/hint";
+import { resolutionStats, sourceStats } from "@/lib/agent/resolution";
 
 const PERIODS = [7, 30, 90] as const;
 
@@ -134,6 +135,9 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
   };
 
   const funnels = (await agentFunnels(from.getTime())).filter((f) => !clientId || f.clientId === clientId);
+  const [resolution, sources] = await Promise.all([resolutionStats(from, clientId), sourceStats(from, clientId)]);
+  const pct = (v: number | null) => (v === null ? "—" : `${Math.round(v * 100)}%`);
+  const R = t.analytics.resolution;
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <PageHeader title={t.analytics.title} />
@@ -179,6 +183,27 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
         conversations={keys.map((k) => ({ key: k.key, label: k.label, value: convMap.get(k.key) ?? 0 }))}
         costs={keys.map((k) => ({ key: k.key, label: k.label, value: Math.round((costMap.get(k.key) ?? 0) * 1000) / 1000 }))}
       />
+
+      {resolution.all.total > 0 && (
+        <Card className="space-y-4 p-5">
+          <h3 className="flex items-center gap-1 text-sm font-semibold">
+            {R.title}
+            <InfoHint>{R.hint}</InfoHint>
+          </h3>
+          <div className="flex flex-wrap items-end gap-x-8 gap-y-3">
+            <div>
+              <div className="text-3xl font-semibold text-accent">{pct(resolution.all.rate)}</div>
+              <div className="text-xs text-muted">{R.rate}</div>
+            </div>
+            {(["confirmed", "assumed", "returned", "escalated", "open"] as const).map((k) => (
+              <div key={k} title={R.hints[k]}>
+                <div className="text-xl font-semibold tabular-nums">{resolution.all[k]}</div>
+                <div className="text-xs text-muted">{R.labels[k]}</div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {funnels.length > 0 && (
         <Card className="space-y-4 p-5">
@@ -232,6 +257,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
                 <th className="py-2 pr-3 text-right font-medium">{t.analytics.conversations}</th>
                 <th className="py-2 pr-3 text-right font-medium">{t.analytics.agentReplies}</th>
                 <th className="py-2 pr-3 text-right font-medium">{t.analytics.handoffs}</th>
+                <th className="py-2 pr-3 text-right font-medium">{R.short}</th>
                 <th className="py-2 pr-3 text-right font-medium">{t.analytics.spend}</th>
                 <th className="py-2 text-right font-medium">{t.analytics.monthBudget}</th>
               </tr>
@@ -257,6 +283,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
                       <td className="py-2 pr-3 text-right tabular-nums">{Number(a.conversations)}</td>
                       <td className="py-2 pr-3 text-right tabular-nums">{Number(a.replies)}</td>
                       <td className="py-2 pr-3 text-right tabular-nums">{Number(a.handoffs)}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums">{pct(resolution.byAgent.get(a.id)?.rate ?? null)}</td>
                       <td className="py-2 pr-3 text-right tabular-nums">{money(usageByAgent.get(a.id) ?? 0)}</td>
                       <td className={cx("py-2 text-right tabular-nums", over && "font-semibold text-danger")}>
                         {money(month)}
@@ -289,6 +316,30 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
               </table>
             )}
           </Card>
+          {sources.some((s) => s.kind !== "direct") && (
+            <Card className="p-5">
+              <h3 className="mb-3 flex items-center gap-1 text-sm font-semibold">
+                {R.sourcesTitle}
+                <InfoHint>{R.sourcesHint}</InfoHint>
+              </h3>
+              <table className="w-full text-sm">
+                <tbody>
+                  {sources
+                    .sort((a, b) => b.conversations - a.conversations)
+                    .map((s) => (
+                      <tr key={`${s.kind}:${s.title}`} className="border-b border-border last:border-0">
+                        <td className="py-1.5">
+                          {R.kinds[s.kind as keyof typeof R.kinds] ?? s.kind}
+                          {s.title && <span className="text-muted"> · {s.title}</span>}
+                          {s.paid > 0 && <div className="text-xs text-success">💳 {s.paid} · {s.revenue}</div>}
+                        </td>
+                        <td className="py-1.5 text-right align-top tabular-nums">{s.conversations}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </Card>
+          )}
           <Card className="p-5">
             <h3 className="mb-3 text-sm font-semibold">{t.analytics.bySource}</h3>
             {bySource.length === 0 ? (

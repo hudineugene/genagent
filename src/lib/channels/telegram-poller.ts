@@ -99,13 +99,19 @@ export async function handleUpdate(channelId: string, u: TgUpdate) {
   });
 
   const text = messageText(m);
+  // Ссылка t.me/бот?start=метка (реклама, QR, сайт): метка — источник клиента
+  const start = /^\/start(?:\s+([\w-]{1,64}))?$/.exec(text.trim());
+  if (start?.[1]) {
+    const { setSource } = await import("@/lib/channels/meta/inbound");
+    await setSource(conversation, { kind: "link", ref: start[1], at: Date.now() });
+  }
   const msg = await addMessage(conversation.id, "user", text);
   // Файл или фото: агент читает документ / получает описание фото (до ответа)
   await readAttachment(channel, agent, conversation.id, msg.id, m).catch((e) => console.error("telegram attachment failed", e));
 
   // Команда запуска бота: отвечаем приветствием агента, если оно задано.
   const greeting = agentConfigSchema.safeParse(agent.config).data?.greeting?.trim();
-  if (text.trim() === "/start" && greeting && agent.status === "active" && conversation.mode === "ai") {
+  if (start && greeting && agent.status === "active" && conversation.mode === "ai") {
     await addMessage(conversation.id, "assistant", greeting);
     await deliver(channel, conversation, greeting);
     return;

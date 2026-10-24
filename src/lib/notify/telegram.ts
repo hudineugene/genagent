@@ -431,6 +431,21 @@ export async function notifyApproval(a: Approval, approvers: "owners" | "team" |
   return n;
 }
 
+/** Клиент оплатил по ссылке агента (или оплата отклонена / возвращена) — команде и владельцам бизнеса. */
+export async function notifyPayment(p: { clientId: string; conversationId: string | null; amount: number; currency: string; description: string; status: string }) {
+  try {
+    const s = await getNotifySettings();
+    const row = p.conversationId ? await conversationInfo(p.conversationId) : null;
+    const [c] = await db.select({ name: clients.name }).from(clients).where(eq(clients.id, p.clientId));
+    const icon = p.status === "paid" ? "💳 <b>Оплата получена</b>" : p.status === "refunded" ? "↩️ <b>Возврат оплаты</b>" : "⚠️ <b>Оплата не прошла</b>";
+    const html = `${icon}: <b>${p.amount} ${esc(p.currency)}</b>\n${row ? `${header(row)} · ${esc(row.agent.name)}` : c ? `<b>${esc(c.name)}</b>` : ""}\n${esc(p.description)}`;
+    await broadcast(html, p.conversationId ? openLink(s, p.conversationId) : undefined);
+    if (p.status === "paid") await sendToOwners(p.clientId, html);
+  } catch (e) {
+    console.error("notify payment failed", e);
+  }
+}
+
 /** Сообщение сотрудникам студии (подписчикам бота уведомлений). */
 export async function sendToTeam(html: string) {
   await broadcast(html);

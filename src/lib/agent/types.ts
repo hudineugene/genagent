@@ -68,6 +68,8 @@ export const agentConfigSchema = z.object({
   tableIds: z.array(z.string()).max(20).optional(),
   /** Расчёт КП по правилам цен клиента (прайс, скидки, НДС) */
   pricing: z.boolean().optional(),
+  /** Ссылки на оплату в диалоге (эквайринг клиента: LiqPay, WayForPay, Monobank) и проверка оплаты */
+  payments: z.boolean().optional(),
   /** Обучение: курсы клиента в чате (уроки, тесты, баллы, личная программа) */
   learning: z.boolean().optional(),
   /** Расчёт доставки: расстояние и время в пути от склада клиента (Google Maps) */
@@ -112,6 +114,10 @@ export const agentConfigSchema = z.object({
   answerCheck: z.boolean().optional(),
   /** Раскрытие ИИ (EU AI Act, ст. 50): первая строка первого ответа в разговоре; text — свой текст, {company} — название */
   aiDisclosure: z.object({ enabled: z.boolean(), text: z.string().max(500).default("") }).optional(),
+  /** Telegram: ответ появляется по мере написания (черновик sendMessageDraft), затем — обычным сообщением */
+  streaming: z.boolean().optional(),
+  /** Кнопки быстрых ответов под сообщением агента (Telegram, Viber): 2–4 варианта, нажатие — ответ клиента */
+  quickReplies: z.boolean().optional(),
   /** Контроль качества ответов сотрудников (оценка после отправки) */
   operatorReview: z.boolean().optional(),
   calendar: calendarConfigSchema.prefault({}),

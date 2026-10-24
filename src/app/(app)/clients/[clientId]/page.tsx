@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, asc, count, desc, eq, inArray } from "drizzle-orm";
-import { Activity, BarChart3, BellRing, BookOpenCheck, GraduationCap, Repeat, Users, Blocks, BookOpen, Bot, Calculator, LayoutDashboard, ClipboardList, ClipboardCheck, FileBarChart2, FileText, Gift, Mail, Mic, PenLine, Route, Truck, Table2, Megaphone, Plus, Settings, Wrench } from "lucide-react";
+import { Activity, BarChart3, BellRing, BookOpenCheck, GraduationCap, Repeat, Users, Blocks, BookOpen, Bot, Calculator, CreditCard, LayoutDashboard, ClipboardList, ClipboardCheck, FileBarChart2, FileText, Gift, Mail, Mic, PenLine, Route, Truck, Table2, Megaphone, Plus, Settings, Wrench } from "lucide-react";
 import { db } from "@/db";
-import { agents, approvals, campaigns, candidates, courses, incidents, learners, lessons, monitors, trips, clientRepeat, onboardingPlans, onboardings, reminders, vacancies, clientPricing, routingRules, contactLists, contacts, outreach, outreachMessages, channels, clientLogistics, contentItems, loyaltyAccounts, loyaltyPrograms, loyaltyTx, meetings, clientDocTypes, clientDocuments, clientForms, dataTables, clientIntegrations, clientTools, clients, conversations, docTemplates, formResponses, generatedDocs, kbSources, knowledgeGaps, routines } from "@/db/schema";
+import { agents, approvals, campaigns, candidates, courses, incidents, learners, lessons, monitors, trips, clientRepeat, onboardingPlans, onboardings, reminders, vacancies, clientPricing, clientPayments, payments, routingRules, contactLists, contacts, outreach, outreachMessages, channels, clientLogistics, contentItems, loyaltyAccounts, loyaltyPrograms, loyaltyTx, meetings, clientDocTypes, clientDocuments, clientForms, dataTables, clientIntegrations, clientTools, clients, conversations, docTemplates, formResponses, generatedDocs, kbSources, knowledgeGaps, routines } from "@/db/schema";
 import { getT } from "@/lib/i18n/server";
 import { findModel } from "@/lib/models";
 import type { Dict, Locale } from "@/lib/i18n";
@@ -25,6 +25,7 @@ import { LogisticsManager } from "./logistics";
 import { OutreachManager } from "./outreach";
 import { RoutingManager } from "./routing";
 import { PricingManager } from "./pricing";
+import { PaymentsManager } from "./payments";
 import { RemindersManager, RepeatManager } from "./reminders";
 import { HiringManager, OnboardingManager } from "./onboarding";
 import { MonitorManager } from "./monitor";
@@ -51,9 +52,9 @@ export default async function ClientPage({
   const [client] = await db.select().from(clients).where(eq(clients.id, clientId));
   if (!client) notFound();
 
-  const SECTIONS = ["kb", "data", "modules", "outreach", "routing", "pricing", "reminders", "repeat", "onboarding", "hiring", "monitor", "learning", "tools", "forms", "documents", "loyalty", "logistics", "approvals", "campaigns", "content", "meetings", "routines"] as const;
+  const SECTIONS = ["kb", "data", "modules", "outreach", "routing", "pricing", "payments", "reminders", "repeat", "onboarding", "hiring", "monitor", "learning", "tools", "forms", "documents", "loyalty", "logistics", "approvals", "campaigns", "content", "meetings", "routines"] as const;
   const active = (SECTIONS as readonly string[]).includes(tab ?? "") ? (tab as (typeof SECTIONS)[number]) : "agents";
-  const [[{ agentsCount }], [{ kbCount }], [{ toolsCount }], [{ campaignsCount }], [{ formsCount }], [{ routinesCount }], [{ docTypesCount }], [{ templatesCount }], [{ tablesCount }], [{ pendingApprovals }], [{ approvalsCount }], teamAgents, [{ contentCount }], [{ meetingsCount }], [{ programsCount }], [{ outsCount }], [logistics], agentConfigs, [{ routingCount }], [pricingRow], [{ remindersCount }], [{ onboardingCount }], [{ vacanciesCount }], [{ monitorsCount }], [{ openIncidents }], [{ coursesCount }], [{ outreachCount }], [repeatRow]] = await Promise.all([
+  const [[{ agentsCount }], [{ kbCount }], [{ toolsCount }], [{ campaignsCount }], [{ formsCount }], [{ routinesCount }], [{ docTypesCount }], [{ templatesCount }], [{ tablesCount }], [{ pendingApprovals }], [{ approvalsCount }], teamAgents, [{ contentCount }], [{ meetingsCount }], [{ programsCount }], [{ outsCount }], [logistics], agentConfigs, [{ routingCount }], [pricingRow], [{ remindersCount }], [{ onboardingCount }], [{ vacanciesCount }], [{ monitorsCount }], [{ openIncidents }], [{ coursesCount }], [{ outreachCount }], [repeatRow], [payRow]] = await Promise.all([
     db.select({ agentsCount: count() }).from(agents).where(eq(agents.clientId, clientId)),
     db.select({ kbCount: count() }).from(kbSources).where(eq(kbSources.clientId, clientId)),
     db.select({ toolsCount: count() }).from(clientTools).where(eq(clientTools.clientId, clientId)),
@@ -82,6 +83,7 @@ export default async function ClientPage({
     db.select({ coursesCount: count() }).from(courses).where(eq(courses.clientId, clientId)),
     db.select({ outreachCount: count() }).from(contactLists).where(eq(contactLists.clientId, clientId)),
     db.select({ tableId: clientRepeat.tableId }).from(clientRepeat).where(eq(clientRepeat.clientId, clientId)),
+    db.select({ provider: clientPayments.provider }).from(clientPayments).where(eq(clientPayments.clientId, clientId)),
   ]);
 
   const base = `/clients/${client.id}`;
@@ -95,6 +97,7 @@ export default async function ClientPage({
     { group: "agent", key: "pricing", icon: Calculator, title: t.pricing.tab, text: t.ws.mod.pricing, n: pricingRow?.tableId ? 1 : 0, used: used((c) => Boolean(c.pricing)) },
     { group: "agent", key: "logistics", icon: Truck, title: t.logistics.tab, text: t.ws.mod.logistics, n: logistics?.base ? 1 : 0, used: used((c) => Boolean(c.logistics)) },
     { group: "agent", key: "routing", icon: Route, title: t.routing.tab, text: t.ws.mod.routing, n: routingCount, used: 0, agentless: true },
+    { group: "sales", key: "payments", icon: CreditCard, title: t.payments.tab, text: t.ws.mod.payments, n: payRow ? 1 : 0, used: used((c) => Boolean(c.payments)) },
     { group: "sales", key: "campaigns", icon: Megaphone, title: t.campaigns.tab, text: t.ws.mod.campaigns, n: campaignsCount, used: 0, agentless: true },
     { group: "sales", key: "outreach", icon: Mail, title: t.outreach.tab, text: t.ws.mod.outreach, n: outreachCount, used: 0, agentless: true },
     { group: "sales", key: "reminders", icon: BellRing, title: t.reminders.tab, text: t.ws.mod.reminders, n: remindersCount, used: 0, agentless: true },
@@ -208,6 +211,8 @@ export default async function ClientPage({
         <HiringTab clientId={client.id} />
       ) : active === "pricing" ? (
         <PricingTab clientId={client.id} />
+      ) : active === "payments" ? (
+        <PaymentsTab clientId={client.id} />
       ) : active === "routing" ? (
         <RoutingTab clientId={client.id} />
       ) : active === "outreach" ? (
@@ -489,6 +494,59 @@ async function PricingTab({ clientId }: { clientId: string }) {
         currency: p?.currency ?? "€",
         notes: p?.notes ?? "",
       }}
+    />
+  );
+}
+
+async function PaymentsTab({ clientId }: { clientId: string }) {
+  const { maskKey } = await import("@/lib/keys");
+  const since = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  const [[cfg], list] = await Promise.all([
+    db.select().from(clientPayments).where(eq(clientPayments.clientId, clientId)),
+    db
+      .select({ p: payments, contact: conversations.contactName })
+      .from(payments)
+      .leftJoin(conversations, eq(conversations.id, payments.conversationId))
+      .where(eq(payments.clientId, clientId))
+      .orderBy(desc(payments.createdAt))
+      .limit(50),
+  ]);
+  const month = list.filter((x) => x.p.createdAt >= since);
+  const paid = month.filter((x) => x.p.status === "paid");
+  const sums = new Map<string, number>();
+  for (const x of paid) sums.set(x.p.currency, (sums.get(x.p.currency) ?? 0) + x.p.amount);
+  const c = cfg?.credentials ?? {};
+  return (
+    <PaymentsManager
+      clientId={clientId}
+      initial={
+        cfg
+          ? {
+              provider: cfg.provider,
+              publicKey: c.publicKey ?? "",
+              merchant: c.merchant ?? "",
+              domain: c.domain ?? "",
+              privateKeyMask: c.privateKey ? maskKey(c.privateKey) : "",
+              secretMask: c.secret ? maskKey(c.secret) : "",
+              tokenMask: c.token ? maskKey(c.token) : "",
+              currency: cfg.currency as "UAH" | "USD" | "EUR",
+              maxAmount: cfg.maxAmount,
+              paidText: cfg.paidText,
+              enabled: cfg.enabled,
+            }
+          : null
+      }
+      month={{ paid: paid.length, links: month.length, sum: [...sums].map(([cur, n]) => `${Math.round(n * 100) / 100} ${cur}`).join(" + ") }}
+      list={list.map((x) => ({
+        id: x.p.id,
+        at: x.p.createdAt.toLocaleString("ru-RU", { timeZone: "Europe/Kyiv", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }),
+        amount: x.p.amount,
+        currency: x.p.currency,
+        description: x.p.description,
+        status: x.p.status,
+        contact: x.contact ?? "",
+        conversationId: x.p.conversationId,
+      }))}
     />
   );
 }

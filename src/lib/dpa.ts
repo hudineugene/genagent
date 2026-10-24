@@ -1,7 +1,7 @@
 import "server-only";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { agents, channels, clientLogistics, clients } from "@/db/schema";
+import { agents, channels, clientLogistics, clientPayments, clients } from "@/db/schema";
 
 /**
  * Список обработчиков (субпроцессоров) данных клиента — по тому, что у него реально подключено, и шаблон договора
@@ -24,8 +24,14 @@ export async function subprocessors(clientId: string): Promise<Subprocessor[]> {
   if (usesOpenAi) list.push({ name: "OpenAI, L.L.C.", purpose: "Расшифровка и озвучка голосовых, картинки", data: "Голосовые сообщения, тексты для озвучки", location: "США (стандартные договорные условия ЕС)" });
   if (configs.some((c) => c.model?.startsWith("openrouter:")) || client.apiKeys.openrouter) list.push({ name: "OpenRouter, Inc.", purpose: "Доступ к другим моделям ИИ", data: "Текст сообщений", location: "США" });
   if (types.has("telegram") || types.has("api")) list.push({ name: "Telegram Messenger Inc.", purpose: "Канал общения, уведомления сотрудникам", data: "Сообщения, имя и ник пользователя", location: "ОАЭ / Нидерланды" });
+  if (types.has("viber")) list.push({ name: "Viber Media S.à r.l.", purpose: "Канал Viber", data: "Сообщения, имя профиля, идентификатор пользователя", location: "Люксембург (ЕС)" });
   if (types.has("whatsapp") || types.has("instagram") || types.has("threads")) list.push({ name: "Meta Platforms Ireland Ltd.", purpose: "Каналы WhatsApp, Instagram, Threads", data: "Сообщения, номер телефона, имя профиля", location: "Ирландия (ЕС)" });
   if (configs.some((c) => c.calendar?.enabled) || logi?.baseAddress || client.apiKeys.googleMaps) list.push({ name: "Google LLC", purpose: "Календарь записи, Google Таблицы, маршруты", data: "Имя, контакт, время записи, адреса доставки", location: "США / ЕС" });
+  const [pay] = await db.select({ provider: clientPayments.provider, enabled: clientPayments.enabled }).from(clientPayments).where(eq(clientPayments.clientId, clientId));
+  if (pay?.enabled) {
+    const bank = { liqpay: "АО КБ «ПриватБанк» (LiqPay)", wayforpay: "ООО «Вей Фор Пей» (WayForPay)", monobank: "АО «Универсал Банк» (monobank)" }[pay.provider];
+    list.push({ name: bank, purpose: "Приём оплат по ссылке", data: "Сумма, назначение и номер заказа; данные карты обрабатывает только банк", location: "Украина" });
+  }
   if (types.has("email")) list.push({ name: "Почтовый сервис бизнеса (IMAP/SMTP)", purpose: "Канал «почта»", data: "Письма и адреса", location: "по договору бизнеса с почтовым сервисом" });
   list.push({ name: "[Хостинг-провайдер сервера студии]", purpose: "Хранение базы и файлов, работа программы", data: "Все данные выше", location: "[страна]" });
   return list;

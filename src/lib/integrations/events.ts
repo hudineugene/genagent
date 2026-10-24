@@ -39,6 +39,7 @@ export type EventPayload = {
   document?: { type: string; filename: string; fields: Record<string, string>; summary: string };
   meeting?: { title: string; kind: string; summary: string; tasks: { who: string; what: string; due: string }[]; score: number | null };
   points?: { program: string; contact: string; delta: number; balance: number; reason: string };
+  payment?: { amount: number; currency: string; description: string; status: string; provider: string; orderId: string };
 };
 
 export type EventInput = {
@@ -55,6 +56,7 @@ export type EventInput = {
   document?: EventPayload["document"];
   meeting?: EventPayload["meeting"];
   points?: EventPayload["points"];
+  payment?: EventPayload["payment"];
 };
 
 const LABELS: Record<IntegrationEventType, string> = {
@@ -67,6 +69,7 @@ const LABELS: Record<IntegrationEventType, string> = {
   document: "Документ",
   meeting: "Встреча",
   points: "Баллы",
+  payment: "Оплата",
 };
 
 export const SHEET_HEADER = ["Дата", "Событие", "Агент", "Канал", "Клиент", "Контакт", "Температура", "Данные клиента", "Подробности", "Диалог"];
@@ -107,6 +110,7 @@ async function buildPayload(event: IntegrationEventType, input: EventInput): Pro
     ...(input.document ? { document: input.document } : {}),
     ...(input.meeting ? { meeting: input.meeting } : {}),
     ...(input.points ? { points: input.points } : {}),
+    ...(input.payment ? { payment: input.payment } : {}),
   };
 }
 
@@ -128,6 +132,8 @@ export function sheetRow(p: EventPayload): string[] {
             ? `${p.meeting.summary}${p.meeting.tasks.length ? ` · Задачи: ${p.meeting.tasks.map((t) => `${t.who ? `${t.who}: ` : ""}${t.what}${t.due ? ` (до ${t.due})` : ""}`).join("; ")}` : ""}${p.meeting.score != null ? ` · оценка ${p.meeting.score}/10` : ""}`
           : p.event === "points" && p.points
             ? `${p.points.delta > 0 ? "+" : ""}${p.points.delta} · баланс ${p.points.balance}${p.points.reason ? ` · ${p.points.reason}` : ""}`
+          : p.event === "payment" && p.payment
+            ? `${p.payment.amount} ${p.payment.currency} · ${p.payment.description} · ${p.payment.status} · ${p.payment.orderId}`
           : p.event === "form" && p.form
             ? `${p.form.name}: ${Object.entries(p.form.answers).map(([k, v]) => `${k}: ${v}`).join("; ")}${p.form.score != null ? ` · баллы ${p.form.score}/${p.form.maxScore}` : ""}`
             : (p.summary ?? p.lead?.reason ?? p.reason ?? "");

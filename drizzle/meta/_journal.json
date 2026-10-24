@@ -260,6 +260,13 @@
       "when": 1792900000000,
       "tag": "0036_stage0",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "6",
+      "when": 1792950000000,
+      "tag": "0037_payments",
+      "breakpoints": true
     }
   ]
 }

@@ -85,6 +85,17 @@ export async function sendDm(token: string, recipientId: string, text: string) {
   return last;
 }
 
+/** Личное сообщение автору комментария (private reply): одно на комментарий, в течение 7 дней после него. */
+export async function sendPrivateReply(token: string, commentId: string, text: string) {
+  const r = await metaFetch<{ message_id: string; recipient_id?: string }>(`${GRAPH()}/${V}/me/messages`, {
+    method: "POST",
+    token,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ recipient: { comment_id: commentId }, message: { text: text.slice(0, 1000) } }),
+  });
+  return r;
+}
+
 /** Публичный ответ на комментарий (только на комментарии верхнего уровня). */
 export async function replyToComment(token: string, commentId: string, text: string) {
   const r = await metaFetch<{ id: string }>(`${GRAPH()}/${V}/${commentId}/replies`, {

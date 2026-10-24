@@ -2,18 +2,29 @@ import { after } from "next/server";
 import type { InstagramConfig } from "@/db/schema";
 import { getMetaSettings } from "@/lib/settings";
 import { validSignature, verifyChallenge } from "@/lib/channels/meta/webhook";
-import { findChannelByAccount, handleInstagramComment, handleInstagramDm } from "@/lib/channels/meta/inbound";
+import { findChannelByAccount, handleInstagramComment, handleInstagramDm, igSource } from "@/lib/channels/meta/inbound";
 import { getMedia } from "@/lib/channels/meta/instagram";
 import { markWebhook } from "@/lib/channels/health";
 
 export const GET = verifyChallenge;
+
+type IgReferral = { ref?: string; source?: string; type?: string; ad_id?: string; ads_context_data?: { ad_title?: string; post_id?: string } };
+type IgMessage = {
+  mid: string;
+  text?: string;
+  is_echo?: boolean;
+  attachments?: { type?: string; payload?: { url?: string } }[];
+  reply_to?: { story?: { url?: string; id?: string } };
+  referral?: IgReferral;
+};
 
 type Entry = {
   id: string;
   messaging?: {
     sender: { id: string };
     recipient: { id: string };
-    message?: { mid: string; text?: string; is_echo?: boolean; attachments?: unknown[] };
+    message?: IgMessage;
+    referral?: IgReferral;
   }[];
   changes?: {
     field: string;
@@ -49,12 +60,14 @@ export async function POST(req: Request) {
       const cfg = channel.config as InstagramConfig;
       try {
         for (const m of entry.messaging ?? []) {
-          if (!m.message || m.message.is_echo) continue;
-          await handleInstagramDm(channel, {
-            senderId: m.sender.id,
-            mid: m.message.mid,
-            text: m.message.text ?? (m.message.attachments?.length ? "[вложение]" : ""),
-          });
+          if (m.message?.is_echo) continue;
+          const { text, source } = igSource(m.message, m.referral);
+          // Переход по рекламе или ссылке ig.me?ref=… без сообщения — запоминаем источник
+          if (!m.message) {
+            if (source) await handleInstagramDm(channel, { senderId: m.sender.id, mid: "", text: "", source });
+            continue;
+          }
+          await handleInstagramDm(channel, { senderId: m.sender.id, mid: m.message.mid, text, source });
         }
         for (const c of entry.changes ?? []) {
           if (c.field !== "comments" || !c.value?.id) continue;

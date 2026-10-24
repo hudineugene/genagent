@@ -36,7 +36,7 @@ export type CampaignRow = {
 
 type Draft = Omit<CampaignRow, "id" | "status" | "enabled" | "stats">;
 
-const CHANNELS = ["telegram", "api", "email", "whatsapp", "instagram"] as const;
+const CHANNELS = ["telegram", "api", "email", "whatsapp", "instagram", "viber"] as const;
 const TEMPS = ["hot", "warm", "cold"] as const;
 const TRIGGERS: Trigger[] = ["idle", "handoff", "booking", "hot"];
 
