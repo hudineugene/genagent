@@ -2,6 +2,7 @@ import { withKeys } from "@/lib/keys";
 import { and, asc, desc, eq, gt, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
+import { messageSeq } from "@/db/dialect";
 import { agents, channels, conversations, messages } from "@/db/schema";
 import { apiChannel } from "@/lib/channels/api-auth";
 import { addMessage, isTyping, respond, upsertConversation } from "@/lib/conversations";
@@ -111,8 +112,8 @@ async function handle(req: Request, { params }: { params: Promise<{ channelId: s
     const docText = await readDocument(Buffer.from(document.data, "base64"), document.filename);
     if (docText) await attachDocument(userMsg.id, { name: document.filename, text: docText }, { clientId: channel.clientId, agentId: channel.agentId, conversationId: conversation.id });
   }
-  const [{ rowid: userRow }] = await db
-    .select({ rowid: sql<number>`rowid` })
+  const [{ seq: userRow }] = await db
+    .select({ seq: messageSeq })
     .from(messages)
     .where(eq(messages.id, userMsg.id));
 
@@ -126,8 +127,8 @@ async function handle(req: Request, { params }: { params: Promise<{ channelId: s
   const after = await db
     .select({ id: messages.id, role: messages.role, text: messages.text, meta: messages.meta, status: messages.status })
     .from(messages)
-    .where(and(eq(messages.conversationId, conversation.id), gt(sql`rowid`, userRow)))
-    .orderBy(asc(sql`rowid`));
+    .where(and(eq(messages.conversationId, conversation.id), gt(messageSeq, userRow)))
+    .orderBy(asc(messageSeq));
   // Только отправленный ответ: отклонённый проверкой фактов клиенту не уходит
   const reply = after.find((m) => m.role === "assistant" && m.status === "sent" && !claimed.has(m.id));
   const handoffMsg = after.find((m) => m.role === "system" && m.text === "handoff");

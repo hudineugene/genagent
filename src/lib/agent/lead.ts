@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { agents, conversations, messages, type LeadCard } from "@/db/schema";
 import { generateJson } from "@/lib/llm/anthropic";
 import { logUsage } from "@/lib/usage";
+import { jsonText } from "@/db/dialect";
 
 /**
  * Карточка лида: дешёвая модель по переписке заполняет, что клиент хочет (поля задаются в агенте — бюджет, спальни,
@@ -140,7 +141,7 @@ export async function flushHotAlerts() {
   const rows = await db
     .select({ id: conversations.id })
     .from(conversations)
-    .where(sql`json_extract(${conversations.context}, '$.hotAlertPending') = 1`);
+    .where(sql`${jsonText(conversations.context, "hotAlertPending")} = 1`);
   let n = 0;
   for (const r of rows) if (await hotAlert(r.id).catch(() => false)) n++;
   return n;

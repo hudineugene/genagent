@@ -3,6 +3,7 @@ import { and, desc, eq, gt, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { agentEvents, clients, conversations, messages } from "@/db/schema";
 import { getSetting, setSetting } from "@/lib/settings";
+import { jsonText } from "@/db/dialect";
 
 /**
  * Утренняя сводка лидов (Telegram, бот уведомлений). Лид — разговор за сутки, где клиент дошёл до дела: агент передал
@@ -68,8 +69,8 @@ export async function collectLeads(sinceMs = Date.now() - DAY_MS): Promise<Lead[
         eq(conversations.isTest, false),
         eq(conversations.kind, "dm"),
         gt(conversations.lastMessageAt, since),
-        sql`json_extract(${conversations.context}, '$.lead.temperature') = 'hot'`,
-        sql`coalesce(json_extract(${conversations.context}, '$.lead.looksTest'), 0) = 0`,
+        sql`${jsonText(conversations.context, "lead.temperature")} = 'hot'`,
+        sql`coalesce(${jsonText(conversations.context, "lead.looksTest")}, 0) = 0`,
       ),
     );
   const ids = [...new Set([...handoffs.map((h) => h.conversationId), ...resultEvents.map((e) => e.conversationId as string), ...hot.map((h) => h.id)])];

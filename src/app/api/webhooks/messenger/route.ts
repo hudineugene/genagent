@@ -7,6 +7,7 @@ import { validSignature, verifyChallenge } from "@/lib/channels/meta/webhook";
 import { igSource, setSource } from "@/lib/channels/meta/inbound";
 import { markWebhook } from "@/lib/channels/health";
 import { addMessage, scheduleReply, upsertConversation } from "@/lib/conversations";
+import { jsonText } from "@/db/dialect";
 
 /**
  * Вебхук Facebook Messenger (object = page): сообщения, нажатия кнопок, переходы из рекламы и ссылок m.me?ref=.
@@ -46,7 +47,7 @@ export async function handleMessenger(body: { object?: string; entry?: Entry[] }
     const [channel] = await db
       .select()
       .from(channels)
-      .where(and(eq(channels.type, "messenger"), eq(channels.enabled, true), sql`json_extract(${channels.config}, '$.pageId') = ${entry.id}`));
+      .where(and(eq(channels.type, "messenger"), eq(channels.enabled, true), sql`${jsonText(channels.config, "pageId")} = ${entry.id}`));
     if (!channel) continue;
     await markWebhook(channel.id).catch(() => {});
     for (const m of entry.messaging ?? []) {

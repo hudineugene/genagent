@@ -6,6 +6,7 @@ import { agents, channels, oauthStates, type InstagramConfig, type ThreadsConfig
 import { getMetaSettings, metaUrls, publicUrl } from "@/lib/settings";
 import * as ig from "./instagram";
 import * as th from "./threads";
+import { jsonText } from "@/db/dialect";
 
 /** Ссылка входа действует сутки — её можно переслать клиенту, чтобы он вошёл в свой аккаунт сам. */
 export const STATE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -50,7 +51,7 @@ export async function completeConnect(provider: Provider, state: string, code: s
 
   if (provider === "instagram") {
     const t = await ig.exchangeCode(app.appId, app.appSecret, urls.instagramRedirect, code);
-    const existing = await findByAccount("instagram", "$.igUserId", t.igUserId);
+    const existing = await findByAccount("instagram", "igUserId", t.igUserId);
     if (existing && existing.agentId !== agent.id) return { ok: false, error: "account_used" };
     const config: InstagramConfig = existing
       ? { ...(existing.config as InstagramConfig), token: t.token, tokenExpiresAt: t.expiresAt, username: t.username }
@@ -66,7 +67,7 @@ export async function completeConnect(provider: Provider, state: string, code: s
   }
 
   const t = await th.exchangeCode(app.appId, app.appSecret, urls.threadsRedirect, code);
-  const existing = await findByAccount("threads", "$.threadsUserId", t.threadsUserId);
+  const existing = await findByAccount("threads", "threadsUserId", t.threadsUserId);
   if (existing && existing.agentId !== agent.id) return { ok: false, error: "account_used" };
   const config: ThreadsConfig = existing
     ? { ...(existing.config as ThreadsConfig), token: t.token, tokenExpiresAt: t.expiresAt, username: t.username }
@@ -79,7 +80,7 @@ async function findByAccount(type: Provider, path: string, accountId: string) {
   const [ch] = await db
     .select()
     .from(channels)
-    .where(and(eq(channels.type, type), sql`json_extract(${channels.config}, ${path}) = ${accountId}`));
+    .where(and(eq(channels.type, type), sql`${jsonText(channels.config, path)} = ${accountId}`));
   return ch;
 }
 

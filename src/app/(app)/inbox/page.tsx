@@ -18,6 +18,7 @@ import { InboxToolbar } from "./toolbar";
 import { InfoColumn } from "./info-panel";
 import { ForgetMemory } from "./forget-memory";
 import { TestToggle } from "./test-toggle";
+import { jsonText, messageSeq } from "@/db/dialect";
 
 type Filter = "all" | "attention" | "human" | "closed" | "test";
 const FILTERS = ["all", "attention", "human", "closed", "test"] as const;
@@ -74,7 +75,7 @@ export default async function InboxPage({
         lastMessageText: conversations.lastMessageText,
         lastMessageAt: conversations.lastMessageAt,
         // «Горячесть» лида — значок в списке
-        lead: sql<"hot" | "warm" | "cold" | null>`json_extract(${conversations.context}, '$.lead.temperature')`,
+        lead: sql<"hot" | "warm" | "cold" | null>`${jsonText(conversations.context, "lead.temperature")}`,
         clientName: clients.name,
         clientColor: clients.color,
         agentName: agents.name,
@@ -233,7 +234,7 @@ async function loadThread(id: string): Promise<{ data: ThreadData; info: Info } 
       clientName: clients.name,
       agentId: agents.id,
       agentName: agents.name,
-      agentIcon: sql<string>`json_extract(${agents.config}, '$.icon')`,
+      agentIcon: sql<string>`${jsonText(agents.config, "icon")}`,
       channelName: channels.name,
       channelConfig: channels.config,
     })
@@ -257,7 +258,7 @@ async function loadThread(id: string): Promise<{ data: ThreadData; info: Info } 
     .from(messages)
     .leftJoin(users, eq(users.id, messages.authorId))
     .where(eq(messages.conversationId, id))
-    .orderBy(asc(messages.createdAt), asc(sql`messages.rowid`));
+    .orderBy(asc(messages.createdAt), asc(messageSeq));
 
   const c = row.conversation;
   const visible = msgs.filter((m) => m.role !== "system");

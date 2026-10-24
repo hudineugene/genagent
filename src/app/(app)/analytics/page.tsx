@@ -12,6 +12,7 @@ import { agentFunnels } from "@/lib/agent/funnel";
 import { InfoHint } from "@/components/hint";
 import { resolutionStats, sourceStats } from "@/lib/agent/resolution";
 import { inScope, scope } from "@/lib/access";
+import { jsonText } from "@/db/dialect";
 
 const PERIODS = [7, 30, 90] as const;
 
@@ -52,7 +53,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
           // Доля передач — по диалогам: в одном диалоге агент может передать клиента несколько раз
           handoffConvs: sql<number>`count(distinct case when ${messages.role} = 'system' and ${messages.text} = 'handoff' then ${messages.conversationId} end)`,
           activeConvs: sql<number>`count(distinct case when ${messages.role} = 'user' then ${messages.conversationId} end)`,
-          avgMs: sql<number>`avg(case when ${messages.role} = 'assistant' then json_extract(${messages.meta}, '$.ms') end)`,
+          avgMs: sql<number>`avg(case when ${messages.role} = 'assistant' then ${jsonText(messages.meta, "ms")} end)`,
         })
         .from(messages)
         .innerJoin(conversations, eq(conversations.id, messages.conversationId))
@@ -143,10 +144,10 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
   // Задержка ответа агента: медиана и 95-й процентиль (по ответам за период)
   const times = (
     await db
-      .select({ ms: sql<number>`json_extract(${messages.meta}, '$.ms')` })
+      .select({ ms: sql<number>`${jsonText(messages.meta, "ms")}` })
       .from(messages)
       .innerJoin(conversations, eq(conversations.id, messages.conversationId))
-      .where(and(...msgWhere, eq(messages.role, "assistant"), sql`json_extract(${messages.meta}, '$.ms') is not null`))
+      .where(and(...msgWhere, eq(messages.role, "assistant"), sql`${jsonText(messages.meta, "ms")} is not null`))
       .limit(20000)
   )
     .map((r) => Number(r.ms))

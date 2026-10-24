@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { agentEvents, channels, conversations, messages, type ApiConfig } from "@/db/schema";
 import { apiChannel } from "@/lib/channels/api-auth";
+import { jsonText } from "@/db/dialect";
 
 /**
  * Очередь для своего бота — то, что студия сделала в «Диалогах» и что бот должен выполнить своим именем:
@@ -35,7 +36,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ channelI
   }
   if (kinds.includes("dm")) conds.push(and(ne(conversations.kind, "comment"), eq(messages.role, "operator")));
   if (kinds.includes("followup")) {
-    conds.push(and(ne(conversations.kind, "comment"), eq(messages.role, "assistant"), sql`json_extract(${messages.meta}, '$.followUp') = 1`));
+    conds.push(and(ne(conversations.kind, "comment"), eq(messages.role, "assistant"), sql`${jsonText(messages.meta, "followUp")} = 1`));
   }
   if (kinds.includes("resume")) {
     conds.push(and(ne(conversations.kind, "comment"), eq(messages.role, "system"), eq(messages.text, "returned")));

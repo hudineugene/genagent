@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { channels } from "@/db/schema";
 import { getMetaSettings, publicUrl } from "@/lib/settings";
 import { parseSignedRequest } from "@/lib/channels/meta/webhook";
+import { jsonText } from "@/db/dialect";
 
 /**
  * Обязательные для Meta адреса:
@@ -24,7 +25,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ kind: s
   if (!payload?.user_id) return new Response("Bad request", { status: 400 });
   const accountId = String(payload.user_id);
 
-  const match = sql`(json_extract(${channels.config}, '$.igUserId') = ${accountId} OR json_extract(${channels.config}, '$.threadsUserId') = ${accountId})`;
+  const match = sql`(${jsonText(channels.config, "igUserId")} = ${accountId} OR ${jsonText(channels.config, "threadsUserId")} = ${accountId})`;
   if (kind === "deauthorize") {
     const off = await db.update(channels).set({ enabled: false, error: "deauthorized" }).where(match).returning({ id: channels.id });
     const { notifyProblem } = await import("@/lib/notify/telegram");

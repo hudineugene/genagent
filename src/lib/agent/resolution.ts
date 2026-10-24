@@ -2,6 +2,7 @@ import "server-only";
 import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { conversations, messages, payments } from "@/db/schema";
+import { jsonText } from "@/db/dialect";
 
 /**
  * Итог обращения (без ИИ, по переписке): подтверждено — запись, оплата, 👍 или благодарность клиента после ответа;
@@ -92,8 +93,8 @@ export async function resolutionStats(from: Date, clientId?: string | null, now 
 export async function sourceStats(from: Date, clientId?: string | null) {
   const rows = await db
     .select({
-      kind: sql<string>`coalesce(json_extract(${conversations.context}, '$.source.kind'), 'direct')`,
-      title: sql<string>`coalesce(json_extract(${conversations.context}, '$.source.title'), json_extract(${conversations.context}, '$.source.ref'), '')`,
+      kind: sql<string>`coalesce(${jsonText(conversations.context, "source.kind")}, 'direct')`,
+      title: sql<string>`coalesce(${jsonText(conversations.context, "source.title")}, ${jsonText(conversations.context, "source.ref")}, '')`,
       n: sql<number>`count(*)`,
     })
     .from(conversations)
@@ -101,8 +102,8 @@ export async function sourceStats(from: Date, clientId?: string | null) {
     .groupBy(sql`1`, sql`2`);
   const revenue = await db
     .select({
-      kind: sql<string>`coalesce(json_extract(${conversations.context}, '$.source.kind'), 'direct')`,
-      title: sql<string>`coalesce(json_extract(${conversations.context}, '$.source.title'), json_extract(${conversations.context}, '$.source.ref'), '')`,
+      kind: sql<string>`coalesce(${jsonText(conversations.context, "source.kind")}, 'direct')`,
+      title: sql<string>`coalesce(${jsonText(conversations.context, "source.title")}, ${jsonText(conversations.context, "source.ref")}, '')`,
       currency: payments.currency,
       sum: sql<number>`sum(${payments.amount})`,
       n: sql<number>`count(*)`,

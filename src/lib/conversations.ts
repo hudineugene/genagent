@@ -37,6 +37,7 @@ import { sendChatAction, sendText, replyInGroup } from "@/lib/channels/telegram-
 import { untrusted } from "@/lib/agent/guard";
 import { compileSystemPrompt } from "@/lib/agent/compile";
 import { sendEmailReply } from "@/lib/channels/email-send";
+import { messageSeq } from "@/db/dialect";
 
 const HISTORY_LIMIT = 40;
 /** Пауза перед ответом: клиент часто пишет несколькими сообщениями подряд. */
@@ -181,7 +182,7 @@ async function respond__(conversationId: string): Promise<void> {
         .select({ id: messages.id, role: messages.role, text: messages.text })
         .from(messages)
         .where(eq(messages.conversationId, conversationId))
-        .orderBy(desc(messages.createdAt), desc(sql`rowid`))
+        .orderBy(desc(messages.createdAt), desc(messageSeq))
         .limit(1);
       if (last?.role === "user") void notify().then((n) => n.notifyClientMessage(conversationId, last.text, last.id));
       return;
@@ -196,8 +197,8 @@ async function respond__(conversationId: string): Promise<void> {
       .select({ id: messages.id, role: messages.role, text: messages.text, meta: messages.meta, createdAt: messages.createdAt })
       .from(messages)
       .where(and(eq(messages.conversationId, conversationId), eq(messages.status, "sent")))
-      // rowid — порядок вставки, на случай одинакового времени
-      .orderBy(desc(messages.createdAt), desc(sql`rowid`))
+      // messageSeq — порядок вставки, на случай одинакового времени
+      .orderBy(desc(messages.createdAt), desc(messageSeq))
       .limit(HISTORY_LIMIT);
     const pendingDraft = await db
       .select({ id: messages.id })
@@ -821,7 +822,7 @@ export async function listMessages(conversationId: string, opts: { afterId?: str
     .select()
     .from(messages)
     .where(eq(messages.conversationId, conversationId))
-    .orderBy(asc(messages.createdAt), asc(sql`rowid`));
+    .orderBy(asc(messages.createdAt), asc(messageSeq));
   if (!opts.afterId) return rows;
   const i = rows.findIndex((m) => m.id === opts.afterId);
   return i < 0 ? rows : rows.slice(i + 1);

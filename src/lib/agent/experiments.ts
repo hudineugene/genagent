@@ -5,6 +5,7 @@ import { agentVersions, conversations, messages, settings, usageLog, type Conver
 import { getSetting, setSetting } from "@/lib/settings";
 import { agentConfigSchema, type AgentConfig } from "./types";
 import { classify } from "./resolution";
+import { jsonText } from "@/db/dialect";
 
 /**
  * A/B и постепенная раскатка версий агента: выбранная версия (B) отвечает в доле новых разговоров, разговор не
@@ -63,7 +64,7 @@ export async function experimentStats(agentId: string): Promise<{ exp: Experimen
   const empty = (): VariantStats => ({ conversations: 0, resolved: null, handoffRate: null, costPerConversation: null });
   if (!exp) return { exp, A: empty(), B: empty() };
   const convs = await db
-    .select({ id: conversations.id, variant: sql<string>`json_extract(${conversations.context}, '$.variant')` })
+    .select({ id: conversations.id, variant: sql<string>`${jsonText(conversations.context, "variant")}` })
     .from(conversations)
     .where(and(eq(conversations.agentId, agentId), eq(conversations.isTest, false), gte(conversations.lastMessageAt, new Date(exp.startedAt))));
   const groups = { A: convs.filter((c) => c.variant === "A"), B: convs.filter((c) => c.variant === `B:${exp.versionId}`) };

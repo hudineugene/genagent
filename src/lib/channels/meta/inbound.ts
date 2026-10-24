@@ -13,6 +13,7 @@ import {
   type ThreadsConfig,
 } from "@/db/schema";
 import { addMessage, scheduleReply, upsertConversation } from "@/lib/conversations";
+import { jsonText } from "@/db/dialect";
 
 /**
  * Входящие из Instagram и Threads — одинаково для вебхуков и периодической проверки:
@@ -41,11 +42,11 @@ async function conversationByMessage(channelId: string, externalId: string) {
 }
 
 export async function findChannelByAccount(type: "instagram" | "threads", accountId: string) {
-  const field = type === "instagram" ? "$.igUserId" : "$.threadsUserId";
+  const field = type === "instagram" ? "igUserId" : "threadsUserId";
   const [ch] = await db
     .select()
     .from(channels)
-    .where(and(eq(channels.type, type), eq(channels.enabled, true), sql`json_extract(${channels.config}, ${field}) = ${accountId}`));
+    .where(and(eq(channels.type, type), eq(channels.enabled, true), sql`${jsonText(channels.config, field)} = ${accountId}`));
   return ch;
 }
 

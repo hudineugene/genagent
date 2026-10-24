@@ -10,6 +10,7 @@ import { resolutionStats } from "@/lib/agent/resolution";
 import { logout } from "@/app/actions/auth";
 import { Card, cx } from "@/components/ui";
 import { GapAnswer, PortalReply } from "./forms";
+import { jsonText } from "@/db/dialect";
 
 const TABS = ["overview", "leads", "chats", "gaps"] as const;
 
@@ -33,7 +34,7 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
     db
       .select({
         total: sql<number>`count(*)`,
-        hot: sql<number>`sum(case when json_extract(${conversations.context}, '$.lead.temperature') = 'hot' then 1 else 0 end)`,
+        hot: sql<number>`sum(case when ${jsonText(conversations.context, "lead.temperature")} = 'hot' then 1 else 0 end)`,
         attention: sql<number>`sum(case when ${conversations.needsAttention} = 1 and ${conversations.status} != 'closed' then 1 else 0 end)`,
       })
       .from(conversations)
@@ -44,7 +45,7 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
     db
       .select()
       .from(conversations)
-      .where(and(own, tab === "leads" ? sql`json_extract(${conversations.context}, '$.lead.temperature') in ('hot','warm')` : undefined))
+      .where(and(own, tab === "leads" ? sql`${jsonText(conversations.context, "lead.temperature")} in ('hot','warm')` : undefined))
       .orderBy(desc(conversations.lastMessageAt))
       .limit(60),
   ]);

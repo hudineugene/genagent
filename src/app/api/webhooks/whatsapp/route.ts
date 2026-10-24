@@ -7,6 +7,7 @@ import { validSignature, verifyChallenge } from "@/lib/channels/meta/webhook";
 import { markRead, messageText, type WaMessage } from "@/lib/channels/meta/whatsapp";
 import { markWebhook } from "@/lib/channels/health";
 import { addMessage, scheduleReply, upsertConversation } from "@/lib/conversations";
+import { jsonText } from "@/db/dialect";
 
 /**
  * Вебхук WhatsApp Business (Meta): GET — подтверждение адреса (verify token из «Интеграций»),
@@ -75,7 +76,7 @@ export async function handleWhatsApp(body: { entry?: { changes?: Change[] }[] })
         const [channel] = await db
           .select()
           .from(channels)
-          .where(and(eq(channels.type, "whatsapp"), eq(channels.enabled, true), sql`json_extract(${channels.config}, '$.phoneNumberId') = ${phoneId}`));
+          .where(and(eq(channels.type, "whatsapp"), eq(channels.enabled, true), sql`${jsonText(channels.config, "phoneNumberId")} = ${phoneId}`));
         if (!channel) continue;
         await markWebhook(channel.id).catch(() => {});
         const cfg = channel.config as WhatsAppConfig;

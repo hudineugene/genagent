@@ -1,12 +1,13 @@
 import "server-only";
 import { withKeys } from "@/lib/keys";
 import { apiKey } from "@/lib/keys";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { messages } from "@/db/schema";
 import { generateJson } from "@/lib/llm/anthropic";
 import { logUsage } from "@/lib/usage";
 import { loadKnowledge } from "@/lib/kb/store";
+import { messageSeq } from "@/db/dialect";
 
 /** Модель для выжимки — самая дешёвая (та же, что у агентов студии): задача короткая. */
 const SUMMARY_MODEL = "claude-haiku-5-5";
@@ -27,7 +28,7 @@ async function handoffSummary__(
       .select({ role: messages.role, text: messages.text })
       .from(messages)
       .where(and(eq(messages.conversationId, conversationId), eq(messages.status, "sent")))
-      .orderBy(desc(messages.createdAt), desc(sql`rowid`))
+      .orderBy(desc(messages.createdAt), desc(messageSeq))
       .limit(HISTORY);
     const dialog = rows
       .reverse()
