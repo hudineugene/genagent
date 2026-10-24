@@ -7,7 +7,7 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { getSession } from "./session";
 
-export type CurrentUser = { id: string; name: string; email: string; role: "admin" | "member"; clientIds: string[] | null; totpEnabled: boolean };
+export type CurrentUser = { id: string; name: string; email: string; role: "admin" | "member" | "client"; clientIds: string[] | null; totpEnabled: boolean };
 
 /** Текущий пользователь или null. Дедуплицируется в рамках одного запроса. */
 export const findCurrentUser = cache(async (): Promise<CurrentUser | null> => {
@@ -21,11 +21,26 @@ export const findCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   return u ?? null;
 });
 
-/** Для страниц и server actions: без сессии — на /login. */
+/** Для страниц и server actions студии: без сессии — на /login; владелец бизнеса — в свой кабинет. */
 export async function requireUser(): Promise<CurrentUser> {
   const u = await findCurrentUser();
   if (!u) redirect("/login");
+  if (u.role === "client") redirect("/portal");
   return u;
+}
+
+/** Кабинет клиента: владелец бизнеса (его клиент) или сотрудник студии с доступом (просмотр кабинета). */
+export async function requirePortalUser(preview?: string | null): Promise<{ user: CurrentUser; clientId: string; staff: boolean }> {
+  const u = await findCurrentUser();
+  if (!u) redirect("/login");
+  if (u.role === "client") {
+    const clientId = u.clientIds?.[0];
+    if (!clientId) redirect("/login");
+    return { user: u, clientId, staff: false };
+  }
+  const { canClient } = await import("./access");
+  if (!preview || !canClient(u, preview)) redirect("/clients");
+  return { user: u, clientId: preview, staff: true };
 }
 
 /** Только для администраторов: остальных — на главную. */

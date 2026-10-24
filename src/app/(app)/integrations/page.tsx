@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { Bell, BellOff, CalendarDays, DatabaseBackup, FileBarChart2, Plug, Share2 } from "lucide-react";
+import { Bell, BellOff, CalendarDays, DatabaseBackup, FileBarChart2, DoorOpen, KeyRound, Plug, Share2 } from "lucide-react";
 import { requireAdmin } from "@/lib/auth";
 import { getT } from "@/lib/i18n/server";
 import { getMetaSettings, metaUrls, publicUrl } from "@/lib/settings";
@@ -13,6 +13,8 @@ import { DailyDigestSection } from "./daily-section";
 import { WeeklyTestsSection } from "./weekly-section";
 import { WaitingSection } from "./waiting-section";
 import { ServicesSection } from "./services-section";
+import { ApiKeys } from "./api-keys";
+import { BrandForm } from "./brand-form";
 import { getServices, serverKeys } from "@/lib/services";
 import { getWaitingSettings } from "@/lib/agent/waiting";
 import { getNotifySettings } from "@/lib/notify/telegram";
@@ -22,7 +24,7 @@ import { getAutoTests } from "@/lib/tests/auto";
 import { getDailyDigest } from "@/lib/agent/daily";
 import { getLeadsSettings } from "@/lib/agent/leads";
 
-const TABS = ["notify", "reports", "backup", "social", "google", "services"] as const;
+const TABS = ["notify", "reports", "backup", "social", "google", "services", "api", "portal"] as const;
 type Tab = (typeof TABS)[number];
 
 /** Интеграции по вкладкам: у каждой отметка «подключено»; отчёты и копия базы — после бота уведомлений. */
@@ -56,6 +58,8 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
     social: Boolean(meta.instagram || meta.threads),
     google: Boolean(google?.clientEmail),
     services: services.webSearch.enabled || Boolean(services.openaiKey || srv.openai || services.googleMapsKey || srv.maps),
+    api: false,
+    portal: false,
   };
   const icons: Record<Tab, ReactNode> = {
     notify: <Bell className="size-4" />,
@@ -64,6 +68,8 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
     social: <Share2 className="size-4" />,
     google: <CalendarDays className="size-4" />,
     services: <Plug className="size-4" />,
+    api: <KeyRound className="size-4" />,
+    portal: <DoorOpen className="size-4" />,
   };
 
   const needNotify = (
@@ -175,6 +181,10 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
 
           {tab === "google" && <GoogleCard email={google?.clientEmail ?? null} />}
 
+          {tab === "api" && <ApiTab />}
+
+          {tab === "portal" && <BrandForm initial={await (await import("@/lib/whitelabel")).getBrand()} />}
+
           {tab === "services" && (
             <ServicesSection
               services={{
@@ -187,6 +197,31 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
         </div>
       </div>
     </div>
+  );
+}
+
+/** Ключи открытого API студии. */
+async function ApiTab() {
+  const { db } = await import("@/db");
+  const { apiKeys, clients } = await import("@/db/schema");
+  const { asc, desc } = await import("drizzle-orm");
+  const [keys, list] = await Promise.all([db.select().from(apiKeys).orderBy(desc(apiKeys.createdAt)), db.select({ id: clients.id, name: clients.name }).from(clients).orderBy(asc(clients.name))]);
+  const names = new Map(list.map((c) => [c.id, c.name]));
+  const fmt = new Intl.DateTimeFormat("ru-RU", { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Kyiv" });
+  return (
+    <ApiKeys
+      base={publicUrl() ?? ""}
+      clients={list}
+      rows={keys.map((k) => ({
+        id: k.id,
+        name: k.name,
+        prefix: k.prefix,
+        scope: k.scope,
+        clients: k.clientIds ? k.clientIds.map((i) => names.get(i) ?? i).join(", ") : "все клиенты",
+        lastUsedAt: k.lastUsedAt ? fmt.format(k.lastUsedAt) : null,
+        revoked: Boolean(k.revokedAt),
+      }))}
+    />
   );
 }
 

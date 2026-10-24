@@ -17,7 +17,8 @@ export const users = sqliteTable("users", {
   email: text("email").notNull().unique(),
   name: text("name").notNull(),
   passwordHash: text("password_hash").notNull(),
-  role: text("role", { enum: ["admin", "member"] }).notNull().default("member"),
+  /** client — владелец бизнеса клиента: только кабинет своего бизнеса (/portal), студия закрыта */
+  role: text("role", { enum: ["admin", "member", "client"] }).notNull().default("member"),
   /** Двухфакторный вход (TOTP): секрет зашифрован ключом сессий; коды восстановления — хэши, каждый на один раз */
   totpSecret: text("totp_secret"),
   totpEnabled: integer("totp_enabled", { mode: "boolean" }).notNull().default(false),
@@ -81,6 +82,24 @@ export const agentVersions = sqliteTable(
   },
   (t) => [index("agent_versions_agent_idx").on(t.agentId)],
 );
+
+/**
+ * Шаблон агента студии: проверенная настройка (роль, тон, правила, проверки, модель…) без данных клиента.
+ * Агенты из шаблона помнят его версию; новые версии шаблона студия раскатывает выборочно — по агентам и полям.
+ */
+export const studioTemplates = sqliteTable("studio_templates", {
+  id: id(),
+  name: text("name").notNull(),
+  description: text("description").notNull().default(""),
+  config: text("config", { mode: "json" }).$type<AgentConfig>().notNull(),
+  version: integer("version").notNull().default(1),
+  createdBy: text("created_by"),
+  createdAt: createdAt(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+export type StudioTemplate = typeof studioTemplates.$inferSelect;
 
 // База знаний клиента: источники (файл, сайт, текст) и их фрагменты для поиска.
 // Полнотекстовый индекс kb_chunks_fts (FTS5) создаётся отдельной миграцией — drizzle не описывает виртуальные таблицы.
@@ -768,6 +787,56 @@ export const clientPayments = sqliteTable("client_payments", {
     .$defaultFn(() => new Date()),
 });
 export type ClientPayments = typeof clientPayments.$inferSelect;
+
+/**
+ * Биллинг клиента студии: абонплата, наценка на расходы ИИ по ключам студии и на сообщения WhatsApp, включённый
+ * в абонплату объём, курс к валюте счёта, месячный лимит расходов (достигнут — агенты клиента молчат, команде сигнал).
+ */
+export const clientBilling = sqliteTable("client_billing", {
+  clientId: text("client_id")
+    .primaryKey()
+    .references(() => clients.id, { onDelete: "cascade" }),
+  currency: text("currency").notNull().default("USD"),
+  /** Курс: сколько единиц валюты счёта за 1 USD */
+  usdRate: real("usd_rate").notNull().default(1),
+  /** Абонплата в месяц, в валюте счёта */
+  fee: real("fee").notNull().default(0),
+  /** Наценка на расходы ИИ по ключам студии, % */
+  markupPct: real("markup_pct").notNull().default(0),
+  /** Наценка на сообщения каналов (WhatsApp), % */
+  channelMarkupPct: real("channel_markup_pct").notNull().default(0),
+  /** Расходы ИИ, включённые в абонплату, USD (сверх — по наценке) */
+  includedUsd: real("included_usd").notNull().default(0),
+  /** Лимит себестоимости в месяц, USD; null — без лимита */
+  limitUsd: real("limit_usd"),
+  /** Когда предупредили о 80% / 100% лимита (YYYY-MM:pct) */
+  alerted: text("alerted").notNull().default(""),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+export type ClientBilling = typeof clientBilling.$inferSelect;
+
+/** Ключи открытого API студии (/api/v1): хранится только хэш; права read или write; можно ограничить клиентами. */
+export const apiKeys = sqliteTable(
+  "api_keys",
+  {
+    id: id(),
+    name: text("name").notNull(),
+    /** Начало ключа для узнавания в списке (ga_live_ab12…) */
+    prefix: text("prefix").notNull(),
+    keyHash: text("key_hash").notNull(),
+    scope: text("scope", { enum: ["read", "write"] }).notNull().default("read"),
+    /** Только эти клиенты; null — все */
+    clientIds: text("client_ids", { mode: "json" }).$type<string[] | null>(),
+    createdBy: text("created_by"),
+    lastUsedAt: integer("last_used_at", { mode: "timestamp_ms" }),
+    revokedAt: integer("revoked_at", { mode: "timestamp_ms" }),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("api_keys_hash_idx").on(t.keyHash)],
+);
+export type ApiKey = typeof apiKeys.$inferSelect;
 
 export const PAYMENT_STATUSES = ["created", "paid", "failed", "expired", "refunded"] as const;
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];

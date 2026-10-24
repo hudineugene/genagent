@@ -15,7 +15,7 @@ import { useI18n } from "@/lib/i18n/client";
 import { Badge, Button, Card, Field, Input, Select, Spinner, cx } from "@/components/ui";
 
 type Role = "admin" | "member";
-type Member = { id: string; name: string; email: string; role: Role; createdAt: Date; clientIds: string[] | null; totp: boolean };
+type Member = { id: string; name: string; email: string; role: Role | "client"; createdAt: Date; clientIds: string[] | null; totp: boolean };
 type ErrorKey = keyof ReturnType<typeof useI18n>["t"]["team"]["errors"];
 
 export function TeamManager({ members, meId, clients }: { members: Member[]; meId: string; clients: { id: string; name: string }[] }) {

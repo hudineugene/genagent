@@ -26,14 +26,12 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 }
 
 async function Shell({ children }: { children: ReactNode }) {
-  const [user, locale, [{ attention }]] = await Promise.all([
-    requireUser(),
-    getLocale(),
-    db
-      .select({ attention: count() })
-      .from(conversations)
-      .where(and(eq(conversations.isTest, false), eq(conversations.needsAttention, true), ne(conversations.status, "closed"))),
-  ]);
+  const [user, locale] = await Promise.all([requireUser(), getLocale()]);
+  const { inScope, scopeOf } = await import("@/lib/access");
+  const [{ attention }] = await db
+    .select({ attention: count() })
+    .from(conversations)
+    .where(and(eq(conversations.isTest, false), eq(conversations.needsAttention, true), ne(conversations.status, "closed"), inScope(conversations.clientId, scopeOf(user))));
   return (
     <I18nProvider locale={locale}>
       <div className="flex min-h-dvh flex-col md:flex-row">

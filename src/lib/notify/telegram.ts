@@ -312,6 +312,7 @@ const problems = (g.__notifyProblems ??= new Map());
 const PROBLEM_TEXT: Record<string, string> = {
   agent_not_active: "агент выключен — сообщение клиента осталось без ответа",
   budget_exceeded: "исчерпан месячный лимит расходов агента — ответы идут менеджеру",
+  client_limit: "исчерпан месячный лимит расходов клиента — ответы идут менеджеру",
   missing_key: "не задан API-ключ модели — агент не может отвечать",
   refusal: "модель отказалась отвечать",
   email_auth_failed: "почта: Google не принял пароль приложения",

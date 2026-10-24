@@ -251,6 +251,11 @@ async function respond__(conversationId: string): Promise<void> {
       await flag(conversationId, "budget_exceeded");
       return;
     }
+    // Месячный лимит расходов клиента (биллинг студии): исчерпан — агенты клиента молчат до следующего месяца
+    if (await import("@/lib/billing").then((b) => b.clientOverLimit(client.id)).catch(() => false)) {
+      await flag(conversationId, "client_limit");
+      return;
+    }
     const { system, messages: prepared, kb, tools, webSearch } = await prepareChat(
       config,
       client,

@@ -12,7 +12,8 @@ import { Badge, Button, Spinner, cx } from "@/components/ui";
 import type { BuilderSource } from "./builder";
 
 type Snapshot = { name: string; config: AgentConfig };
-type Field = keyof AgentConfig | "name";
+// Отметка «из шаблона студии» — служебная, в сравнении версий не показываем
+type Field = Exclude<keyof AgentConfig, "studioTemplate"> | "name";
 
 const FIELDS: Field[] = [
   "name",

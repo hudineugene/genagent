@@ -1,4 +1,4 @@
-import { asc } from "drizzle-orm";
+import { asc, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { clients, users } from "@/db/schema";
 import { requireAdmin } from "@/lib/auth";
@@ -14,6 +14,7 @@ export default async function TeamPage() {
   const members = await db
     .select({ id: users.id, name: users.name, email: users.email, role: users.role, createdAt: users.createdAt, clientIds: users.clientIds, totp: users.totpEnabled })
     .from(users)
+    .where(ne(users.role, "client"))
     .orderBy(asc(users.createdAt));
 
   return (

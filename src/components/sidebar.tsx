@@ -7,6 +7,7 @@ import {
   BarChart3,
   Building2,
   House,
+  LayoutTemplate,
   LogOut,
   MessagesSquare,
   Monitor,
@@ -18,6 +19,7 @@ import {
   Sun,
   UserRound,
   Users,
+  Wallet,
 } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
 import { LOCALES, LOCALE_LABELS } from "@/lib/i18n";
@@ -40,10 +42,12 @@ export function Sidebar({ userName, isAdmin, inboxBadge }: { userName: string; i
       active: pathname.startsWith("/clients") || pathname.startsWith("/agents"),
     },
     { href: "/analytics", label: t.nav.analytics, icon: BarChart3, active: pathname.startsWith("/analytics") },
+    { href: "/templates", label: t.nav.templates, icon: LayoutTemplate, active: pathname.startsWith("/templates") },
   ];
   const settings: NavItem[] = isAdmin
     ? [
         { href: "/team", label: t.nav.team, icon: Users, active: pathname.startsWith("/team") },
+        { href: "/billing", label: t.nav.billing, icon: Wallet, active: pathname.startsWith("/billing") },
         { href: "/integrations", label: t.nav.integrations, icon: Plug, active: pathname.startsWith("/integrations") },
       ]
     : [];

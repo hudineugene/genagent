@@ -18,7 +18,8 @@ export default function LoginPage() {
 }
 
 async function Login() {
-  if (await findCurrentUser()) redirect("/");
+  const me = await findCurrentUser();
+  if (me) redirect(me.role === "client" ? "/portal" : "/");
   const locale = await getLocale();
   return (
     <I18nProvider locale={locale}>

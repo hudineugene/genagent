@@ -18,6 +18,8 @@ export class ForbiddenError extends Error {
 
 /** Клиенты, доступные пользователю; null — все. */
 export function scopeOf(user: Pick<CurrentUser, "role" | "clientIds">): string[] | null {
+  // Владелец бизнеса — всегда только свой клиент
+  if (user.role === "client") return user.clientIds ?? [];
   return user.role === "admin" || !user.clientIds ? null : user.clientIds;
 }
 
@@ -143,7 +145,8 @@ export async function requireUnscoped() {
 export async function canAccess(kind: Kind | "client", id: string | null | undefined): Promise<boolean> {
   const { findCurrentUser } = await import("./auth");
   const user = await findCurrentUser();
-  if (!user) return false;
+  // Адреса и страницы студии владельцу бизнеса закрыты — у него свой кабинет
+  if (!user || user.role === "client") return false;
   if (!scopeOf(user)) return true;
   if (!id) return false;
   const clientId = kind === "client" ? id : await clientOf(kind, id);

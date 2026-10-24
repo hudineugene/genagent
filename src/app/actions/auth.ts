@@ -41,7 +41,7 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   }
   recordSuccess(email, ip);
   await setSession({ userId: user.id });
-  redirect("/");
+  redirect(user.role === "client" ? "/portal" : "/");
 }
 
 /** Второй шаг входа: 6 цифр из приложения-аутентификатора или код восстановления (одноразовый). */
@@ -70,7 +70,7 @@ export async function loginCode(_prev: LoginState, formData: FormData): Promise<
   }
   recordSuccess(user.email, ip);
   await setSession({ userId: user.id });
-  redirect("/");
+  redirect(user.role === "client" ? "/portal" : "/");
 }
 
 export async function logout() {

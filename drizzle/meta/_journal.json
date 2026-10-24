@@ -288,6 +288,27 @@
       "when": 1793100000000,
       "tag": "0040_procedures",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "6",
+      "when": 1793150000000,
+      "tag": "0041_billing",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "6",
+      "when": 1793200000000,
+      "tag": "0042_api_keys",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "6",
+      "when": 1793250000000,
+      "tag": "0043_studio_templates",
+      "breakpoints": true
     }
   ]
 }

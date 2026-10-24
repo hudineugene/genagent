@@ -1,10 +1,11 @@
 import { notFound } from "next/navigation";
 import { and, eq, gte, sum } from "drizzle-orm";
 import { db } from "@/db";
-import { clients, usageLog } from "@/db/schema";
+import { clients, usageLog, users } from "@/db/schema";
 import { KEY_KINDS, maskKey } from "@/lib/keys";
 import { ClientKeys } from "./client-keys";
 import { ClientPrivacy } from "./client-privacy";
+import { OwnerLogins } from "./owner-logins";
 import { subprocessors } from "@/lib/dpa";
 import { deleteClient, updateClient } from "@/app/actions/clients";
 import { getT } from "@/lib/i18n/server";
@@ -42,6 +43,10 @@ export default async function EditClientPage({ params }: { params: Promise<{ cli
         clientId={client.id}
         ownSpend={Number(own ?? 0)}
         keys={KEY_KINDS.map((kind) => ({ kind, masked: apiKeys[kind] ? maskKey(apiKeys[kind]) : null, studio: Boolean(process.env[ENV[kind]]) }))}
+      />
+      <OwnerLogins
+        clientId={client.id}
+        rows={(await db.select({ id: users.id, name: users.name, email: users.email, clientIds: users.clientIds }).from(users).where(eq(users.role, "client"))).filter((u) => u.clientIds?.includes(client.id))}
       />
       <ClientPrivacy clientId={client.id} retentionDays={client.retentionDays} subs={(await subprocessors(client.id)).map((s) => ({ name: s.name, purpose: s.purpose, location: s.location }))} />
     </div>

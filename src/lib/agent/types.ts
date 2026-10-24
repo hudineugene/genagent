@@ -122,6 +122,8 @@ export const agentConfigSchema = z.object({
   quickReplies: z.boolean().optional(),
   /** Контроль качества ответов сотрудников (оценка после отправки) */
   operatorReview: z.boolean().optional(),
+  /** Агент создан из шаблона студии: какой и какой версии (для выборочных обновлений) */
+  studioTemplate: z.object({ id: z.string(), version: z.number().int() }).optional(),
   calendar: calendarConfigSchema.prefault({}),
 });
 
