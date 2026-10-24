@@ -53,7 +53,7 @@ export default async function ClientPage({
 
   const SECTIONS = ["kb", "data", "modules", "outreach", "routing", "pricing", "reminders", "repeat", "onboarding", "hiring", "monitor", "learning", "tools", "forms", "documents", "loyalty", "logistics", "approvals", "campaigns", "content", "meetings", "routines"] as const;
   const active = (SECTIONS as readonly string[]).includes(tab ?? "") ? (tab as (typeof SECTIONS)[number]) : "agents";
-  const [[{ agentsCount }], [{ kbCount }], [{ toolsCount }], [{ campaignsCount }], [{ formsCount }], [{ routinesCount }], [{ docTypesCount }], [{ templatesCount }], [{ tablesCount }], [{ pendingApprovals }], [{ approvalsCount }], teamAgents, [{ contentCount }], [{ meetingsCount }], [{ programsCount }], [{ outsCount }], [logistics], agentConfigs, [{ routingCount }], [pricingRow], [{ remindersCount }], [{ onboardingCount }], [{ vacanciesCount }], [{ monitorsCount }], [{ openIncidents }], [{ coursesCount }]] = await Promise.all([
+  const [[{ agentsCount }], [{ kbCount }], [{ toolsCount }], [{ campaignsCount }], [{ formsCount }], [{ routinesCount }], [{ docTypesCount }], [{ templatesCount }], [{ tablesCount }], [{ pendingApprovals }], [{ approvalsCount }], teamAgents, [{ contentCount }], [{ meetingsCount }], [{ programsCount }], [{ outsCount }], [logistics], agentConfigs, [{ routingCount }], [pricingRow], [{ remindersCount }], [{ onboardingCount }], [{ vacanciesCount }], [{ monitorsCount }], [{ openIncidents }], [{ coursesCount }], [{ outreachCount }], [repeatRow]] = await Promise.all([
     db.select({ agentsCount: count() }).from(agents).where(eq(agents.clientId, clientId)),
     db.select({ kbCount: count() }).from(kbSources).where(eq(kbSources.clientId, clientId)),
     db.select({ toolsCount: count() }).from(clientTools).where(eq(clientTools.clientId, clientId)),
@@ -80,22 +80,44 @@ export default async function ClientPage({
     db.select({ monitorsCount: count() }).from(monitors).where(eq(monitors.clientId, clientId)),
     db.select({ openIncidents: count() }).from(incidents).where(and(eq(incidents.clientId, clientId), eq(incidents.status, "open"))),
     db.select({ coursesCount: count() }).from(courses).where(eq(courses.clientId, clientId)),
+    db.select({ outreachCount: count() }).from(contactLists).where(eq(contactLists.clientId, clientId)),
+    db.select({ tableId: clientRepeat.tableId }).from(clientRepeat).where(eq(clientRepeat.clientId, clientId)),
   ]);
 
   const base = `/clients/${client.id}`;
   const used = (f: (c: (typeof agentConfigs)[number]["config"]) => boolean) => agentConfigs.filter((a) => f(a.config)).length;
-  const modules: ModuleCard[] = [
-    { key: "tools", icon: Wrench, title: t.tools.tab, text: t.ws.mod.tools, n: toolsCount + outsCount, used: used((c) => Boolean(c.toolIds?.length)) },
-    { key: "forms", icon: ClipboardList, title: t.forms.tab, text: t.ws.mod.forms, n: formsCount, used: used((c) => Boolean(c.formIds?.length)) },
-    { key: "documents", icon: FileText, title: t.documents.tab, text: t.ws.mod.documents, n: docTypesCount + templatesCount, used: used((c) => Boolean(c.docTemplateIds?.length)) },
-    { key: "loyalty", icon: Gift, title: t.loyalty.tab, text: t.ws.mod.loyalty, n: programsCount, used: used((c) => Boolean(c.loyaltyProgramId)) },
-    { key: "logistics", icon: Truck, title: t.logistics.tab, text: t.ws.mod.logistics, n: logistics?.base ? 1 : 0, used: used((c) => Boolean(c.logistics)) },
-    { key: "pricing", icon: Calculator, title: t.pricing.tab, text: t.ws.mod.pricing, n: pricingRow?.tableId ? 1 : 0, used: used((c) => Boolean(c.pricing)) },
-    { key: "routing", icon: Route, title: t.routing.tab, text: t.ws.mod.routing, n: routingCount, used: 0 },
-    { key: "approvals", icon: ClipboardCheck, title: t.ws.mod.teamTitle, text: t.ws.mod.team, n: teamAgents ? 1 : approvalsCount, used: used((c) => Boolean(c.team?.enabled)), badge: pendingApprovals },
+  // Все разделы клиента по группам. В меню — только настроенные (и открытый сейчас), остальные — в «Все разделы»
+  const sections: ModuleCard[] = [
+    { group: "agent", key: "tools", icon: Wrench, title: t.tools.tab, text: t.ws.mod.tools, n: toolsCount + outsCount, used: used((c) => Boolean(c.toolIds?.length)) },
+    { group: "agent", key: "forms", icon: ClipboardList, title: t.forms.tab, text: t.ws.mod.forms, n: formsCount, used: used((c) => Boolean(c.formIds?.length)) },
+    { group: "agent", key: "documents", icon: FileText, title: t.documents.tab, text: t.ws.mod.documents, n: docTypesCount + templatesCount, used: used((c) => Boolean(c.docTemplateIds?.length)) },
+    { group: "agent", key: "loyalty", icon: Gift, title: t.loyalty.tab, text: t.ws.mod.loyalty, n: programsCount, used: used((c) => Boolean(c.loyaltyProgramId)) },
+    { group: "agent", key: "pricing", icon: Calculator, title: t.pricing.tab, text: t.ws.mod.pricing, n: pricingRow?.tableId ? 1 : 0, used: used((c) => Boolean(c.pricing)) },
+    { group: "agent", key: "logistics", icon: Truck, title: t.logistics.tab, text: t.ws.mod.logistics, n: logistics?.base ? 1 : 0, used: used((c) => Boolean(c.logistics)) },
+    { group: "agent", key: "routing", icon: Route, title: t.routing.tab, text: t.ws.mod.routing, n: routingCount, used: 0, agentless: true },
+    { group: "sales", key: "campaigns", icon: Megaphone, title: t.campaigns.tab, text: t.ws.mod.campaigns, n: campaignsCount, used: 0, agentless: true },
+    { group: "sales", key: "outreach", icon: Mail, title: t.outreach.tab, text: t.ws.mod.outreach, n: outreachCount, used: 0, agentless: true },
+    { group: "sales", key: "reminders", icon: BellRing, title: t.reminders.tab, text: t.ws.mod.reminders, n: remindersCount, used: 0, agentless: true },
+    { group: "sales", key: "repeat", icon: Repeat, title: t.repeat.tab, text: t.ws.mod.repeat, n: repeatRow?.tableId ? 1 : 0, used: 0, agentless: true },
+    { group: "sales", key: "content", icon: PenLine, title: t.content.tab, text: t.ws.mod.content, n: contentCount, used: 0, agentless: true },
+    { group: "ops", key: "meetings", icon: Mic, title: t.meetings.tab, text: t.ws.mod.meetings, n: meetingsCount, used: 0, agentless: true },
+    { group: "ops", key: "routines", icon: FileBarChart2, title: t.routines.tab, text: t.ws.mod.routines, n: routinesCount, used: 0, agentless: true },
+    { group: "ops", key: "monitor", icon: Activity, title: t.monitor.tab, text: t.ws.mod.monitor, n: monitorsCount, used: 0, agentless: true, badge: openIncidents },
+    { group: "people", key: "approvals", icon: ClipboardCheck, title: t.ws.mod.teamTitle, text: t.ws.mod.team, n: teamAgents ? 1 : approvalsCount, used: used((c) => Boolean(c.team?.enabled)), badge: pendingApprovals },
+    { group: "people", key: "onboarding", icon: GraduationCap, title: t.onboarding.tab, text: t.ws.mod.onboarding, n: onboardingCount, used: 0, agentless: true },
+    { group: "people", key: "hiring", icon: Users, title: t.hiring.tab, text: t.ws.mod.hiring, n: vacanciesCount, used: 0, agentless: true },
+    { group: "people", key: "learning", icon: BookOpenCheck, title: t.learning.tab, text: t.ws.mod.learning, n: coursesCount, used: used((c) => Boolean(c.learning)) },
   ];
+  const modules = sections.filter((m) => m.group === "agent");
+  const shown = (g: ModuleCard["group"]) =>
+    sections.filter((m) => m.group === g && (m.n > 0 || m.key === active || m.badge)).map((m) => ({ key: m.key, label: m.title, icon: m.icon, n: m.n || undefined, alert: m.badge }));
   const nav: { title?: string; items: { key: string; label: string; icon: typeof Bot; n?: number; alert?: number }[] }[] = [
-    { items: [{ key: "agents", label: t.ws.overview, icon: LayoutDashboard, n: agentsCount }] },
+    {
+      items: [
+        { key: "agents", label: t.ws.overview, icon: LayoutDashboard, n: agentsCount },
+        { key: "modules", label: t.ws.catalog, icon: Blocks, n: sections.filter((m) => m.n > 0).length },
+      ],
+    },
     {
       title: t.ws.knowledge,
       items: [
@@ -103,36 +125,11 @@ export default async function ClientPage({
         { key: "data", label: t.data.tab, icon: Table2, n: tablesCount },
       ],
     },
-    {
-      title: t.ws.modules,
-      items: [
-        { key: "modules", label: t.ws.catalog, icon: Blocks, n: modules.filter((m) => m.n > 0).length },
-        // В меню — только настроенные модули и открытый сейчас; остальные — в каталоге
-        ...modules.filter((m) => m.n > 0 || m.key === active).map((m) => ({ key: m.key, label: m.title, icon: m.icon, alert: m.badge })),
-      ],
-    },
-    {
-      title: t.ws.work,
-      items: [
-        { key: "campaigns", label: t.campaigns.tab, icon: Megaphone, n: campaignsCount },
-        { key: "outreach", label: t.outreach.tab, icon: Mail },
-        { key: "reminders", label: t.reminders.tab, icon: BellRing, n: remindersCount },
-        { key: "repeat", label: t.repeat.tab, icon: Repeat },
-        { key: "content", label: t.content.tab, icon: PenLine, n: contentCount },
-        { key: "meetings", label: t.meetings.tab, icon: Mic, n: meetingsCount },
-        { key: "routines", label: t.routines.tab, icon: FileBarChart2, n: routinesCount },
-        { key: "monitor", label: t.monitor.tab, icon: Activity, n: monitorsCount, alert: openIncidents },
-      ],
-    },
-    {
-      title: t.ws.people,
-      items: [
-        { key: "onboarding", label: t.onboarding.tab, icon: GraduationCap, n: onboardingCount },
-        { key: "hiring", label: t.hiring.tab, icon: Users, n: vacanciesCount },
-        { key: "learning", label: t.learning.tab, icon: BookOpenCheck, n: coursesCount },
-      ],
-    },
-  ];
+    { title: t.ws.groups.agent, items: shown("agent") },
+    { title: t.ws.groups.sales, items: shown("sales") },
+    { title: t.ws.groups.ops, items: shown("ops") },
+    { title: t.ws.groups.people, items: shown("people") },
+  ].filter((g) => g.items.length);
 
   return (
     <div className="mx-auto max-w-7xl">
@@ -232,7 +229,7 @@ export default async function ClientPage({
       ) : active === "routines" ? (
         <RoutinesTab clientId={client.id} />
       ) : active === "modules" ? (
-        <ModulesCatalog base={base} modules={modules} t={t} />
+        <ModulesCatalog base={base} modules={sections} t={t} />
       ) : (
         <AgentsTab clientId={client.id} t={t} locale={locale} base={base} modules={modules} />
       )}
@@ -242,21 +239,33 @@ export default async function ClientPage({
   );
 }
 
-type ModuleCard = { key: string; icon: typeof Bot; title: string; text: string; n: number; used: number; badge?: number };
+type ModuleCard = { group: "agent" | "sales" | "ops" | "people"; key: string; icon: typeof Bot; title: string; text: string; n: number; used: number; badge?: number; agentless?: boolean };
+const GROUPS = ["agent", "sales", "ops", "people"] as const;
 
-/** Каталог модулей: что можно подключить клиенту, что уже настроено и сколько агентов этим пользуется. */
+/** Все разделы клиента по группам: что настроено, что можно подключить; с чего начать. */
 function ModulesCatalog({ base, modules, t }: { base: string; modules: ModuleCard[]; t: Dict }) {
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div>
         <h2 className="text-base font-semibold">{t.ws.catalogTitle}</h2>
         <p className="mt-1 max-w-3xl text-sm text-muted">{t.ws.catalogHint}</p>
+        <p className="mt-2 max-w-3xl rounded-lg bg-accent-soft px-3 py-2 text-sm">{t.ws.catalogStart}</p>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {modules.map((m) => (
-          <ModuleTile key={m.key} base={base} m={m} t={t} />
-        ))}
-      </div>
+      {GROUPS.map((g) => (
+        <section key={g} className="space-y-2">
+          <div>
+            <h3 className="text-sm font-semibold">{t.ws.groups[g]}</h3>
+            <p className="text-xs text-muted">{t.ws.groupHints[g]}</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {modules
+              .filter((m) => m.group === g)
+              .map((m) => (
+                <ModuleTile key={m.key} base={base} m={m} t={t} />
+              ))}
+          </div>
+        </section>
+      ))}
     </div>
   );
 }
@@ -276,7 +285,7 @@ function ModuleTile({ base, m, t, compact }: { base: string; m: ModuleCard; t: D
         {!compact && <p className="text-[13px] text-muted">{m.text}</p>}
         <div className="mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
           <Badge tone={on ? "success" : "neutral"}>{on ? t.ws.on : t.ws.off}</Badge>
-          {!compact && <span>{on ? (m.used ? t.ws.usedBy.replace("{n}", String(m.used)) : t.ws.notUsed) : t.ws.setUp}</span>}
+          {!compact && <span>{on ? (m.agentless ? "" : m.used ? t.ws.usedBy.replace("{n}", String(m.used)) : t.ws.notUsed) : t.ws.setUp}</span>}
         </div>
       </Card>
     </Link>
@@ -1015,9 +1024,9 @@ async function AgentsTab({ clientId, t, locale, base, modules }: { clientId: str
       ))}
     </div>
     <div className="mt-8 mb-3 flex items-center justify-between gap-3">
-      <h2 className="text-base font-semibold">{t.ws.modules}</h2>
+      <h2 className="text-base font-semibold">{t.ws.groups.agent}</h2>
       <Link href={`${base}?tab=modules`} replace className="text-sm text-accent hover:underline">
-        {t.ws.allModules}
+        {t.ws.catalog}
       </Link>
     </div>
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
