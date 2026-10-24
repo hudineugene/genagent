@@ -14,6 +14,8 @@ import { toPlainText } from "@/lib/conversations";
 import { publicUrl } from "@/lib/settings";
 import { readContentImage } from "./images";
 import { toTelegramHtml } from "@/lib/routines/engine";
+import { streamChat } from "@/lib/llm";
+import { maxVariants } from "./kinds";
 
 /**
  * Контент-студия: генерация текстов в стиле бренда по данным клиента (профиль, голос бренда, база знаний)
@@ -24,7 +26,7 @@ const KB_CHARS = 30_000;
 
 export type ContentKind = ContentItem["kind"];
 export type ContentPlatform = ContentItem["platform"];
-export type GenerateInput = { kind: ContentKind; platform: ContentPlatform; brief: string; tone: string; length: "short" | "medium" | "long"; variants: number; useKb: boolean };
+export type GenerateInput = { kind: ContentKind; platform: ContentPlatform; brief: string; tone: string; length: "short" | "medium" | "long"; variants: number; useKb: boolean; platforms?: ContentPlatform[] };
 
 const KIND_RULES: Record<ContentKind, string> = {
   post: "Пост для соцсети: цепляющая первая строка, польза или история, призыв к действию в конце.",
@@ -32,6 +34,7 @@ const KIND_RULES: Record<ContentKind, string> = {
   ad: "Рекламное объявление: короткий заголовок (до 40 знаков) в title и текст (до 125 знаков для соцсетей, до 90 для поиска). Варианты должны отличаться подходом (выгода, боль, социальное доказательство, срочность) — для A/B-теста.",
   seo: "SEO-бриф для копирайтера: цель страницы, основной и дополнительные ключевые запросы, интент, title и meta description, структура H1–H3 с тезисами, что обязательно упомянуть, внутренние ссылки, объём.",
   vacancy: "Вакансия: должность в title, о компании (2–3 предложения), задачи, требования, условия (только известные), как откликнуться.",
+  repurpose: "Перепаковка: из исходного материала в задании сделай отдельный готовый текст для каждой площадки — со своим форматом, длиной и подачей (тред, пост, подпись, кусок для рассылки). Смысл и факты — только из исходника.",
 };
 const PLATFORM_RULES: Record<ContentPlatform, string> = {
   telegram: "Telegram-канал: абзацы по 1–3 строки, можно эмодзи в меру, жирный — **так**, без хэштегов или 1–2 в конце.",
@@ -55,7 +58,10 @@ async function generateContent__(clientId: string, input: GenerateInput) {
     if (kb.mode === "full") facts = kb.docs.map((d) => `## ${d.title}\n${d.content}`).join("\n\n");
     else if (kb.mode === "search") facts = [...(kb.pinned ?? []).map((d) => `## ${d.title}\n${d.content}`), kb.context ?? ""].join("\n\n");
   }
-  const variants = Math.min(3, Math.max(1, input.variants));
+  const variants = Math.min(maxVariants(input.kind), Math.max(1, input.variants));
+  // Перепаковка: один текст на каждую выбранную площадку
+  const targets = input.kind === "repurpose" ? (input.platforms?.length ? input.platforms : [input.platform]) : null;
+  const serp = input.kind === "seo" ? await serpResearch(input.brief, clientId).catch(() => "") : "";
   const started = Date.now();
   const { data, usage, model } = await generateJson<{ variants: { title: string; text: string }[] }>(apiKey, MODEL, {
     system: [
@@ -63,16 +69,19 @@ async function generateContent__(clientId: string, input: GenerateInput) {
       client.description ? `О компании: ${client.description}` : "",
       client.brandVoice ? `Голос бренда: ${client.brandVoice}` : "",
       `Задача: ${KIND_RULES[input.kind]}`,
-      `Площадка: ${PLATFORM_RULES[input.platform]}`,
-      `Объём: ${input.kind === "ad" ? "по правилам объявления" : LENGTH[input.length]}.`,
+      targets ? `Площадки (по одному тексту на каждую, в этом порядке):\n${targets.map((p) => `- ${p}: ${PLATFORM_RULES[p]}`).join("\n")}` : `Площадка: ${PLATFORM_RULES[input.platform]}`,
+      `Объём: ${input.kind === "ad" ? "по правилам объявления" : targets ? "по формату каждой площадки" : LENGTH[input.length]}.`,
       input.tone ? `Тон: ${input.tone}.` : "",
       "Факты (цены, сроки, характеристики, адреса) бери только из данных компании ниже или из задания. Чего нет — не выдумывай: пиши без конкретики или поставь [уточнить]. Язык — язык задания.",
-      `Сделай ${variants} ${variants === 1 ? "вариант" : "разных варианта"}. title — заголовок или тема (для поста — короткая тема для списка), text — готовый текст.`,
+      targets
+        ? `Сделай ровно ${targets.length} текстов — по одному на площадку, в том же порядке. title — для какой площадки и о чём (коротко), text — готовый текст.`
+        : `Сделай ${variants} ${variants === 1 ? "вариант" : "разных вариантов"}. title — заголовок или тема (для поста — короткая тема для списка), text — готовый текст.`,
+      serp ? `\nАнализ поисковой выдачи по запросу (учти в брифе: что есть у конкурентов в топе, чего не хватает, какую структуру и объём взять):\n${serp}` : "",
       facts ? `\nДанные компании:\n${facts.slice(0, KB_CHARS)}` : "",
     ]
       .filter(Boolean)
       .join("\n"),
-    prompt: `Задание: ${input.brief}`,
+    prompt: `${input.kind === "repurpose" ? "Исходный материал" : "Задание"}: ${input.brief}`,
     schema: {
       type: "object",
       additionalProperties: false,
@@ -85,12 +94,45 @@ async function generateContent__(clientId: string, input: GenerateInput) {
   });
   await logUsage({ source: "generate", model, usage, clientId, ms: Date.now() - started }).catch(() => {});
   const batch = randomUUID();
-  const rows = data.variants.slice(0, variants).filter((v) => v.text.trim());
+  const rows = data.variants.slice(0, targets ? targets.length : variants).filter((v) => v.text.trim());
   if (!rows.length) throw new Error("empty");
   return db
     .insert(contentItems)
-    .values(rows.map((v) => ({ clientId, batch, kind: input.kind, platform: input.platform, brief: input.brief.slice(0, 2000), title: v.title.trim().slice(0, 300), text: v.text.trim().slice(0, 20_000) })))
+    .values(
+      rows.map((v, i) => ({
+        clientId,
+        batch,
+        kind: input.kind,
+        platform: targets ? (targets[i] ?? input.platform) : input.platform,
+        brief: input.brief.slice(0, 2000),
+        title: v.title.trim().slice(0, 300),
+        text: v.text.trim().slice(0, 20_000),
+      })),
+    )
     .returning();
+}
+
+/**
+ * SEO-бриф: смотрим выдачу по запросу (поиск в интернете, если включён в «Внешних сервисах») — что в топе,
+ * какая структура и объём у лучших страниц, каких тем не хватает. Пусто — поиска нет.
+ */
+async function serpResearch(query: string, clientId: string) {
+  const { getServices } = await import("@/lib/services");
+  if (!(await getServices()).webSearch.enabled) return "";
+  let text = "";
+  const started = Date.now();
+  for await (const ev of streamChat({
+    model: "anthropic:claude-haiku-5-5",
+    effort: "low",
+    system:
+      "Ты SEO-аналитик. Найди в поиске топ-5 страниц по запросу пользователя и опиши кратко по-русски: какие это страницы (заголовки), их структура (H2/H3), примерный объём, какие подтемы раскрыты, чего у них не хватает (возможности). Только факты из найденного, 10–15 строк.",
+    messages: [{ role: "user", content: `Запрос: ${query.slice(0, 500)}` }],
+    webSearch: { maxUses: 3 },
+  })) {
+    if (ev.type === "text") text += ev.text;
+    else if (ev.type === "done") await logUsage({ source: "generate", model: ev.servedBy, usage: ev.usage, clientId, ms: Date.now() - started }).catch(() => {});
+  }
+  return text.trim().slice(0, 6000);
 }
 
 /** Опубликовать в Telegram-канал от имени бота клиента. Бот должен быть администратором канала. */

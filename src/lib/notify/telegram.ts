@@ -119,6 +119,7 @@ function conversationButtons(s: NotifySettings | undefined, row: NonNullable<Awa
       { text: "🤖 Вернуть агенту", callback_data: `rt:${id}` },
     ]);
   }
+  rows.push([{ text: "📋 Бриф перед звонком", callback_data: `br:${id}` }]);
   if (s?.adminUrl) rows.push([{ text: "Открыть диалог", url: `${s.adminUrl}/inbox?c=${id}` }]);
   return rows.length ? { inline_keyboard: rows } : undefined;
 }
@@ -132,6 +133,32 @@ async function markDone(s: NotifySettings, q: { message?: { chat: { id: number |
     text: `${(q.message.text ?? "").slice(0, 3500)}\n\n${mark}`,
     link_preview_options: { is_disabled: true },
   }).catch(() => {});
+}
+
+/**
+ * Уведомление о разговоре — ответственным по распределению заявок (если у клиента есть правила), иначе всем.
+ * assignText — по чему выбрать тему, если ответственные ещё не назначены (причина и выжимка передачи).
+ */
+async function sendRouted(row: NonNullable<Awaited<ReturnType<typeof conversationInfo>>>, html: string, markup?: unknown, assignText?: string) {
+  const s = await getNotifySettings();
+  if (!s?.token) return;
+  let target = row.conversation.context?.assignedTo ?? null;
+  if (!target && assignText) {
+    const { assignConversation } = await import("@/lib/routing");
+    target = await assignConversation(row.conversation.id, row.client.id, assignText);
+  }
+  if (!target?.chatIds.length) return broadcast(html, markup);
+  let sent = 0;
+  for (const chatId of target.chatIds) {
+    try {
+      await send(s, chatId, `${html}\n\n👤 <i>${esc(target.rule)}</i>`, markup);
+      sent++;
+    } catch (e) {
+      console.error("routed notify failed", chatId, e instanceof Error ? e.message : e);
+    }
+  }
+  // Ответственные отписались от бота — чтобы клиент не потерялся, уведомляем всех
+  if (!sent) await broadcast(html, markup);
 }
 
 /** Агент передал клиента менеджеру. */
@@ -154,7 +181,7 @@ export async function notifyHandoff(conversationId: string, summary: string | nu
     if (draft && buttons) buttons.inline_keyboard.unshift([{ text: "📤 Отправить черновик", callback_data: `sd:${row.conversation.id}` }]);
     const why = opts.reason ? `<b>Причина:</b> ${esc(opts.reason)}\n` : "";
     const lead = opts.lead ? `${leadHtml(opts.lead)}\n\n` : "";
-    await broadcast(`${title}\n${header(row)}\n\n${why}${lead}${summary ? esc(summary) : "<i>Выжимки нет — откройте диалог.</i>"}${draft}${note}`, buttons);
+    await sendRouted(row, `${title}\n${header(row)}\n\n${why}${lead}${summary ? esc(summary) : "<i>Выжимки нет — откройте диалог.</i>"}${draft}${note}`, buttons, [opts.reason, summary].filter(Boolean).join("\n"));
   } catch (e) {
     console.error("notify handoff failed", e);
   }
@@ -202,7 +229,7 @@ export async function notifyClientMessage(conversationId: string, text: string, 
       if (!lastOp || lastOp.externalId === "bot") return;
     }
     const s = await getNotifySettings();
-    await broadcast(`💬 <b>Клиент пишет</b>\n${header(row)}\n\n${esc(text.slice(0, 1500))}`, conversationButtons(s, row));
+    await sendRouted(row, `💬 <b>Клиент пишет</b>\n${header(row)}\n\n${esc(text.slice(0, 1500))}`, conversationButtons(s, row));
   } catch (e) {
     console.error("notify client message failed", e);
   }
@@ -221,9 +248,11 @@ export async function notifyHotLead(conversationId: string, lead: LeadCard) {
       .orderBy(desc(messages.createdAt))
       .limit(1);
     const quote = last?.text ? `\n\n💬 <i>${esc(last.text.slice(0, 400))}</i>` : "";
-    await broadcast(
+    await sendRouted(
+      row,
       `🔥 <b>Горячий клиент сейчас в чате</b>\n${header(row)}\n\n${leadHtml(lead)}${quote}\n\n<i>Агент ведёт разговор сам — подключитесь, если хотите закрыть сделку лично.</i>`,
       conversationButtons(s, row),
+      [lead.reason, ...lead.fields.map((f) => `${f.label}: ${f.value}`), last?.text].filter(Boolean).join("\n"),
     );
   } catch (e) {
     console.error("notify hot lead failed", e);
@@ -239,7 +268,7 @@ export async function notifyWaiting(conversationId: string, minutes: number, urg
     const wait = minutes >= 60 ? `${Math.floor(minutes / 60)} ч ${minutes % 60 ? `${minutes % 60} мин` : ""}`.trim() : `${minutes} мин`;
     const title = urgent ? `🔴 <b>Клиент ждёт ответа уже ${wait}</b>` : `⏳ <b>Клиент ждёт ответа ${wait}</b>`;
     const quote = lastText ? `\n\n<i>${esc(lastText.slice(0, 600))}</i>` : "";
-    await broadcast(`${title}\n${header(row)}${quote}`, conversationButtons(s, row));
+    await sendRouted(row, `${title}\n${header(row)}${quote}`, conversationButtons(s, row));
   } catch (e) {
     console.error("notify waiting failed", e);
   }
@@ -760,14 +789,18 @@ async function handleUpdate(u: Update) {
         await answerGap(s, chatId, gapId, u.message.text, isStudio);
         return;
       }
-      if (!isStudio) {
-        await send(s, chatId, "Чтобы ответить на вопрос, нажмите «✍️ Ответить» под ним.");
-        return;
-      }
       // Ответ клиенту: «Ответить» на подсказку или первое сообщение после кнопки «Ответить»
       const viaReply = u.message.reply_to_message && promptToConversation.get(`${chatId}:${u.message.reply_to_message.message_id}`);
       const pending = pendingReply.get(chatId);
       const conversationId = viaReply || (pending && Date.now() - pending.at < REPLY_TTL_MS ? pending.conversationId : null);
+      if (!isStudio) {
+        // Владелец отвечает только клиентам своего бизнеса (разговор ему назначен распределением заявок)
+        const [conv] = conversationId ? await db.select({ clientId: conversations.clientId }).from(conversations).where(eq(conversations.id, conversationId)) : [];
+        if (!conv || !(s.owners ?? []).some((o) => o.chatId === chatId && o.clientId === conv.clientId)) {
+          await send(s, chatId, "Чтобы ответить на вопрос, нажмите «✍️ Ответить» под ним.");
+          return;
+        }
+      }
       if (!conversationId) {
         await send(s, chatId, "Чтобы ответить клиенту, нажмите «✍️ Ответить» под уведомлением о нём.");
         return;
@@ -795,7 +828,11 @@ async function handleUpdate(u: Update) {
   if (!isStudio && !ownClients.length) return answer("Нет доступа");
   const [action, messageId] = q.data.split(":");
   if (!/^[0-9a-f-]{36}$/.test(messageId ?? "")) return answer("Неизвестная кнопка");
-  if (!isStudio && !["ga", "kx", "kb", "ap", "ax"].includes(action)) return answer("Нет доступа");
+  if (!isStudio && !["ga", "kx", "kb", "ap", "ax", "rp", "rt", "sd", "br"].includes(action)) return answer("Нет доступа");
+  if (!isStudio && (action === "rp" || action === "rt" || action === "sd" || action === "br")) {
+    const [conv] = await db.select({ clientId: conversations.clientId }).from(conversations).where(eq(conversations.id, messageId));
+    if (!conv || !ownClients.includes(conv.clientId)) return answer("Нет доступа");
+  }
   if (action === "ap" || action === "ax") {
     const [a] = await db.select().from(approvals).where(eq(approvals.id, messageId));
     if (!a) return answer("Заявка не найдена");
@@ -826,6 +863,14 @@ async function handleUpdate(u: Update) {
     );
     promptToGap.set(`${chatId}:${prompt.message_id}`, messageId);
     if (promptToGap.size > 500) promptToGap.delete(promptToGap.keys().next().value as string);
+    return;
+  }
+  if (action === "br") {
+    await answer("Готовлю бриф…");
+    const { callBrief } = await import("@/lib/agent/brief");
+    const text = await callBrief(messageId).catch(() => null);
+    const row = await conversationInfo(messageId);
+    await send(s, chatId, text ? `📋 <b>Бриф перед звонком</b>${row ? `\n${header(row)}` : ""}\n\n${esc(text).replace(/^##\s*(.+)$/gm, "<b>$1</b>").slice(0, 3800)}` : "Не получилось подготовить бриф — попробуйте ещё раз.");
     return;
   }
   if (action === "rp") {

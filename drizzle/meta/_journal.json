@@ -218,6 +218,27 @@
       "when": 1792840000000,
       "tag": "0030_client_keys",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "6",
+      "when": 1792850000000,
+      "tag": "0031_outreach",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1792860000000,
+      "tag": "0032_routing",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "6",
+      "when": 1792870000000,
+      "tag": "0033_pricing",
+      "breakpoints": true
     }
   ]
 }

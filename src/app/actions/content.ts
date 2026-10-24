@@ -14,10 +14,11 @@ import { generateContent, publishItem } from "@/lib/content/studio";
 const genSchema = z.object({
   kind: z.enum(CONTENT_KINDS),
   platform: z.enum(CONTENT_PLATFORMS),
-  brief: z.string().trim().min(3).max(3000),
+  brief: z.string().trim().min(3).max(20_000),
   tone: z.string().trim().max(200),
   length: z.enum(["short", "medium", "long"]),
-  variants: z.number().int().min(1).max(3),
+  variants: z.number().int().min(1).max(10),
+  platforms: z.array(z.enum(CONTENT_PLATFORMS)).max(7).optional(),
   useKb: z.boolean(),
   /** Сразу нарисовать картинку к каждому варианту (OpenAI) */
   withImage: z.boolean().optional(),

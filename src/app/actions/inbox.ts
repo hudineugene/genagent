@@ -84,6 +84,19 @@ export async function forgetClientMemory(conversationId: string): Promise<InboxR
 }
 
 /** «Проверить ответ» до отправки: оценка, замечания и улучшенный вариант (по правилам и базе знаний агента). */
+/** Бриф перед звонком клиенту (на одну страницу). */
+export async function callBriefAction(conversationId: string): Promise<{ text?: string; error?: string }> {
+  await requireUser();
+  try {
+    const { callBrief } = await import("@/lib/agent/brief");
+    const text = await callBrief(conversationId);
+    return text ? { text } : { error: "unavailable" };
+  } catch (e) {
+    console.error("call brief failed", e);
+    return { error: "unavailable" };
+  }
+}
+
 export async function checkOperatorDraft(conversationId: string, text: string): Promise<{ score: number; problems: string[]; better: string } | { error: string }> {
   await requireUser();
   if (!text.trim()) return { error: "empty" };

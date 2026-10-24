@@ -13,6 +13,7 @@ import { loadTables, tableTool, tablesNote } from "@/lib/data/tables";
 import { approvalTool, teamNote } from "@/lib/team/approvals";
 import { getProgram, loyaltyNote, loyaltyTools } from "@/lib/loyalty/engine";
 import { deliveryTool } from "@/lib/logistics/routes";
+import { pricingTool } from "@/lib/pricing";
 import { webSearchFor } from "@/lib/services";
 import { examplesNote, getExamples } from "./examples";
 
@@ -88,6 +89,7 @@ export async function prepareChat(
     ...templates.map((t) => docTool(t, { ...tools, clientId: client.id })),
     ...tables.map((t) => tableTool(t)),
     ...(config.logistics && apiKey("googleMaps") ? [deliveryTool(client.id)] : []),
+    ...(config.pricing ? [pricingTool(client.id)] : []),
     ...(loyalty ? loyaltyTools(loyalty, { ...tools, clientId: client.id }) : []),
     ...(config.team?.enabled && config.team.approvals ? [approvalTool(config.team, { ...tools, clientId: client.id })] : []),
   ];

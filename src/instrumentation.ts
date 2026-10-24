@@ -61,6 +61,8 @@ export async function register() {
   startRoutines();
   const { startContent } = await import("./lib/content/studio");
   startContent();
+  const { startOutreach } = await import("./lib/outreach/engine");
+  startOutreach();
   const { startMonthlyReports } = await import("./lib/agent/report");
   startMonthlyReports();
   const { startWatch } = await import("./lib/agent/watch");

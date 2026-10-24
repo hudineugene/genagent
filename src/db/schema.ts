@@ -545,6 +545,150 @@ export const meetings = sqliteTable(
 );
 export type Meeting = typeof meetings.$inferSelect;
 
+/**
+ * Списки контактов (CSV, Excel, Google Таблица): потенциальные клиенты, участники вебинара, база покупателей.
+ * По списку — персональная рассылка (outreach): исследование каждого (поиск новостей компании), письмо под него
+ * или под его группу, проверка черновиков человеком, отправка с почтового канала клиента или в существующий чат.
+ */
+export const contactLists = sqliteTable(
+  "contact_lists",
+  {
+    id: id(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    source: text("source").notNull().default("file"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("contact_lists_client_idx").on(t.clientId)],
+);
+export type ContactList = typeof contactLists.$inferSelect;
+
+export const contacts = sqliteTable(
+  "contacts",
+  {
+    id: id(),
+    listId: text("list_id")
+      .notNull()
+      .references(() => contactLists.id, { onDelete: "cascade" }),
+    clientId: text("client_id").notNull(),
+    name: text("name").notNull().default(""),
+    email: text("email").notNull().default(""),
+    telegram: text("telegram").notNull().default(""),
+    phone: text("phone").notNull().default(""),
+    company: text("company").notNull().default(""),
+    website: text("website").notNull().default(""),
+    /** Группа (сегмент): «активный», «пассивный», «VIP»… — у группы может быть своё задание письма */
+    grp: text("grp").notNull().default(""),
+    /** Остальные столбцы файла: должность, город, что спрашивал на вебинаре… */
+    fields: text("fields", { mode: "json" }).$type<Record<string, string>>().notNull().default({}),
+    unsubscribed: integer("unsubscribed", { mode: "boolean" }).notNull().default(false),
+    createdAt: createdAt(),
+  },
+  (t) => [index("contacts_list_idx").on(t.listId), index("contacts_email_idx").on(t.clientId, t.email)],
+);
+export type Contact = typeof contacts.$inferSelect;
+
+export const outreach = sqliteTable(
+  "outreach",
+  {
+    id: id(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    listId: text("list_id")
+      .notNull()
+      .references(() => contactLists.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    /** email — с почтового канала клиента; chats — в существующие разговоры (Telegram, WhatsApp, почта), найденные по контакту */
+    mode: text("mode", { enum: ["email", "chats"] }).notNull().default("email"),
+    channelId: text("channel_id").references(() => channels.id, { onDelete: "set null" }),
+    brief: text("brief").notNull().default(""),
+    groupBriefs: text("group_briefs", { mode: "json" }).$type<Record<string, string>>().notNull().default({}),
+    /** Перед письмом найти свежие новости компании контакта (поиск в интернете) */
+    research: integer("research", { mode: "boolean" }).notNull().default(false),
+    status: text("status", { enum: ["draft", "generating", "review", "sending", "done"] }).notNull().default("draft"),
+    error: text("error"),
+    createdAt: createdAt(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [index("outreach_client_idx").on(t.clientId)],
+);
+export type Outreach = typeof outreach.$inferSelect;
+
+export const outreachMessages = sqliteTable(
+  "outreach_messages",
+  {
+    id: id(),
+    outreachId: text("outreach_id")
+      .notNull()
+      .references(() => outreach.id, { onDelete: "cascade" }),
+    contactId: text("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    subject: text("subject").notNull().default(""),
+    body: text("body").notNull().default(""),
+    /** Что нашлось о компании (для проверки человеком) */
+    research: text("research").notNull().default(""),
+    status: text("status", { enum: ["pending", "ready", "approved", "sent", "failed", "skipped"] }).notNull().default("pending"),
+    error: text("error"),
+    sentAt: integer("sent_at", { mode: "timestamp_ms" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("outreach_messages_idx").on(t.outreachId, t.status)],
+);
+export type OutreachMessage = typeof outreachMessages.$inferSelect;
+
+/**
+ * Распределение заявок: тема (отдел) → кому из команды приходят уведомления о передаче, горячих клиентах и новых
+ * сообщениях. Тему выбирает дешёвая модель по причине и выжимке; не подошла ни одна — всем, как раньше.
+ */
+export const routingRules = sqliteTable(
+  "routing_rules",
+  {
+    id: id(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description").notNull().default(""),
+    /** Кому: chatId подписчиков бота уведомлений (сотрудники студии и владельцы клиента) */
+    chatIds: text("chat_ids", { mode: "json" }).$type<string[]>().notNull().default([]),
+    position: integer("position").notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [index("routing_rules_client_idx").on(t.clientId)],
+);
+export type RoutingRule = typeof routingRules.$inferSelect;
+
+export type PriceTier = { from: number; percent: number };
+/**
+ * Правила цен для расчёта КП: прайс — таблица из «Данных» (столбцы названия и цены), скидки по сумме заказа или
+ * количеству (ступени «от … — …%»), НДС, валюта. Считает код: агент только называет позиции и количество.
+ */
+export const clientPricing = sqliteTable("client_pricing", {
+  clientId: text("client_id")
+    .primaryKey()
+    .references(() => clients.id, { onDelete: "cascade" }),
+  tableId: text("table_id").references(() => dataTables.id, { onDelete: "set null" }),
+  nameColumn: text("name_column").notNull().default(""),
+  priceColumn: text("price_column").notNull().default(""),
+  tierBy: text("tier_by", { enum: ["amount", "qty"] }).notNull().default("amount"),
+  tiers: text("tiers", { mode: "json" }).$type<PriceTier[]>().notNull().default([]),
+  /** НДС, %: 0 — цены без НДС не пересчитываем */
+  vat: real("vat").notNull().default(0),
+  currency: text("currency").notNull().default("€"),
+  /** Условия, которые агент называет вместе с расчётом (срок действия, предоплата…) */
+  notes: text("notes").notNull().default(""),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+export type ClientPricing = typeof clientPricing.$inferSelect;
+
 export type Vehicle = { name: string; capacityKg: number; capacityM3: number };
 /** Логистика клиента: склад / точка отправления, время на одну точку, машины; правила доставки — для агента. */
 export const clientLogistics = sqliteTable("client_logistics", {
@@ -937,6 +1081,8 @@ export type ConversationContext = {
   optOut?: boolean;
   /** Агент для сотрудников: этому собеседнику уже ответили, что доступа нет */
   teamDenied?: boolean;
+  /** Ответственные за разговор по распределению заявок: тема и кому уходят уведомления */
+  assignedTo?: { rule: string; chatIds: string[]; at: number };
   /** Строка заявки этого разговора в Google Таблице (id интеграции → номер строки) */
   sheetRows?: Record<string, number>;
   postId?: string;

@@ -6,7 +6,7 @@ import { CalendarClock, Copy, ExternalLink, ImageIcon, ImagePlus, Pencil, PenLin
 import { deleteContentItem, generateContentAction, generateImageAction, removeImageAction, saveContentItem, scheduleContent, unscheduleContent } from "@/app/actions/content";
 import { useI18n } from "@/lib/i18n/client";
 import { Badge, Button, Card, EmptyState, Field, Input, Select, Spinner, Textarea } from "@/components/ui";
-import { CONTENT_KINDS, CONTENT_PLATFORMS } from "@/lib/content/kinds";
+import { CONTENT_KINDS, CONTENT_PLATFORMS, maxVariants } from "@/lib/content/kinds";
 
 type Kind = (typeof CONTENT_KINDS)[number];
 type Platform = (typeof CONTENT_PLATFORMS)[number];
@@ -58,14 +58,15 @@ export function ContentStudio({ clientId, rows, bots, openai }: { clientId: stri
 function Generator({ clientId, openai }: { clientId: string; openai: boolean }) {
   const { t } = useI18n();
   const c = t.content;
-  const [v, setV] = useState({ kind: "post" as Kind, platform: "telegram" as Platform, brief: "", tone: "", length: "medium" as "short" | "medium" | "long", variants: 2, useKb: true, withImage: false });
+  const [v, setV] = useState({ kind: "post" as Kind, platform: "telegram" as Platform, platforms: ["telegram", "instagram", "linkedin"] as Platform[], brief: "", tone: "", length: "medium" as "short" | "medium" | "long", variants: 2, useKb: true, withImage: false });
+  const repurpose = v.kind === "repurpose";
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const set = <K extends keyof typeof v>(k: K, val: (typeof v)[K]) => setV({ ...v, [k]: val });
   const submit = () =>
     start(async () => {
       setError(null);
-      const r = await generateContentAction(clientId, v);
+      const r = await generateContentAction(clientId, { ...v, platforms: repurpose ? v.platforms : undefined });
       if (r.error) setError((c.errors as Record<string, string>)[r.error] ?? c.errors.failed);
       else {
         set("brief", "");
@@ -80,7 +81,7 @@ function Generator({ clientId, openai }: { clientId: string; openai: boolean }) 
       </div>
       <div className="flex flex-wrap gap-3">
         <Field label={c.kind}>
-          <Select className="w-48" value={v.kind} onChange={(e) => set("kind", e.target.value as Kind)}>
+          <Select className="w-48" value={v.kind} onChange={(e) => { const kind = e.target.value as Kind; setV({ ...v, kind, variants: Math.min(v.variants, maxVariants(kind)) }); }}>
             {CONTENT_KINDS.map((k) => (
               <option key={k} value={k}>
                 {c.kinds[k]}
@@ -88,15 +89,34 @@ function Generator({ clientId, openai }: { clientId: string; openai: boolean }) 
             ))}
           </Select>
         </Field>
-        <Field label={c.platform}>
-          <Select className="w-44" value={v.platform} onChange={(e) => set("platform", e.target.value as Platform)}>
-            {CONTENT_PLATFORMS.map((k) => (
-              <option key={k} value={k}>
-                {c.platforms[k]}
-              </option>
-            ))}
-          </Select>
-        </Field>
+        {repurpose ? (
+          <Field label={c.platformsMany}>
+            <div className="flex max-w-xl flex-wrap gap-x-4 gap-y-1.5 pt-1.5">
+              {CONTENT_PLATFORMS.map((k) => (
+                <label key={k} className="flex items-center gap-1.5 text-sm">
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-[var(--accent)]"
+                    checked={v.platforms.includes(k)}
+                    onChange={() => set("platforms", v.platforms.includes(k) ? v.platforms.filter((p) => p !== k) : [...v.platforms, k])}
+                  />
+                  {c.platforms[k]}
+                </label>
+              ))}
+            </div>
+          </Field>
+        ) : (
+          <Field label={c.platform}>
+            <Select className="w-44" value={v.platform} onChange={(e) => set("platform", e.target.value as Platform)}>
+              {CONTENT_PLATFORMS.map((k) => (
+                <option key={k} value={k}>
+                  {c.platforms[k]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
+        {!repurpose && (
         <Field label={c.length}>
           <Select className="w-40" value={v.length} disabled={v.kind === "ad"} onChange={(e) => set("length", e.target.value as typeof v.length)}>
             {(["short", "medium", "long"] as const).map((k) => (
@@ -106,18 +126,21 @@ function Generator({ clientId, openai }: { clientId: string; openai: boolean }) 
             ))}
           </Select>
         </Field>
-        <Field label={c.variants}>
-          <Select className="w-24" value={v.variants} onChange={(e) => set("variants", Number(e.target.value))}>
-            {[1, 2, 3].map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </Select>
-        </Field>
+        )}
+        {!repurpose && (
+          <Field label={c.variants}>
+            <Select className="w-24" value={v.variants} onChange={(e) => set("variants", Number(e.target.value))}>
+              {Array.from({ length: maxVariants(v.kind) }, (_, i) => i + 1).map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
       </div>
-      <Field label={c.brief} hint={c.briefHint}>
-        <Textarea rows={3} value={v.brief} maxLength={3000} placeholder={c.briefPlaceholder[v.kind]} onChange={(e) => set("brief", e.target.value)} />
+      <Field label={repurpose ? c.source : c.brief} hint={repurpose ? c.sourceHint : v.kind === "seo" ? c.seoHint : c.briefHint}>
+        <Textarea rows={repurpose ? 8 : 3} value={v.brief} maxLength={repurpose ? 20_000 : 3000} placeholder={c.briefPlaceholder[v.kind]} onChange={(e) => set("brief", e.target.value)} />
       </Field>
       <Field label={c.tone}>
         <Input value={v.tone} maxLength={200} placeholder={c.tonePlaceholder} onChange={(e) => set("tone", e.target.value)} />
@@ -136,7 +159,7 @@ function Generator({ clientId, openai }: { clientId: string; openai: boolean }) 
         </label>
       )}
       {error && <p className="text-sm text-danger">{error}</p>}
-      <Button disabled={pending || v.brief.trim().length < 3} onClick={submit}>
+      <Button disabled={pending || v.brief.trim().length < 3 || (repurpose && !v.platforms.length)} onClick={submit}>
         {pending ? <Spinner /> : <Sparkles className="size-4" />}
         {pending ? (v.withImage && openai ? c.generatingWithImage : c.generating) : c.generate}
       </Button>

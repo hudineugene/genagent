@@ -30,12 +30,14 @@ import {
   Video,
   X,
   type LucideIcon,
+  ClipboardList,
 } from "lucide-react";
 import { scenarioFromConversationAction } from "@/app/actions/tests";
 import {
   deleteConversation,
   approveDraft,
   checkOperatorDraft,
+  callBriefAction,
   markRead,
   rejectDraft,
   returnToAgent,
@@ -108,6 +110,9 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
   const [checking, startCheck] = useTransition();
   // «В автотест»: создан сценарий-повтор этого разговора (ссылка на вкладку проверки агента)
   const [scenarioNote, setScenarioNote] = useState<string | null>(null);
+  // «Бриф перед звонком»: кто клиент, что обсудили, возражения, о чём говорить
+  const [brief, setBrief] = useState<string | null>(null);
+  const [briefing, startBrief] = useTransition();
   const endRef = useRef<HTMLDivElement>(null);
   const time = new Intl.DateTimeFormat(locale === "uk" ? "uk-UA" : "ru-RU", { timeStyle: "short" });
 
@@ -190,6 +195,20 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
             </Button>
           )}
           <IconAction
+            title={t.inbox.brief}
+            disabled={briefing}
+            onClick={() =>
+              startBrief(async () => {
+                setError(null);
+                const r = await callBriefAction(data.id);
+                if (r.text) setBrief(r.text);
+                else setError(t.inbox.briefFailed);
+              })
+            }
+          >
+            {briefing ? <Spinner className="size-4" /> : <ClipboardList className="size-4" />}
+          </IconAction>
+          <IconAction
             title={t.inbox.toTestHint}
             disabled={pending}
             onClick={() =>
@@ -229,6 +248,15 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
           <InfoToggle />
         </div>
       </div>
+      {brief && (
+        <div className="relative border-b border-border bg-surface-2/50 px-4 py-3 text-sm">
+          <button type="button" className="absolute top-2 right-3 text-xs text-muted hover:text-text" onClick={() => setBrief(null)}>
+            {t.inbox.briefClose}
+          </button>
+          <div className="mb-1 text-xs font-semibold text-accent">{t.inbox.brief}</div>
+          <div className="max-h-80 overflow-auto whitespace-pre-wrap pr-10">{brief.replace(/^##\s*/gm, "▸ ")}</div>
+        </div>
+      )}
 
       <div className="flex-1 space-y-3 overflow-y-auto bg-surface-2/50 px-4 py-4">
         {data.kind === "comment" && data.context && (

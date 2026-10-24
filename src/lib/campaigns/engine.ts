@@ -326,7 +326,9 @@ export async function sendRun(run: CampaignRun): Promise<void> {
 
 /** Клиент написал «стоп»: отписать и остановить всё, что ему запланировано. */
 export async function optOut(conversationId: string) {
-  const [cur] = await db.select({ context: conversations.context }).from(conversations).where(eq(conversations.id, conversationId));
+  const [cur] = await db.select({ context: conversations.context, clientId: conversations.clientId, externalId: conversations.externalId }).from(conversations).where(eq(conversations.id, conversationId));
+  // Ответили «стоп» на письмо рассылки по списку — отписать этот адрес во всех списках клиента
+  if (cur && cur.externalId.includes("@")) await import("@/lib/outreach/engine").then((m) => m.unsubscribeEmail(cur.clientId, cur.externalId)).catch(() => {});
   await db.update(conversations).set({ context: { ...cur?.context, optOut: true } }).where(eq(conversations.id, conversationId));
   await db
     .update(campaignRuns)

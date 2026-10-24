@@ -4,7 +4,18 @@ import type { Conversation, EmailConfig } from "@/db/schema";
 
 // Отправка писем отдельно от чтения ящика: её вызывает доставка ответов (conversations.ts).
 
+/** Письма, «отправленные» в тестах (EMAIL_TEST_JSON=1): ничего не уходит в сеть, письмо остаётся здесь. */
+export const testOutbox: { to: string; subject: string; text: string; from: string }[] = [];
+
 export function smtpTransport(cfg: EmailConfig) {
+  if (process.env.EMAIL_TEST_JSON === "1") {
+    return {
+      sendMail: async (m: { to: string; subject: string; text: string; from: { address: string } }) => {
+        testOutbox.push({ to: m.to, subject: m.subject, text: m.text, from: m.from.address });
+        return { messageId: `<test-${testOutbox.length}@local>` };
+      },
+    } as unknown as ReturnType<typeof nodemailer.createTransport>;
+  }
   return nodemailer.createTransport({
     host: cfg.smtpHost,
     port: cfg.smtpPort,

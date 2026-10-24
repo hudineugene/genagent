@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, asc, count, desc, eq, inArray } from "drizzle-orm";
-import { BarChart3, Blocks, BookOpen, Bot, LayoutDashboard, ClipboardList, ClipboardCheck, FileBarChart2, FileText, Gift, Mic, PenLine, Truck, Table2, Megaphone, Plus, Settings, Wrench } from "lucide-react";
+import { BarChart3, Blocks, BookOpen, Bot, Calculator, LayoutDashboard, ClipboardList, ClipboardCheck, FileBarChart2, FileText, Gift, Mail, Mic, PenLine, Route, Truck, Table2, Megaphone, Plus, Settings, Wrench } from "lucide-react";
 import { db } from "@/db";
-import { agents, approvals, campaigns, channels, clientLogistics, contentItems, loyaltyAccounts, loyaltyPrograms, loyaltyTx, meetings, clientDocTypes, clientDocuments, clientForms, dataTables, clientIntegrations, clientTools, clients, conversations, docTemplates, formResponses, generatedDocs, kbSources, knowledgeGaps, routines } from "@/db/schema";
+import { agents, approvals, campaigns, clientPricing, routingRules, contactLists, contacts, outreach, outreachMessages, channels, clientLogistics, contentItems, loyaltyAccounts, loyaltyPrograms, loyaltyTx, meetings, clientDocTypes, clientDocuments, clientForms, dataTables, clientIntegrations, clientTools, clients, conversations, docTemplates, formResponses, generatedDocs, kbSources, knowledgeGaps, routines } from "@/db/schema";
 import { getT } from "@/lib/i18n/server";
 import { findModel } from "@/lib/models";
 import type { Dict, Locale } from "@/lib/i18n";
@@ -22,6 +22,9 @@ import { ContentStudio } from "./content";
 import { MeetingsManager } from "./meetings";
 import { LoyaltyManager } from "./loyalty";
 import { LogisticsManager } from "./logistics";
+import { OutreachManager } from "./outreach";
+import { RoutingManager } from "./routing";
+import { PricingManager } from "./pricing";
 import { publicUrl } from "@/lib/settings";
 import { campaignStats } from "@/lib/campaigns/engine";
 import { getGoogleSettings } from "@/lib/google/calendar";
@@ -44,9 +47,9 @@ export default async function ClientPage({
   const [client] = await db.select().from(clients).where(eq(clients.id, clientId));
   if (!client) notFound();
 
-  const SECTIONS = ["kb", "data", "modules", "tools", "forms", "documents", "loyalty", "logistics", "approvals", "campaigns", "content", "meetings", "routines"] as const;
+  const SECTIONS = ["kb", "data", "modules", "outreach", "routing", "pricing", "tools", "forms", "documents", "loyalty", "logistics", "approvals", "campaigns", "content", "meetings", "routines"] as const;
   const active = (SECTIONS as readonly string[]).includes(tab ?? "") ? (tab as (typeof SECTIONS)[number]) : "agents";
-  const [[{ agentsCount }], [{ kbCount }], [{ toolsCount }], [{ campaignsCount }], [{ formsCount }], [{ routinesCount }], [{ docTypesCount }], [{ templatesCount }], [{ tablesCount }], [{ pendingApprovals }], [{ approvalsCount }], teamAgents, [{ contentCount }], [{ meetingsCount }], [{ programsCount }], [{ outsCount }], [logistics], agentConfigs] = await Promise.all([
+  const [[{ agentsCount }], [{ kbCount }], [{ toolsCount }], [{ campaignsCount }], [{ formsCount }], [{ routinesCount }], [{ docTypesCount }], [{ templatesCount }], [{ tablesCount }], [{ pendingApprovals }], [{ approvalsCount }], teamAgents, [{ contentCount }], [{ meetingsCount }], [{ programsCount }], [{ outsCount }], [logistics], agentConfigs, [{ routingCount }], [pricingRow]] = await Promise.all([
     db.select({ agentsCount: count() }).from(agents).where(eq(agents.clientId, clientId)),
     db.select({ kbCount: count() }).from(kbSources).where(eq(kbSources.clientId, clientId)),
     db.select({ toolsCount: count() }).from(clientTools).where(eq(clientTools.clientId, clientId)),
@@ -65,6 +68,8 @@ export default async function ClientPage({
     db.select({ outsCount: count() }).from(clientIntegrations).where(eq(clientIntegrations.clientId, clientId)),
     db.select({ base: clientLogistics.baseAddress }).from(clientLogistics).where(eq(clientLogistics.clientId, clientId)),
     db.select({ config: agents.config }).from(agents).where(eq(agents.clientId, clientId)),
+    db.select({ routingCount: count() }).from(routingRules).where(eq(routingRules.clientId, clientId)),
+    db.select({ tableId: clientPricing.tableId }).from(clientPricing).where(eq(clientPricing.clientId, clientId)),
   ]);
 
   const base = `/clients/${client.id}`;
@@ -75,6 +80,8 @@ export default async function ClientPage({
     { key: "documents", icon: FileText, title: t.documents.tab, text: t.ws.mod.documents, n: docTypesCount + templatesCount, used: used((c) => Boolean(c.docTemplateIds?.length)) },
     { key: "loyalty", icon: Gift, title: t.loyalty.tab, text: t.ws.mod.loyalty, n: programsCount, used: used((c) => Boolean(c.loyaltyProgramId)) },
     { key: "logistics", icon: Truck, title: t.logistics.tab, text: t.ws.mod.logistics, n: logistics?.base ? 1 : 0, used: used((c) => Boolean(c.logistics)) },
+    { key: "pricing", icon: Calculator, title: t.pricing.tab, text: t.ws.mod.pricing, n: pricingRow?.tableId ? 1 : 0, used: used((c) => Boolean(c.pricing)) },
+    { key: "routing", icon: Route, title: t.routing.tab, text: t.ws.mod.routing, n: routingCount, used: 0 },
     { key: "approvals", icon: ClipboardCheck, title: t.ws.mod.teamTitle, text: t.ws.mod.team, n: teamAgents ? 1 : approvalsCount, used: used((c) => Boolean(c.team?.enabled)), badge: pendingApprovals },
   ];
   const nav: { title?: string; items: { key: string; label: string; icon: typeof Bot; n?: number; alert?: number }[] }[] = [
@@ -98,6 +105,7 @@ export default async function ClientPage({
       title: t.ws.work,
       items: [
         { key: "campaigns", label: t.campaigns.tab, icon: Megaphone, n: campaignsCount },
+        { key: "outreach", label: t.outreach.tab, icon: Mail },
         { key: "content", label: t.content.tab, icon: PenLine, n: contentCount },
         { key: "meetings", label: t.meetings.tab, icon: Mic, n: meetingsCount },
         { key: "routines", label: t.routines.tab, icon: FileBarChart2, n: routinesCount },
@@ -168,6 +176,12 @@ export default async function ClientPage({
         <CampaignsTab clientId={client.id} />
       ) : active === "forms" ? (
         <FormsTab clientId={client.id} />
+      ) : active === "pricing" ? (
+        <PricingTab clientId={client.id} />
+      ) : active === "routing" ? (
+        <RoutingTab clientId={client.id} />
+      ) : active === "outreach" ? (
+        <OutreachTab clientId={client.id} />
       ) : active === "logistics" ? (
         <LogisticsTab clientId={client.id} />
       ) : active === "loyalty" ? (
@@ -233,6 +247,86 @@ function ModuleTile({ base, m, t, compact }: { base: string; m: ModuleCard; t: D
         </div>
       </Card>
     </Link>
+  );
+}
+
+async function PricingTab({ clientId }: { clientId: string }) {
+  const [[p], tables] = await Promise.all([
+    db.select().from(clientPricing).where(eq(clientPricing.clientId, clientId)),
+    db.select({ id: dataTables.id, name: dataTables.name, columns: dataTables.columns }).from(dataTables).where(eq(dataTables.clientId, clientId)),
+  ]);
+  return (
+    <PricingManager
+      clientId={clientId}
+      tables={tables.map((x) => ({ id: x.id, name: x.name, columns: x.columns.map((c) => c.name) }))}
+      initial={{
+        tableId: p?.tableId ?? null,
+        nameColumn: p?.nameColumn ?? "",
+        priceColumn: p?.priceColumn ?? "",
+        tierBy: p?.tierBy ?? "amount",
+        tiers: p?.tiers ?? [],
+        vat: p?.vat ?? 0,
+        currency: p?.currency ?? "€",
+        notes: p?.notes ?? "",
+      }}
+    />
+  );
+}
+
+async function RoutingTab({ clientId }: { clientId: string }) {
+  const [rules, notify] = await Promise.all([
+    db.select().from(routingRules).where(eq(routingRules.clientId, clientId)).orderBy(asc(routingRules.position), asc(routingRules.createdAt)),
+    getNotifySettings(),
+  ]);
+  const people = [
+    ...(notify?.subscribers ?? []).map((p) => ({ chatId: p.chatId, name: p.name, kind: "studio" as const })),
+    ...(notify?.owners ?? []).filter((o) => o.clientId === clientId).map((p) => ({ chatId: p.chatId, name: p.name, kind: "owner" as const })),
+  ];
+  return <RoutingManager clientId={clientId} rules={rules.map((r) => ({ id: r.id, name: r.name, description: r.description, chatIds: r.chatIds }))} people={people} />;
+}
+
+async function OutreachTab({ clientId }: { clientId: string }) {
+  const [lists, items, emailChannels, services] = await Promise.all([
+    db.select().from(contactLists).where(eq(contactLists.clientId, clientId)).orderBy(desc(contactLists.createdAt)),
+    db.select().from(outreach).where(eq(outreach.clientId, clientId)).orderBy(desc(outreach.createdAt)),
+    db.select({ id: channels.id, name: channels.name }).from(channels).where(and(eq(channels.clientId, clientId), eq(channels.type, "email"))),
+    import("@/lib/services").then((m) => m.getServices()),
+  ]);
+  const listRows = await Promise.all(
+    lists.map(async (l) => {
+      const cs = await db.select({ email: contacts.email, grp: contacts.grp, unsubscribed: contacts.unsubscribed }).from(contacts).where(eq(contacts.listId, l.id));
+      const groups = new Map<string, number>();
+      for (const c of cs) if (c.grp) groups.set(c.grp, (groups.get(c.grp) ?? 0) + 1);
+      return { id: l.id, name: l.name, count: cs.length, withEmail: cs.filter((c) => c.email).length, unsubscribed: cs.filter((c) => c.unsubscribed).length, groups: [...groups].map(([name, n]) => ({ name, n })).slice(0, 20) };
+    }),
+  );
+  const counts = items.length
+    ? await db
+        .select({ id: outreachMessages.outreachId, status: outreachMessages.status, n: count() })
+        .from(outreachMessages)
+        .where(inArray(outreachMessages.outreachId, items.map((i) => i.id)))
+        .groupBy(outreachMessages.outreachId, outreachMessages.status)
+    : [];
+  return (
+    <OutreachManager
+      clientId={clientId}
+      lists={listRows}
+      emailChannels={emailChannels}
+      webSearch={services.webSearch.enabled}
+      items={items.map((i) => ({
+        id: i.id,
+        name: i.name,
+        listId: i.listId,
+        mode: i.mode,
+        channelId: i.channelId,
+        brief: i.brief,
+        groupBriefs: i.groupBriefs,
+        research: i.research,
+        status: i.status,
+        error: i.error,
+        counts: Object.fromEntries(counts.filter((c) => c.id === i.id).map((c) => [c.status, c.n])),
+      }))}
+    />
   );
 }
 
