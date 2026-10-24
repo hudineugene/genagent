@@ -16,9 +16,11 @@ import { useShell } from "./frame";
  */
 export function ContextPanel({ studioName }: { studioName: string }) {
   const { panel } = useShell();
-  if (!panel) return null;
+  const pathname = usePathname();
+  // В «Диалогах» свои три колонки (список, переписка, карточка) — панель клиентов только сжимала бы их
+  if (!panel || pathname.startsWith("/inbox")) return null;
   return (
-    <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r border-border bg-surface/50 lg:flex">
+    <aside data-tour="panel" className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r border-border bg-surface/50 lg:flex">
       <div className="flex h-14 shrink-0 items-center border-b border-border px-4">
         <span className="truncate font-display text-[15px] font-bold tracking-tight">{studioName}</span>
       </div>

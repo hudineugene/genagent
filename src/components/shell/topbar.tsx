@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Fragment, Suspense, useEffect, useRef, useState } from "react";
 import { Bell, ChevronRight, CircleDollarSign, Flame, Hand, MessagesSquare, Moon, Search, Sun } from "lucide-react";
 import { bellFeed, type NavCtx } from "@/app/actions/nav";
@@ -11,6 +11,8 @@ import { useI18n } from "@/lib/i18n/client";
 import { OPEN_PALETTE } from "../command-palette";
 import { cx } from "../ui";
 import { useShell } from "./frame";
+import { rememberPage } from "./recent";
+import { chime, notifyOn } from "./notify";
 
 /** Верхняя строка (компьютер): путь к странице, поиск, события и тема. Липкая — всегда под рукой. */
 export function Topbar() {
@@ -23,6 +25,7 @@ export function Topbar() {
       <button
         type="button"
         onClick={() => window.dispatchEvent(new Event(OPEN_PALETTE))}
+        data-tour="search"
         className="flex h-9 w-56 items-center gap-2 rounded-xl border border-border bg-surface px-3 text-sm text-muted transition hover:border-accent/40 hover:text-text xl:w-72"
       >
         <Search className="size-4" />
@@ -84,6 +87,12 @@ function Crumbs() {
   const pathname = usePathname();
   const tab = useSearchParams().get("tab");
   const list = crumbs(pathname, tab, ctx, t);
+  const title = list.map((c) => c.label).join(" › ");
+  const href = pathname + (tab ? `?tab=${tab}` : "");
+  // Страница с известными именами — в «Недавние» поиска
+  useEffect(() => {
+    if (title && !title.includes("…")) rememberPage({ href, title });
+  }, [href, title]);
   return (
     <nav aria-label={t.shell.path} className="flex min-w-0 flex-1 items-center gap-1 text-sm">
       {list.map((c, i) => (
@@ -118,17 +127,32 @@ function ago(at: number, t: Dict) {
 /** Колокольчик: события за 3 дня; точка — есть новые с прошлого открытия. Обновляется раз в минуту. */
 function BellMenu() {
   const { t } = useI18n();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<FeedItem[]>([]);
   const [seen, setSeen] = useState(Number.POSITIVE_INFINITY);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     let alive = true;
+    // Уведомлять только о событиях после открытия страницы
+    let since = Date.now();
     const load = () =>
       bellFeed()
         .then((list) => {
           if (!alive) return;
           setItems(list);
+          const important = list.filter((x) => (x.kind === "handoff" || x.kind === "hot") && x.at > since);
+          if (important.length && notifyOn()) {
+            chime();
+            for (const f of important.slice(0, 3)) {
+              const n = new Notification(f.kind === "hot" ? t.home.feedHot : t.home.feedHandoff, { body: [f.client, f.contact].filter(Boolean).join(" · "), tag: `${f.kind}-${f.conversationId}` });
+              n.onclick = () => {
+                window.focus();
+                if (f.conversationId) router.push(`/inbox?c=${f.conversationId}`);
+              };
+            }
+          }
+          since = Math.max(since, ...list.map((x) => x.at));
           try {
             setSeen(Number(localStorage.getItem(SEEN_KEY) ?? 0));
           } catch {
@@ -142,7 +166,7 @@ function BellMenu() {
       alive = false;
       clearInterval(timer);
     };
-  }, []);
+  }, [t, router]);
   useEffect(() => {
     if (!open) return;
     const close = (e: MouseEvent | KeyboardEvent) => {
@@ -180,6 +204,7 @@ function BellMenu() {
         aria-expanded={open}
         aria-label={t.shell.events}
         title={t.shell.events}
+        data-tour="bell"
         className={cx("relative grid size-9 place-items-center rounded-xl text-muted transition hover:bg-surface-2 hover:text-text", open && "bg-surface-2 text-text")}
       >
         <Bell className="size-[18px]" />

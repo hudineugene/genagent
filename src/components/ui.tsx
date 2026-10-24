@@ -193,6 +193,8 @@ export function EmptyState({
 function EmptyArt({ icon, tone }: { icon?: ReactNode; tone: "neutral" | "success" }) {
   return (
     <span className="relative mb-1 block h-20 w-28" aria-hidden>
+      {/* Тёплое свечение в цветах знака GenAgent за значком */}
+      <span className={cx("absolute top-1/2 left-1/2 size-24 -translate-x-1/2 -translate-y-1/2 rounded-full blur-xl", tone === "success" ? "bg-success/20" : "bg-accent/25")} />
       <span className="absolute top-3 left-1 h-14 w-16 -rotate-12 rounded-xl border border-border bg-surface-2" />
       <span className="absolute top-2 right-1 h-14 w-16 rotate-[10deg] rounded-xl border border-border bg-surface-2">
         <span className="absolute top-3 left-3 h-1.5 w-8 rounded-full bg-border" />
@@ -200,7 +202,7 @@ function EmptyArt({ icon, tone }: { icon?: ReactNode; tone: "neutral" | "success
       </span>
       <span
         className={cx(
-          "bg-metal absolute top-1/2 left-1/2 grid size-14 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border shadow-md [&>svg]:size-6",
+          "bg-metal absolute top-1/2 left-1/2 grid size-14 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border shadow-md ring-4 ring-surface [&>svg]:size-6",
           tone === "success" ? "text-success" : "text-accent",
         )}
       >

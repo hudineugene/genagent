@@ -94,7 +94,7 @@ export async function clientSections(clientId: string, t: Dict) {
     },
     { title: t.ws.groups.agent, tone: "bg-violet-500/10 text-violet-600 dark:text-violet-300", items: of("agent") },
     { title: t.ws.groups.sales, tone: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-300", items: of("sales") },
-    { title: t.ws.groups.ops, tone: "bg-orange-500/10 text-orange-600 dark:text-orange-300", items: of("ops") },
+    { title: t.ws.groups.ops, tone: "bg-cyan-500/10 text-cyan-700 dark:text-cyan-300", items: of("ops") },
     { title: t.ws.groups.people, tone: "bg-pink-500/10 text-pink-600 dark:text-pink-300", items: of("people") },
   ];
   return { sections, nav };

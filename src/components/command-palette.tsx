@@ -3,14 +3,18 @@
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import { useEffect, useMemo, useRef, useState, useTransition, type ComponentType } from "react";
-import { Bot, CornerDownLeft, MessageCircle, Search } from "lucide-react";
+import { Bot, Clock, Compass, CornerDownLeft, Keyboard, MessageCircle, PanelLeft, Plus, Search, SunMoon } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
 import { searchAll, type SearchHit } from "@/app/actions/search";
 import { ClientAvatar, Spinner, cx } from "./ui";
+import { useShell } from "./shell/frame";
+import { readRecent, type RecentPage } from "./shell/recent";
+import { OPEN_SHORTCUTS } from "./shell/shortcuts";
+import { START_TOUR } from "./shell/tour";
 
 export type PalettePage = { href: string; label: string; icon: ComponentType<{ className?: string }> };
 
-type Item = { key: string; group: string; href: string; title: string; subtitle?: string; lead: React.ReactNode };
+type Item = { key: string; group: string; href?: string; run?: () => void; title: string; subtitle?: string; lead: React.ReactNode };
 
 /** Событие, которым кнопка поиска в меню открывает палитру. */
 export const OPEN_PALETTE = "genagent:open-palette";
@@ -27,6 +31,8 @@ export function CommandPalette({ pages }: { pages: PalettePage[] }) {
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [active, setActive] = useState(0);
   const [pending, start] = useTransition();
+  const [recent, setRecent] = useState<RecentPage[]>([]);
+  const { togglePanel } = useShell();
     const list = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -34,6 +40,7 @@ export function CommandPalette({ pages }: { pages: PalettePage[] }) {
     const show = () => {
       setQuery("");
       setActive(0);
+      setRecent(readRecent());
       setOpen(true);
     };
     const onKey = (e: KeyboardEvent) => {
@@ -43,6 +50,7 @@ export function CommandPalette({ pages }: { pages: PalettePage[] }) {
           if (!v) {
             setQuery("");
             setActive(0);
+            setRecent(readRecent());
           }
           return !v;
         });
@@ -66,12 +74,33 @@ export function CommandPalette({ pages }: { pages: PalettePage[] }) {
 
   const items = useMemo<Item[]>(() => {
     const q = query.trim().toLowerCase();
-    const out: Item[] = pages
+    const has = (text: string) => !q || text.toLowerCase().includes(q);
+    const flipTheme = () => {
+      const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+      try {
+        localStorage.setItem("theme", next);
+      } catch {}
+      (window as unknown as { __applyTheme?: () => void }).__applyTheme?.();
+      window.dispatchEvent(new Event("genagent:theme"));
+    };
+    const actions: Item[] = [
+      { key: "x:client", group: t.palette.actions, href: "/clients/new", title: t.shell.newClient, lead: <Plus className="size-4 text-accent" /> },
+      { key: "x:theme", group: t.palette.actions, run: flipTheme, title: t.palette.toggleTheme, lead: <SunMoon className="size-4 text-muted" /> },
+      { key: "x:panel", group: t.palette.actions, run: togglePanel, title: t.palette.togglePanel, lead: <PanelLeft className="size-4 text-muted" /> },
+      { key: "x:tour", group: t.palette.actions, run: () => window.dispatchEvent(new Event(START_TOUR)), title: t.tour.start, lead: <Compass className="size-4 text-muted" /> },
+      { key: "x:keys", group: t.palette.actions, run: () => window.dispatchEvent(new Event(OPEN_SHORTCUTS)), title: t.palette.shortcuts, subtitle: "?", lead: <Keyboard className="size-4 text-muted" /> },
+    ].filter((a) => has(a.title));
+    const recentItems: Item[] = recent
+      .filter((r) => has(r.title))
+      .slice(0, q ? 3 : 5)
+      .map((r) => ({ key: `r:${r.href}`, group: t.palette.recent, href: r.href, title: r.title, lead: <Clock className="size-4 text-muted" /> }));
+    const out: Item[] = [...recentItems];
+    out.push(...pages
       .filter((p) => !q || p.label.toLowerCase().includes(q))
-      .map((p) => ({ key: `p:${p.href}`, group: t.palette.pages, href: p.href, title: p.label, lead: <p.icon className="size-4 text-muted" /> }));
+      .map((p) => ({ key: `p:${p.href}`, group: t.palette.pages, href: p.href, title: p.label, lead: <p.icon className="size-4 text-muted" /> })));
     for (const h of hits) {
       if (h.kind === "client") {
-        out.push({ key: `c:${h.id}`, group: t.palette.clients, href: `/clients/${h.id}`, title: h.title, subtitle: h.subtitle, lead: <ClientAvatar name={h.title} color={h.color} size={24} /> });
+        out.push({ key: `c:${h.id}`, group: t.palette.clients, href: `/clients/${h.id}`, title: h.title, subtitle: h.subtitle, lead: <ClientAvatar id={h.id} name={h.title} color={h.color} size={24} /> });
       } else if (h.kind === "agent") {
         out.push({ key: `a:${h.id}`, group: t.palette.agents, href: `/agents/${h.id}`, title: h.title, subtitle: h.subtitle, lead: <span className="grid size-6 place-items-center text-base">{h.icon || <Bot className="size-4" />}</span> });
       } else {
@@ -89,8 +118,9 @@ export function CommandPalette({ pages }: { pages: PalettePage[] }) {
         });
       }
     }
+    out.push(...actions);
     return out;
-  }, [hits, pages, query, t]);
+  }, [hits, pages, query, t, recent, togglePanel]);
 
   const current = Math.min(active, items.length - 1);
   useEffect(() => {
@@ -102,7 +132,8 @@ export function CommandPalette({ pages }: { pages: PalettePage[] }) {
   const go = (item: Item | undefined) => {
     if (!item) return;
     setOpen(false);
-    router.push(item.href);
+    if (item.run) item.run();
+    else if (item.href) router.push(item.href);
   };
 
   // В body: у меню размытие фона, а оно делает fixed-окно относительным к меню

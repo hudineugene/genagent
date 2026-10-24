@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { cx } from "./ui";
 
 export type Column = { key: string; label: string; value: number; hint?: string };
@@ -11,6 +11,24 @@ function niceMax(v: number) {
   const p = 10 ** Math.floor(Math.log10(v));
   for (const m of [1, 2, 2.5, 5, 10]) if (v <= m * p) return m * p;
   return 10 * p;
+}
+
+/** Заголовок графика: название, итог и среднее за день (если задан шаблон), переключатель «таблица». */
+function ChartHead({ title, data, format, totalLabel, integer, table, onToggle, tableLabel, chartLabel }: { title: string; data: Column[]; format: (v: number) => string; totalLabel?: string; integer?: boolean; table: boolean; onToggle: () => void; tableLabel: string; chartLabel: string }) {
+  const total = data.reduce((a, d) => a + d.value, 0);
+  return (
+    <div className="mb-3 flex items-start justify-between gap-2">
+      <div className="min-w-0">
+        <h3 className="text-sm font-semibold">{title}</h3>
+        {totalLabel && data.length > 0 && (
+          <p className="mt-0.5 text-xs text-muted tabular-nums">{totalLabel.replace("{total}", format(total)).replace("{avg}", integer ? (Math.round((total / data.length) * 10) / 10).toLocaleString() : format(total / data.length))}</p>
+        )}
+      </div>
+      <button type="button" onClick={onToggle} className="shrink-0 rounded-lg px-2 py-1 text-xs text-muted hover:bg-surface-2 hover:text-text">
+        {table ? chartLabel : tableLabel}
+      </button>
+    </div>
+  );
 }
 
 /**
@@ -27,7 +45,10 @@ export function ColumnChart({
   height = 180,
   labelEvery,
   integer,
+  totalLabel,
 }: {
+  /** Шаблон строки итога: «Всего {total} · в среднем {avg} в день» */
+  totalLabel?: string;
   title: string;
   data: Column[];
   format?: (v: number) => string;
@@ -48,16 +69,7 @@ export function ColumnChart({
 
   return (
     <div>
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold">{title}</h3>
-        <button
-          type="button"
-          onClick={() => setTable(!table)}
-          className="rounded-lg px-2 py-1 text-xs text-muted hover:bg-surface-2 hover:text-text"
-        >
-          {table ? chartLabel : tableLabel}
-        </button>
-      </div>
+      <ChartHead title={title} data={data} format={format} totalLabel={totalLabel} integer={integer} table={table} onToggle={() => setTable(!table)} tableLabel={tableLabel} chartLabel={chartLabel} />
 
       {table ? (
         <div className="max-h-64 overflow-y-auto rounded-xl border border-border">
@@ -97,7 +109,7 @@ export function ColumnChart({
                     onMouseLeave={() => setHover(null)}
                   >
                     <div
-                      className={cx("w-full max-w-6 rounded-t-[4px] bg-accent transition-opacity", hover !== null && hover !== i && "opacity-40")}
+                      className={cx("w-full max-w-6 rounded-t-[4px] bg-accent transition-[opacity,filter]", hover !== null && hover !== i && "opacity-40", hover === i && "brightness-110")}
                       style={{ height: d.value > 0 ? `max(${(d.value / max) * 100}%, 2px)` : 0 }}
                     />
                     {hover === i && (
@@ -153,6 +165,7 @@ export function AreaChart({
   chartLabel,
   height = 180,
   integer,
+  totalLabel,
 }: {
   title: string;
   data: Column[];
@@ -161,7 +174,9 @@ export function AreaChart({
   chartLabel: string;
   height?: number;
   integer?: boolean;
+  totalLabel?: string;
 }) {
+  const fillId = useId();
   const [hover, setHover] = useState<number | null>(null);
   const [table, setTable] = useState(false);
   const top = Math.max(0, ...data.map((d) => d.value));
@@ -190,12 +205,7 @@ export function AreaChart({
 
   return (
     <div>
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold">{title}</h3>
-        <button type="button" onClick={() => setTable(!table)} className="rounded-lg px-2 py-1 text-xs text-muted hover:bg-surface-2 hover:text-text">
-          {table ? chartLabel : tableLabel}
-        </button>
-      </div>
+      <ChartHead title={title} data={data} format={format} totalLabel={totalLabel} integer={integer} table={table} onToggle={() => setTable(!table)} tableLabel={tableLabel} chartLabel={chartLabel} />
       {table ? (
         <div className="max-h-64 overflow-y-auto rounded-xl border border-border">
           <table className="w-full text-sm">
@@ -225,12 +235,12 @@ export function AreaChart({
               ))}
               <svg viewBox={`0 0 ${W} ${height}`} preserveAspectRatio="none" className="absolute inset-0 h-full w-full overflow-visible">
                 <defs>
-                  <linearGradient id="area-fill" x1="0" y1="0" x2="0" y2="1">
+                  <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.28" />
                     <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
                   </linearGradient>
                 </defs>
-                <path d={area} fill="url(#area-fill)" />
+                <path d={area} fill={`url(#${fillId})`} />
                 <path d={line} fill="none" stroke="var(--accent)" strokeWidth={2} vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
               </svg>
               {/* Перекрестие и точка на наведённом дне */}

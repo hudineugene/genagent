@@ -10,6 +10,8 @@ import { Sidebar } from "@/components/sidebar";
 import { ShellFrame } from "@/components/shell/frame";
 import { ContextPanel } from "@/components/shell/context-panel";
 import { Topbar } from "@/components/shell/topbar";
+import { Shortcuts } from "@/components/shell/shortcuts";
+import { Tour } from "@/components/shell/tour";
 import { Toaster } from "@/components/toast";
 import { Spinner } from "@/components/ui";
 
@@ -50,6 +52,8 @@ async function Shell({ children }: { children: ReactNode }) {
           <Topbar />
           <main className="min-w-0 flex-1 px-4 pt-6 pb-24 md:px-6 md:py-7 lg:px-8">{children}</main>
         </div>
+        <Shortcuts />
+        <Tour />
       </ShellFrame>
       <Toaster />
     </I18nProvider>

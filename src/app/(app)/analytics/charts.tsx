@@ -35,6 +35,7 @@ export function AnalyticsCharts({
             title={t.analytics.conversationsByDay}
             data={conversations}
             integer
+            totalLabel={t.analytics.chartTotal}
             tableLabel={t.analytics.showTable}
             chartLabel={t.analytics.showChart}
           />
@@ -44,6 +45,7 @@ export function AnalyticsCharts({
             title={t.analytics.spendByDay}
             data={costs}
             format={money}
+            totalLabel={t.analytics.chartTotal}
             tableLabel={t.analytics.showTable}
             chartLabel={t.analytics.showChart}
           />

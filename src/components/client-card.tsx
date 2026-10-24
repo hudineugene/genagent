@@ -3,9 +3,13 @@ import { ChevronRight, Clock } from "lucide-react";
 import type { ClientSummary } from "@/lib/dashboard";
 import type { Dict } from "@/lib/i18n";
 import { ClientAvatar, cx } from "./ui";
+import { Spark } from "./spark";
 
-/** Карточка клиента: агенты со статусом, диалоги и расход за неделю, кто ждёт человека. Главная и «Клиенты». */
-export function ClientCard({ client: c, t }: { client: ClientSummary; t: Dict }) {
+/**
+ * Карточка клиента: агенты со статусом, диалоги и расход за неделю, кто ждёт человека. Главная и «Клиенты».
+ * trend — разговоры по дням за 14 дней (мини-график со стрелкой тренда в подвале).
+ */
+export function ClientCard({ client: c, t, trend }: { client: ClientSummary; t: Dict; trend?: number[] }) {
   return (
     <div className="group relative flex h-full flex-col rounded-2xl border border-border bg-surface p-5 transition hover:border-accent/40 hover:shadow-lg hover:shadow-black/5">
       <Link href={`/clients/${c.id}`} className="absolute inset-0 rounded-2xl" aria-label={c.name} />
@@ -44,8 +48,11 @@ export function ClientCard({ client: c, t }: { client: ClientSummary; t: Dict })
           <b className="font-semibold text-text tabular-nums">${c.cost.toFixed(2)}</b>
         </span>
         <span className="text-muted/70">{t.home.perWeek}</span>
+        <span className="ml-auto hidden sm:block">
+          <Spark data={trend} />
+        </span>
         {c.waiting > 0 && (
-          <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-danger/10 px-2 py-0.5 font-semibold text-danger">
+          <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-danger/10 sm:ml-0 px-2 py-0.5 font-semibold text-danger">
             <Clock className="size-3" />
             {c.waiting}
           </span>

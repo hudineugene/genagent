@@ -15,6 +15,7 @@ import { ClientForm } from "@/components/client-form";
 import { BackLink } from "@/components/back-link";
 import { ConfirmButton } from "@/components/confirm-button";
 import { PageHeader } from "@/components/ui";
+import { SectionNav } from "@/components/section-nav";
 
 import { guardPage } from "@/lib/access";
 const daysAgo = (n: number) => new Date(Date.now() - n * 86400_000);
@@ -23,6 +24,7 @@ export default async function EditClientPage({ params }: { params: Promise<{ cli
   const { clientId } = await params;
   await guardPage("client", clientId);
   const { t } = await getT();
+  const n = t.shell.settingsNav;
   const [client] = await db.select().from(clients).where(eq(clients.id, clientId));
   if (!client) notFound();
   // Ключи в браузер не уходят: форме — запись без них, разделу ключей — только маска
@@ -34,24 +36,45 @@ export default async function EditClientPage({ params }: { params: Promise<{ cli
     .where(and(eq(usageLog.clientId, client.id), eq(usageLog.ownKey, true), gte(usageLog.createdAt, daysAgo(30))));
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="mx-auto max-w-5xl">
       <BackLink href={`/clients/${client.id}`} label={client.name} />
       <PageHeader
         title={t.clients.editTitle}
         actions={<ConfirmButton action={deleteClient.bind(null, client.id)} label={t.common.delete} />}
       />
+      <div className="grid gap-8 lg:grid-cols-[180px_minmax(0,1fr)]">
+      <SectionNav label={t.clients.editTitle} items={[
+        { id: "main", label: n.main },
+        { id: "logo", label: n.logo },
+        { id: "keys", label: n.keys },
+        { id: "owners", label: n.owners },
+        { id: "privacy", label: n.privacy },
+      ]} />
+      <div className="min-w-0 [&>section]:scroll-mt-20">
+      <section id="main">
       <ClientForm action={updateClient.bind(null, client.id)} client={{ ...safe, apiKeys: {} }} />
+      </section>
+      <section id="logo">
       <ClientLogo clientId={client.id} hasCustom={Boolean(await readCustomLogo(client.id))} version={(await logoVersions()).get(client.id) ?? 0} />
+      </section>
+      <section id="keys">
       <ClientKeys
         clientId={client.id}
         ownSpend={Number(own ?? 0)}
         keys={KEY_KINDS.map((kind) => ({ kind, masked: apiKeys[kind] ? maskKey(apiKeys[kind]) : null, studio: Boolean(process.env[ENV[kind]]) }))}
       />
+      </section>
+      <section id="owners">
       <OwnerLogins
         clientId={client.id}
         rows={(await db.select({ id: users.id, name: users.name, email: users.email, clientIds: users.clientIds }).from(users).where(eq(users.role, "client"))).filter((u) => u.clientIds?.includes(client.id))}
       />
+      </section>
+      <section id="privacy">
       <ClientPrivacy clientId={client.id} retentionDays={client.retentionDays} subs={(await subprocessors(client.id)).map((s) => ({ name: s.name, purpose: s.purpose, location: s.location }))} />
+      </section>
+      </div>
+      </div>
     </div>
   );
 }

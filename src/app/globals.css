@@ -1,8 +1,9 @@
 @import "tailwindcss";
 
 /*
- * Фирменный стиль GenAgent: графит + сталь (под логотип). Светлая тема — холодный светлый графит с синим стальным
- * акцентом, тёмная — «металл»: глубокий графит, светлый стальной акцент, тёмный текст на кнопках для контраста.
+ * Фирменный стиль GenAgent: графит + оранжевый (под логотип). Светлая тема — холодный светлый графит с глубоким
+ * оранжевым акцентом (контраст белого текста 5,2), тёмная — «металл»: глубокий графит, яркий оранжевый акцент, тёмный
+ * текст на кнопках. Тревога — малиновая, чтобы не путалась с оранжевым.
  */
 :root {
   --bg: #f4f5f7;
@@ -11,10 +12,10 @@
   --border: #e1e4e9;
   --text: #14161a;
   --muted: #646b78;
-  --accent: #2f5fd0;
-  --accent-soft: #e8eefb;
+  --accent: #c2410c;
+  --accent-soft: #fdeee4;
   --accent-text: #ffffff;
-  --danger: #d33a3a;
+  --danger: #e11d48;
   --success: #17864c;
   /* Металл: поверхности с мягким бликом (ядро карты, главные карточки, плитка логотипа) */
   --metal: linear-gradient(135deg, #ffffff 0%, #eef1f5 38%, #fbfcfd 52%, #e4e8ee 100%);
@@ -33,10 +34,10 @@
     --border: #282c33;
     --text: #e8ebf0;
     --muted: #8c94a3;
-    --accent: #7aa2ff;
-    --accent-soft: #1a2540;
-    --accent-text: #0b1020;
-    --danger: #f06b6b;
+    --accent: #ff8a3d;
+    --accent-soft: #3a1f0e;
+    --accent-text: #1a0d04;
+    --danger: #fb7185;
     --success: #3ccf7f;
     --metal: linear-gradient(135deg, #22252b 0%, #15171b 40%, #262a31 55%, #111316 100%);
     --metal-edge: #343942;
@@ -51,10 +52,10 @@
   --border: #282c33;
   --text: #e8ebf0;
   --muted: #8c94a3;
-  --accent: #7aa2ff;
-  --accent-soft: #1a2540;
-  --accent-text: #0b1020;
-  --danger: #f06b6b;
+  --accent: #ff8a3d;
+  --accent-soft: #3a1f0e;
+  --accent-text: #1a0d04;
+  --danger: #fb7185;
   --success: #3ccf7f;
   --metal: linear-gradient(135deg, #22252b 0%, #15171b 40%, #262a31 55%, #111316 100%);
   --metal-edge: #343942;

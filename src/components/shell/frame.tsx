@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { navContext, type NavCtx } from "@/app/actions/nav";
 
 type Shell = {
@@ -35,12 +35,12 @@ export function ShellFrame({ initialPanel, children }: { initialPanel: boolean; 
       alive = false;
     };
   }, [pathname]);
-  const togglePanel = () => {
+  const togglePanel = useCallback(() => {
     setPanel((v) => {
       document.cookie = `panel=${v ? "off" : "on"}; path=/; max-age=31536000; samesite=lax`;
       return !v;
     });
-  };
+  }, []);
   return (
     <ShellContext.Provider value={{ ctx: state.ctx, ctxPath: state.path, panel, togglePanel }}>
       <div data-panel={panel ? "on" : "off"} className="flex min-h-dvh flex-col md:flex-row">

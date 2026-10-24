@@ -41,7 +41,9 @@ import {
   OPEN_PALETTE,
   type PalettePage,
 } from "./command-palette";
-import { cx } from "./ui";
+import { SwitchButton, cx } from "./ui";
+import { toast } from "./toast";
+import { NOTIFY_EVENT, chime, notifyRaw, setNotify } from "./shell/notify";
 import { BrandMark } from "./brand";
 import { useShell } from "./shell/frame";
 
@@ -93,7 +95,7 @@ export function Sidebar({
           <Search className="size-4" />
         </button>
 
-        <nav aria-label={t.nav.groupWork} className="hidden flex-1 flex-col items-center gap-2 md:flex [&>div+div]:border-t [&>div+div]:border-border [&>div+div]:pt-2">
+        <nav data-tour="rail" aria-label={t.nav.groupWork} className="hidden flex-1 flex-col items-center gap-2 md:flex [&>div+div]:border-t [&>div+div]:border-border [&>div+div]:pt-2">
           <RailGroup items={work} tone="work" />
           {settings.length > 0 && <RailGroup items={settings} tone="settings" />}
           <RailGroup items={help} tone="help" />
@@ -160,6 +162,7 @@ function ProfileMenu({ userName, initial, active }: { userName: string; initial:
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-label={t.shell.profileMenu}
+        data-tour="profile"
         className={cx(
           "group/rail relative grid size-10 place-items-center rounded-full bg-accent-soft text-sm font-semibold text-accent ring-2 ring-transparent transition hover:ring-accent/30",
           (open || active) && "ring-accent/40",
@@ -189,6 +192,12 @@ function ProfileMenu({ userName, initial, active }: { userName: string; initial:
             <span className="text-xs text-muted">{t.shell.density}</span>
             <DensitySwitch />
           </div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs text-muted" title={t.shell.notifyHint}>
+              {t.shell.notify}
+            </span>
+            <NotifySwitch />
+          </div>
           <form action={logout} className="border-t border-border pt-2">
             <button className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-muted transition hover:bg-surface-2 hover:text-danger">
               <LogOut className="size-4" />
@@ -201,16 +210,16 @@ function ProfileMenu({ userName, initial, active }: { userName: string; initial:
   );
 }
 
-/** Цвет значков группы меню: работа — сталь (акцент), настройки — фиолетовый, помощь — янтарный. */
+/** Цвет значков группы меню: работа — акцент (оранжевый), настройки — фиолетовый, помощь — голубой. */
 const TONES = {
   work: "text-accent",
   settings: "text-violet-600 dark:text-violet-300",
-  help: "text-amber-600 dark:text-amber-300",
+  help: "text-sky-600 dark:text-sky-300",
 } as const;
 const ACTIVE_BG = {
   work: "bg-accent/12",
   settings: "bg-violet-500/12",
-  help: "bg-amber-500/14",
+  help: "bg-sky-500/12",
 } as const;
 
 /** Группа значков рельсы: активный раздел — плашка цвета группы и полоска слева, подпись — при наведении. */
@@ -235,6 +244,29 @@ function RailGroup({ items, tone }: { items: NavItem[]; tone: keyof typeof TONES
         </Link>
       ))}
     </div>
+  );
+}
+
+function subscribeNotify(onChange: () => void) {
+  window.addEventListener(NOTIFY_EVENT, onChange);
+  return () => window.removeEventListener(NOTIFY_EVENT, onChange);
+}
+
+/** Уведомления браузера и звук о передачах менеджеру и горячих клиентах (в этом браузере). */
+function NotifySwitch() {
+  const { t } = useI18n();
+  const on = useSyncExternalStore(subscribeNotify, notifyRaw, () => "off") === "on";
+  return (
+    <SwitchButton
+      checked={on}
+      label={t.shell.notify}
+      onChange={(v) => {
+        void setNotify(v).then((ok) => {
+          if (v && !ok) toast(t.shell.notifyDenied, "error");
+          if (ok) chime();
+        });
+      }}
+    />
   );
 }
 

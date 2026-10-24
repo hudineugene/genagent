@@ -8,7 +8,7 @@ import { studioDayStart } from "@/lib/general";
 const DAY = 24 * 3600_000;
 const DAYS = 14;
 
-export type HomeTrends = { wrote: number[]; answered: number[]; handoffs: number[]; spend: number[] };
+export type HomeTrends = { wrote: number[]; answered: number[]; handoffs: number[]; spend: number[]; byClient: Record<string, number[]> };
 export type FeedItem = {
   kind: "new" | "handoff" | "hot" | "paid";
   at: number;
@@ -19,14 +19,17 @@ export type FeedItem = {
   amount?: string;
 };
 
-/** Ряды за 14 дней (старые → новые) для плиток «Сегодня»: написали, ответил агент, передано людям, расходы ИИ. */
+/**
+ * Ряды за 14 дней (старые → новые) для плиток «Сегодня»: написали, ответил агент, передано людям, расходы ИИ;
+ * byClient — сколько разговоров с сообщениями клиентов по дням у каждого клиента (мини-графики карточек).
+ */
 export async function homeTrends(ids: string[] | null): Promise<HomeTrends> {
   const today = studioDayStart().getTime();
   const from = new Date(today - (DAYS - 1) * DAY);
   const scopeConv = ids ? inArray(conversations.clientId, ids.length ? ids : ["-"]) : undefined;
   const [rows, costs] = await Promise.all([
     db
-      .select({ role: messages.role, text: messages.text, status: messages.status, at: messages.createdAt, conv: messages.conversationId })
+      .select({ role: messages.role, text: messages.text, status: messages.status, at: messages.createdAt, conv: messages.conversationId, clientId: conversations.clientId })
       .from(messages)
       .innerJoin(conversations, eq(conversations.id, messages.conversationId))
       .where(and(gte(messages.createdAt, from), eq(conversations.isTest, false), scopeConv))
@@ -42,14 +45,25 @@ export async function homeTrends(ids: string[] | null): Promise<HomeTrends> {
   const answered = Array.from({ length: DAYS }, () => new Set<string>());
   const handoffs = Array(DAYS).fill(0);
   const spend = Array(DAYS).fill(0);
+  const byClient = new Map<string, Set<string>[]>();
   for (const r of rows) {
     const i = idx(r.at);
-    if (r.role === "user") wrote[i].add(r.conv);
+    if (r.role === "user") {
+      wrote[i].add(r.conv);
+      if (!byClient.has(r.clientId)) byClient.set(r.clientId, Array.from({ length: DAYS }, () => new Set<string>()));
+      byClient.get(r.clientId)![i].add(r.conv);
+    }
     else if (r.role === "assistant" && r.status === "sent") answered[i].add(r.conv);
     else if (r.role === "system" && r.text === "handoff") handoffs[i]++;
   }
   for (const c of costs) spend[idx(c.at)] += c.cost;
-  return { wrote: wrote.map((s) => s.size), answered: answered.map((s) => s.size), handoffs, spend: spend.map((v) => Math.round(v * 100) / 100) };
+  return {
+    wrote: wrote.map((s) => s.size),
+    answered: answered.map((s) => s.size),
+    handoffs,
+    spend: spend.map((v) => Math.round(v * 100) / 100),
+    byClient: Object.fromEntries([...byClient].map(([id, days]) => [id, days.map((d) => d.size)])),
+  };
 }
 
 /** Живая лента главной: новые разговоры, передачи менеджеру, горячие клиенты и оплаты за 3 дня. */

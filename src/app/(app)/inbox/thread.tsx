@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, useSyncExternalStore, useTransition, type ReactNode } from "react";
 import {
   ArrowLeft,
   AudioLines,
@@ -118,6 +118,45 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
   const [briefing, startBrief] = useTransition();
   const endRef = useRef<HTMLDivElement>(null);
   const time = new Intl.DateTimeFormat(locale === "uk" ? "uk-UA" : "ru-RU", { timeStyle: "short" });
+  const dayFmt = new Intl.DateTimeFormat(locale === "uk" ? "uk-UA" : "ru-RU", { day: "numeric", month: "long", year: "numeric" });
+  const [now] = useState(() => Date.now());
+  /** Разделитель дня перед первым сообщением дня: «Сегодня», «Вчера» или дата. */
+  const daySep = (i: number) => {
+    const d = new Date(data.messages[i].createdAt);
+    const prev = i > 0 ? new Date(data.messages[i - 1].createdAt) : null;
+    if (prev && prev.toDateString() === d.toDateString()) return null;
+    const today = new Date(now);
+    const yesterday = new Date(now - 86_400_000);
+    const label = d.toDateString() === today.toDateString() ? t.nav.today : d.toDateString() === yesterday.toDateString() ? t.shell.yesterday : dayFmt.format(d);
+    return (
+      <div className="flex items-center gap-3 py-1 text-[11px] font-medium text-muted" role="separator">
+        <span className="h-px flex-1 bg-border" />
+        <span className="first-letter:uppercase">{label}</span>
+        <span className="h-px flex-1 bg-border" />
+      </div>
+    );
+  };
+  /** Аватар у последнего сообщения подряд от того же отправителя — как в мессенджерах. */
+  const lastOfGroup = (i: number) => {
+    const m = data.messages[i];
+    const next = data.messages[i + 1];
+    return !next || next.role !== m.role || (m.role === "operator" && next.author !== m.author) || new Date(next.createdAt).toDateString() !== new Date(m.createdAt).toDateString();
+  };
+  const avatarOf = (m: ThreadData["messages"][number], i: number) => {
+    if (!lastOfGroup(i)) return <span className="size-7 shrink-0" />;
+    if (m.role === "user") return <ContactAvatar id={data.id} label={contactLabel(data, t.inbox)} size={28} anonymous={!data.contactName && !data.contactHandle} />;
+    if (m.role === "operator")
+      return (
+        <span className="grid size-7 shrink-0 place-items-center rounded-full bg-amber-500/20 text-xs font-semibold text-amber-700 dark:text-amber-300" title={m.author ?? t.inbox.you}>
+          {(m.author ?? t.inbox.you).trim().charAt(0).toUpperCase()}
+        </span>
+      );
+    return (
+      <span className="grid size-7 shrink-0 place-items-center rounded-full bg-accent-soft text-accent" title={m.role === "bot" ? t.inbox.bot : t.inbox.agent}>
+        {m.role === "bot" ? <MessageSquare className="size-3.5" /> : <Bot className="size-3.5" />}
+      </span>
+    );
+  };
 
   // Открыли диалог — непрочитанные сбрасываем.
   useEffect(() => {
@@ -300,7 +339,10 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
             <span className="text-text">{data.context.subject}</span>
           </div>
         )}
-        {data.messages.map((m, i) => {
+        {data.messages.map((m, i) => (
+          <Fragment key={m.id}>
+          {daySep(i)}
+          {((): ReactNode => {
           if (m.status === "draft") return <DraftMessage key={m.id} id={m.id} text={m.text} />;
           // Стикеры клиента подряд — одной строкой «Стикер ×N»
           const userSticker = (x?: ThreadData["messages"][number]) => x?.role === "user" && isSticker(x.text, x.meta?.kind);
@@ -357,7 +399,9 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
           const KindIcon = kind ? KIND_ICONS[kind] ?? KIND_ICONS.other : null;
           const stickerOnly = kind === "sticker" && /^\p{Extended_Pictographic}/u.test(m.text.trim()) && m.text.trim().length <= 8;
           return (
-            <div key={m.id} className={cx("flex flex-col", ours ? "items-end" : "items-start")}>
+            <div key={m.id} className={cx("flex items-end gap-2", ours && "flex-row-reverse")}>
+              {avatarOf(m, i)}
+            <div className={cx("flex min-w-0 flex-1 flex-col", ours ? "items-end" : "items-start")}>
               <div
                 className={cx(
                   "max-w-[80%] whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2 text-sm leading-relaxed",
@@ -459,8 +503,11 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
                 </details>
               ) : null}
             </div>
+            </div>
           );
-        })}
+          })()}
+          </Fragment>
+        ))}
         {data.typing && data.mode === "ai" && (
           <div className="flex items-center justify-end gap-2 text-xs text-muted">
             <Spinner className="size-3" />
@@ -493,8 +540,10 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
       {!data.botReplies ? (
         <p className="border-t border-border px-4 py-3 text-xs text-muted">{t.inbox.apiReplyInBot}</p>
       ) : (
+      <>
+      <QuickReplies text={text} onPick={(q) => setText((v) => (v.trim() ? `${v.trimEnd()} ${q}` : q))} />
       <form
-        className="flex items-end gap-2 border-t border-border p-3"
+        className="flex items-end gap-2 p-3 pt-2"
         onSubmit={(e) => {
           e.preventDefault();
           send();
@@ -531,6 +580,7 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
           <SendHorizontal className="size-4" />
         </Button>
       </form>
+      </>
       )}
       {review && (
         <div className="mx-3 mb-3 rounded-xl border border-border bg-surface-2/60 p-3 text-sm">
@@ -633,6 +683,71 @@ function DraftMessage({ id, text }: { id: string; text: string }) {
           </Button>
         </div>
       </div>
+    </div>
+  );
+}
+
+const QUICK_KEY = "quick-replies";
+const QUICK_EVENT = "genagent:quick";
+const readQuick = () => {
+  try {
+    return localStorage.getItem(QUICK_KEY) ?? "";
+  } catch {
+    return "";
+  }
+};
+const subscribeQuick = (onChange: () => void) => {
+  window.addEventListener(QUICK_EVENT, onChange);
+  window.addEventListener("storage", onChange);
+  return () => {
+    window.removeEventListener(QUICK_EVENT, onChange);
+    window.removeEventListener("storage", onChange);
+  };
+};
+function saveQuick(list: string[]) {
+  try {
+    localStorage.setItem(QUICK_KEY, JSON.stringify(list.slice(0, 12)));
+  } catch {}
+  window.dispatchEvent(new Event(QUICK_EVENT));
+}
+
+/**
+ * Быстрые ответы менеджера над полем ввода: щелчок вставляет фразу. Свои фразы сохраняются в этом браузере
+ * («+» — сохранить набранный текст, «×» у фразы — убрать); пока своих нет — стандартный набор.
+ */
+function QuickReplies({ text, onPick }: { text: string; onPick: (q: string) => void }) {
+  const { t } = useI18n();
+  const raw = useSyncExternalStore(subscribeQuick, readQuick, () => "");
+  let list: string[];
+  try {
+    list = raw ? (JSON.parse(raw) as string[]) : t.shell.quickDefaults.split("|");
+  } catch {
+    list = t.shell.quickDefaults.split("|");
+  }
+  const draft = text.trim();
+  return (
+    <div className="flex items-center gap-1.5 overflow-x-auto border-t border-border px-3 pt-2.5 [scrollbar-width:none]">
+      {list.map((q) => (
+        <span key={q} className="group/q relative inline-flex shrink-0 items-center">
+          <button type="button" onClick={() => onPick(q)} title={q} className="max-w-56 truncate rounded-full border border-border bg-surface px-3 py-1 text-xs text-muted transition hover:border-accent/50 hover:text-text">
+            {q}
+          </button>
+          <button
+            type="button"
+            aria-label={t.shell.quickRemove}
+            title={t.shell.quickRemove}
+            onClick={() => saveQuick(list.filter((x) => x !== q))}
+            className="absolute -top-1 -right-1 hidden size-4 place-items-center rounded-full bg-text text-[10px] leading-none text-bg group-hover/q:grid"
+          >
+            ×
+          </button>
+        </span>
+      ))}
+      {draft && !list.includes(draft) && (
+        <button type="button" onClick={() => saveQuick([...list, draft])} title={t.shell.quickAdd} aria-label={t.shell.quickAdd} className="grid size-6 shrink-0 place-items-center rounded-full border border-dashed border-border text-muted hover:border-accent hover:text-accent">
+          +
+        </button>
+      )}
     </div>
   );
 }

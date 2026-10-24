@@ -17,6 +17,7 @@ import {
 import { getT } from "@/lib/i18n/server";
 import type { Dict } from "@/lib/i18n";
 import { scope } from "@/lib/access";
+import { requireUser } from "@/lib/auth";
 import { dashboardData, type Decision } from "@/lib/dashboard";
 import { ClientCard } from "@/components/client-card";
 import { contactLabel } from "@/lib/contact";
@@ -37,12 +38,28 @@ export default async function TodayPage() {
   const gaps = decisions.filter((d): d is Extract<Decision, { kind: "gaps" }> => d.kind === "gaps");
   const decisionRows = decisions.length - gaps.length + (gaps.length ? 1 : 0);
   const date = new Intl.DateTimeFormat(locale === "uk" ? "uk-UA" : "ru-RU", { weekday: "long", day: "numeric", month: "long", timeZone: studioTz() }).format(new Date());
+  // Приветствие по времени студии и имени сотрудника
+  const hour = Number(new Intl.DateTimeFormat("en-GB", { hour: "2-digit", hourCycle: "h23", timeZone: studioTz() }).format(new Date()));
+  const hello = hour >= 5 && hour < 12 ? t.home.helloMorning : hour < 17 && hour >= 12 ? t.home.helloDay : hour < 23 && hour >= 17 ? t.home.helloEvening : t.home.helloNight;
+  const firstName = (await requireUser()).name.trim().split(/\s+/)[0];
+  const share = today.wrote ? Math.round((today.answered / today.wrote) * 100) : null;
 
   return (
     <div className="mx-auto max-w-6xl space-y-8">
-      <header>
-        <p className="text-sm font-medium text-muted first-letter:uppercase">{date}</p>
-        <h1 className="mt-1 text-3xl font-bold tracking-tight">{t.home.title}</h1>
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-muted first-letter:uppercase">{date}</p>
+          <h1 className="mt-1 text-3xl font-bold tracking-tight">
+            {hello}
+            {firstName ? `, ${firstName}` : ""}
+          </h1>
+          <p className="mt-1.5 text-sm text-muted">
+            {waiting.length || decisionRows
+              ? t.home.focus.replace("{w}", String(waiting.length)).replace("{d}", String(decisionRows))
+              : t.home.focusCalm}
+          </p>
+        </div>
+        {share !== null && <Ring value={share} label={t.home.ringLabel} />}
       </header>
 
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -167,7 +184,7 @@ export default async function TodayPage() {
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {data.clients.map((c) => (
-            <ClientCard key={c.id} client={c} t={t} />
+            <ClientCard key={c.id} client={c} t={t} trend={trends.byClient[c.id]} />
           ))}
         </div>
       </section>
@@ -241,6 +258,24 @@ function FeedRow({ f, t }: { f: FeedItem; t: Dict }) {
     </Link>
   ) : (
     body
+  );
+}
+
+/** Кольцо доли: скольким разговорам за сутки ответил агент. */
+function Ring({ value, label }: { value: number; label: string }) {
+  const r = 26;
+  const len = 2 * Math.PI * r;
+  return (
+    <div className="flex items-center gap-3 rounded-2xl border border-border bg-metal px-4 py-3">
+      <svg width={64} height={64} viewBox="0 0 64 64" className="-rotate-90" aria-hidden>
+        <circle cx={32} cy={32} r={r} fill="none" strokeWidth={6} className="stroke-border" />
+        <circle cx={32} cy={32} r={r} fill="none" strokeWidth={6} strokeLinecap="round" className="stroke-accent" strokeDasharray={`${(len * value) / 100} ${len}`} />
+      </svg>
+      <div>
+        <div className="font-display text-2xl font-bold tabular-nums">{value}%</div>
+        <div className="max-w-36 text-xs leading-snug text-muted">{label}</div>
+      </div>
+    </div>
   );
 }
 

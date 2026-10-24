@@ -3,12 +3,14 @@ import { Building2, Plus } from "lucide-react";
 import { getT } from "@/lib/i18n/server";
 import { scope } from "@/lib/access";
 import { dashboardData } from "@/lib/dashboard";
+import { homeTrends } from "@/lib/home-live";
 import { ClientCard } from "@/components/client-card";
 import { EmptyState, PageHeader, buttonClass } from "@/components/ui";
 
 export default async function ClientsPage() {
   const { t } = await getT();
-  const { clients } = await dashboardData(await scope());
+  const ids = await scope();
+  const [{ clients }, trends] = await Promise.all([dashboardData(ids), homeTrends(ids)]);
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -36,7 +38,7 @@ export default async function ClientsPage() {
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {clients.map((c) => (
-            <ClientCard key={c.id} client={c} t={t} />
+            <ClientCard key={c.id} client={c} t={t} trend={trends.byClient[c.id]} />
           ))}
         </div>
       )}
