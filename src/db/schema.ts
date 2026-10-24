@@ -917,6 +917,207 @@ export const repeatNudges = sqliteTable(
   (t) => [uniqueIndex("repeat_nudges_unique").on(t.clientId, t.customer, t.lastOrder)],
 );
 
+export type TripStop = {
+  name: string;
+  address: string;
+  kg: number;
+  m3: number;
+  /** Контакт получателя: @ник, телефон или почта — ему сообщения «едем», «задержка», «доставлено» */
+  contact: string;
+  /** Плановое время прибытия (мс) */
+  eta: number;
+  /** Прогноз сейчас (мс) — с пробками, погодой и историей */
+  forecast?: number;
+  status: "pending" | "done" | "failed";
+  doneAt?: number;
+  note?: string;
+  /** Что уже сообщили получателю: on_way — едем к вам, delay — задержка (минут), done */
+  told?: { onWay?: boolean; delayMin?: number; done?: boolean };
+};
+/**
+ * Рейсы: сохранённый маршрут с водителем. Водитель получает маршрут в мессенджере и отмечает точки в чате с агентом;
+ * получатели — «едем к вам», «задержка до …», «доставлено»; прогноз задержек — пробки (Google), погода (Open-Meteo)
+ * и история прошлых рейсов.
+ */
+export const trips = sqliteTable(
+  "trips",
+  {
+    id: id(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    name: text("name").notNull().default(""),
+    vehicle: text("vehicle").notNull().default(""),
+    /** @ник Telegram или телефон водителя */
+    driver: text("driver").notNull().default(""),
+    driverName: text("driver_name").notNull().default(""),
+    departure: integer("departure", { mode: "timestamp_ms" }).notNull(),
+    returnToBase: integer("return_to_base", { mode: "boolean" }).notNull().default(true),
+    stops: text("stops", { mode: "json" }).$type<TripStop[]>().notNull().default([]),
+    km: real("km").notNull().default(0),
+    minutes: integer("minutes").notNull().default(0),
+    mapsUrl: text("maps_url").notNull().default(""),
+    /** Инструкции водителю: где забрать, кому звонить, оплата на месте */
+    instructions: text("instructions").notNull().default(""),
+    notifyCustomers: integer("notify_customers", { mode: "boolean" }).notNull().default(true),
+    status: text("status", { enum: ["planned", "sent", "active", "done"] }).notNull().default("planned"),
+    /** Риск задержки: погода и история — текстом для студии */
+    risk: text("risk").notNull().default(""),
+    sentAt: integer("sent_at", { mode: "timestamp_ms" }),
+    lastCheckAt: integer("last_check_at", { mode: "timestamp_ms" }),
+    createdAt: createdAt(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [index("trips_client_idx").on(t.clientId, t.status)],
+);
+export type Trip = typeof trips.$inferSelect;
+
+/**
+ * Контроль сервисов клиента: проверка сайта / API (ответ, текст на странице, время ответа) или сигналы из его
+ * систем (вебхук с ошибками и метриками). Сбой подряд N раз — инцидент: сообщение команде и черновик
+ * упреждающего сообщения клиентам, которых это заденет (из него — рассылка после проверки человеком).
+ */
+export const monitors = sqliteTable(
+  "monitors",
+  {
+    id: id(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    kind: text("kind", { enum: ["http", "webhook"] }).notNull().default("http"),
+    url: text("url").notNull().default(""),
+    /** Текст, который должен быть в ответе (например, "ok" или название на странице) */
+    expectText: text("expect_text").notNull().default(""),
+    /** Медленнее — тоже сбой */
+    maxMs: integer("max_ms").notNull().default(10000),
+    intervalMin: integer("interval_min").notNull().default(5),
+    failThreshold: integer("fail_threshold").notNull().default(2),
+    /** Ключ для сигналов из систем клиента: POST /api/monitor/<id> */
+    apiKey: text("api_key").notNull(),
+    /** Кого заденет сбой — для черновика сообщения: «все, кто платит онлайн», «пользователи приложения» */
+    audience: text("audience").notNull().default(""),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    status: text("status", { enum: ["unknown", "up", "down"] }).notNull().default("unknown"),
+    fails: integer("fails").notNull().default(0),
+    lastCheckAt: integer("last_check_at", { mode: "timestamp_ms" }),
+    lastMs: integer("last_ms"),
+    lastError: text("last_error"),
+    createdAt: createdAt(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [index("monitors_client_idx").on(t.clientId)],
+);
+export type Monitor = typeof monitors.$inferSelect;
+
+export const incidents = sqliteTable(
+  "incidents",
+  {
+    id: id(),
+    monitorId: text("monitor_id")
+      .notNull()
+      .references(() => monitors.id, { onDelete: "cascade" }),
+    clientId: text("client_id").notNull(),
+    error: text("error").notNull().default(""),
+    /** Черновик упреждающего сообщения клиентам (проверяет человек) */
+    draft: text("draft").notNull().default(""),
+    /** Черновик «всё снова работает» */
+    resolvedDraft: text("resolved_draft").notNull().default(""),
+    status: text("status", { enum: ["open", "resolved"] }).notNull().default("open"),
+    /** Рассылка, созданная из черновика */
+    campaignId: text("campaign_id"),
+    startedAt: integer("started_at", { mode: "timestamp_ms" }).notNull(),
+    resolvedAt: integer("resolved_at", { mode: "timestamp_ms" }),
+  },
+  (t) => [index("incidents_monitor_idx").on(t.monitorId, t.startedAt)],
+);
+export type Incident = typeof incidents.$inferSelect;
+
+export type QuizQuestion = { q: string; options: string[]; correct: number };
+/**
+ * Обучение в мессенджере: курсы из уроков (текст, видео, тест), баллы за уроки и курс (в программу баллов клиента),
+ * личная программа по уровню, цели и результатам тестов, напоминания продолжить. Учится клиент или сотрудник
+ * прямо в чате с агентом.
+ */
+export const courses = sqliteTable(
+  "courses",
+  {
+    id: id(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    description: text("description").notNull().default(""),
+    level: text("level", { enum: ["beginner", "intermediate", "advanced"] }).notNull().default("beginner"),
+    /** Темы через запятую — для подбора программы под цель */
+    topics: text("topics").notNull().default(""),
+    /** Бонус за весь курс */
+    points: integer("points").notNull().default(0),
+    /** Куда начислять баллы (программа баллов клиента) */
+    programId: text("program_id").references(() => loyaltyPrograms.id, { onDelete: "set null" }),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    position: integer("position").notNull().default(0),
+    createdAt: createdAt(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [index("courses_client_idx").on(t.clientId)],
+);
+export type Course = typeof courses.$inferSelect;
+
+export const lessons = sqliteTable(
+  "lessons",
+  {
+    id: id(),
+    courseId: text("course_id")
+      .notNull()
+      .references(() => courses.id, { onDelete: "cascade" }),
+    position: integer("position").notNull().default(0),
+    title: text("title").notNull(),
+    body: text("body").notNull().default(""),
+    videoUrl: text("video_url").notNull().default(""),
+    quiz: text("quiz", { mode: "json" }).$type<QuizQuestion[]>().notNull().default([]),
+    /** Сколько % правильных — урок сдан */
+    passScore: integer("pass_score").notNull().default(70),
+    points: integer("points").notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [index("lessons_course_idx").on(t.courseId, t.position)],
+);
+export type Lesson = typeof lessons.$inferSelect;
+
+export type LessonResult = { score: number; passed: boolean; at: number; tries: number };
+export const learners = sqliteTable(
+  "learners",
+  {
+    id: id(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    /** Нормализованный контакт: ник, телефон, почта или id чата */
+    contact: text("contact").notNull(),
+    name: text("name").notNull().default(""),
+    conversationId: text("conversation_id").references(() => conversations.id, { onDelete: "set null" }),
+    level: text("level").notNull().default(""),
+    goal: text("goal").notNull().default(""),
+    /** Личная программа: курсы по порядку */
+    path: text("path", { mode: "json" }).$type<string[]>().notNull().default([]),
+    /** Результаты по урокам: lessonId → оценка */
+    results: text("results", { mode: "json" }).$type<Record<string, LessonResult>>().notNull().default({}),
+    points: integer("points").notNull().default(0),
+    lastActivityAt: integer("last_activity_at", { mode: "timestamp_ms" }),
+    remindedAt: integer("reminded_at", { mode: "timestamp_ms" }),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("learners_contact_idx").on(t.clientId, t.contact)],
+);
+export type Learner = typeof learners.$inferSelect;
+
 export type Vehicle = { name: string; capacityKg: number; capacityM3: number };
 /** Логистика клиента: склад / точка отправления, время на одну точку, машины; правила доставки — для агента. */
 export const clientLogistics = sqliteTable("client_logistics", {

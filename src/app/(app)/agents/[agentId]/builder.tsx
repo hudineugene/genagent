@@ -545,6 +545,13 @@ export function Builder({
             <span className="block text-xs text-muted">{t.builder.pricingCalcHint}</span>
           </span>
         </label>
+        <label className="flex items-start gap-2.5 text-sm">
+          <input type="checkbox" className="mt-0.5 size-4 accent-[var(--accent)]" checked={Boolean(config.learning)} onChange={(e) => set("learning", e.target.checked)} />
+          <span>
+            <span className="font-medium">{t.builder.learning}</span>
+            <span className="block text-xs text-muted">{t.builder.learningHint}</span>
+          </span>
+        </label>
         <Link href={`/clients/${client.id}?tab=data`} className="text-sm text-accent hover:underline">
           {t.builder.dataManage}
         </Link>

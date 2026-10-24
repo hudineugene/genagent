@@ -49,6 +49,7 @@ const FIELDS: Field[] = [
   "loyaltyProgramId",
   "logistics",
   "pricing",
+  "learning",
 ];
 
 export function VersionsPanel({
@@ -120,6 +121,7 @@ export function VersionsPanel({
       loyaltyProgramId: b.sections.loyalty,
       logistics: b.deliveryEstimate,
       pricing: b.pricingCalc,
+      learning: b.learning,
     };
     return map[f];
   };
@@ -153,6 +155,8 @@ export function VersionsPanel({
         return String((c.formIds ?? []).length || "—");
       case "docTemplateIds":
         return String((c.docTemplateIds ?? []).length || "—");
+      case "learning":
+        return c.learning ? t.versions.on : t.versions.off;
       case "pricing":
         return c.pricing ? t.versions.on : t.versions.off;
       case "logistics":

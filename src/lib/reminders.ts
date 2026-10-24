@@ -167,14 +167,19 @@ export async function reminderHistory(reminderId: string, limit = 30) {
 }
 
 const g = globalThis as unknown as { __remindersTimer?: NodeJS.Timeout };
-/** Напоминания по таблицам, повторные покупки и адаптация — раз в 10 минут. */
+/** Напоминания по таблицам, повторные покупки, адаптация, рейсы и обучение — раз в 10 минут; контроль сервисов — раз в минуту. */
 export function startReminders() {
   if (g.__remindersTimer) return;
   const tick = async () => {
     await remindersTick().catch((e) => console.error("reminders tick failed", e));
     await import("@/lib/repeat").then((m) => m.repeatTick()).catch((e) => console.error("repeat tick failed", e));
     await import("@/lib/onboarding").then((m) => m.onboardingTick()).catch((e) => console.error("onboarding tick failed", e));
+    await import("@/lib/logistics/trips").then((m) => m.tripsTick()).catch((e) => console.error("trips tick failed", e));
+    await import("@/lib/learning").then((m) => m.learningTick()).catch((e) => console.error("learning tick failed", e));
   };
   g.__remindersTimer = setInterval(() => void tick(), 10 * 60_000);
   g.__remindersTimer.unref?.();
+  // Контроль сервисов — каждую минуту (у каждой проверки свой интервал)
+  const mt = setInterval(() => void import("@/lib/monitor").then((m) => m.monitorsTick()).catch((e) => console.error("monitors tick failed", e)), 60_000);
+  mt.unref?.();
 }

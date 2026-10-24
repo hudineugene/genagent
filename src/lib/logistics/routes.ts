@@ -14,12 +14,12 @@ const ROUTES_URL = () => process.env.GOOGLE_ROUTES_URL || "https://routes.google
 /** Google оптимизирует до 25 промежуточных точек */
 export const MAX_STOPS = 25;
 
-export type Stop = { name: string; address: string; kg: number; m3: number };
+export type Stop = { name: string; address: string; kg: number; m3: number; contact?: string };
 /** eta и back — время в мс (часовой пояс показа выбирает браузер) */
 export type RouteStop = Stop & { eta: number; legKm: number; legMin: number };
 export type PlannedRoute = { vehicle: string; stops: RouteStop[]; km: number; minutes: number; back: number; mapsUrl: string; kg: number; m3: number };
 
-/** «Имя; адрес; кг; м³» или просто адрес — по строке на точку. */
+/** «Имя; адрес; кг; м³; контакт получателя» или просто адрес — по строке на точку. */
 export function parseStops(text: string): Stop[] {
   return text
     .split(/\r?\n/)
@@ -29,7 +29,7 @@ export function parseStops(text: string): Stop[] {
       const parts = l.split(";").map((x) => x.trim());
       if (parts.length === 1) return { name: `${i + 1}`, address: parts[0], kg: 0, m3: 0 };
       const num = (s?: string) => Math.max(0, Number((s ?? "").replace(",", ".")) || 0);
-      return { name: parts[0] || `${i + 1}`, address: parts[1] || parts[0], kg: num(parts[2]), m3: num(parts[3]) };
+      return { name: parts[0] || `${i + 1}`, address: parts[1] || parts[0], kg: num(parts[2]), m3: num(parts[3]), contact: (parts[4] ?? "").trim() };
     });
 }
 
@@ -55,7 +55,7 @@ type RoutesResponse = {
   error?: { message?: string };
 };
 
-async function callRoutes(body: object, mask: string): Promise<NonNullable<RoutesResponse["routes"]>[number]> {
+export async function callRoutes(body: object, mask: string): Promise<NonNullable<RoutesResponse["routes"]>[number]> {
   const key = apiKey("googleMaps");
   if (!key) throw new Error("no_maps_key");
   const res = await fetch(ROUTES_URL(), {
@@ -71,7 +71,7 @@ async function callRoutes(body: object, mask: string): Promise<NonNullable<Route
   return route;
 }
 
-const seconds = (d?: string) => Number((d ?? "0s").replace("s", "")) || 0;
+export const seconds = (d?: string) => Number((d ?? "0s").replace("s", "")) || 0;
 const mapsLink = (origin: string, dest: string, points: string[]) =>
   `https://www.google.com/maps/dir/?api=1&travelmode=driving&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(dest)}${points.length ? `&waypoints=${encodeURIComponent(points.join("|"))}` : ""}`;
 

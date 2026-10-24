@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, asc, count, desc, eq, inArray } from "drizzle-orm";
-import { BarChart3, BellRing, GraduationCap, Repeat, Users, Blocks, BookOpen, Bot, Calculator, LayoutDashboard, ClipboardList, ClipboardCheck, FileBarChart2, FileText, Gift, Mail, Mic, PenLine, Route, Truck, Table2, Megaphone, Plus, Settings, Wrench } from "lucide-react";
+import { Activity, BarChart3, BellRing, BookOpenCheck, GraduationCap, Repeat, Users, Blocks, BookOpen, Bot, Calculator, LayoutDashboard, ClipboardList, ClipboardCheck, FileBarChart2, FileText, Gift, Mail, Mic, PenLine, Route, Truck, Table2, Megaphone, Plus, Settings, Wrench } from "lucide-react";
 import { db } from "@/db";
-import { agents, approvals, campaigns, candidates, clientRepeat, onboardingPlans, onboardings, reminders, vacancies, clientPricing, routingRules, contactLists, contacts, outreach, outreachMessages, channels, clientLogistics, contentItems, loyaltyAccounts, loyaltyPrograms, loyaltyTx, meetings, clientDocTypes, clientDocuments, clientForms, dataTables, clientIntegrations, clientTools, clients, conversations, docTemplates, formResponses, generatedDocs, kbSources, knowledgeGaps, routines } from "@/db/schema";
+import { agents, approvals, campaigns, candidates, courses, incidents, learners, lessons, monitors, trips, clientRepeat, onboardingPlans, onboardings, reminders, vacancies, clientPricing, routingRules, contactLists, contacts, outreach, outreachMessages, channels, clientLogistics, contentItems, loyaltyAccounts, loyaltyPrograms, loyaltyTx, meetings, clientDocTypes, clientDocuments, clientForms, dataTables, clientIntegrations, clientTools, clients, conversations, docTemplates, formResponses, generatedDocs, kbSources, knowledgeGaps, routines } from "@/db/schema";
 import { getT } from "@/lib/i18n/server";
 import { findModel } from "@/lib/models";
 import type { Dict, Locale } from "@/lib/i18n";
@@ -27,6 +27,8 @@ import { RoutingManager } from "./routing";
 import { PricingManager } from "./pricing";
 import { RemindersManager, RepeatManager } from "./reminders";
 import { HiringManager, OnboardingManager } from "./onboarding";
+import { MonitorManager } from "./monitor";
+import { LearningManager } from "./learning";
 import { publicUrl } from "@/lib/settings";
 import { campaignStats } from "@/lib/campaigns/engine";
 import { getGoogleSettings } from "@/lib/google/calendar";
@@ -49,9 +51,9 @@ export default async function ClientPage({
   const [client] = await db.select().from(clients).where(eq(clients.id, clientId));
   if (!client) notFound();
 
-  const SECTIONS = ["kb", "data", "modules", "outreach", "routing", "pricing", "reminders", "repeat", "onboarding", "hiring", "tools", "forms", "documents", "loyalty", "logistics", "approvals", "campaigns", "content", "meetings", "routines"] as const;
+  const SECTIONS = ["kb", "data", "modules", "outreach", "routing", "pricing", "reminders", "repeat", "onboarding", "hiring", "monitor", "learning", "tools", "forms", "documents", "loyalty", "logistics", "approvals", "campaigns", "content", "meetings", "routines"] as const;
   const active = (SECTIONS as readonly string[]).includes(tab ?? "") ? (tab as (typeof SECTIONS)[number]) : "agents";
-  const [[{ agentsCount }], [{ kbCount }], [{ toolsCount }], [{ campaignsCount }], [{ formsCount }], [{ routinesCount }], [{ docTypesCount }], [{ templatesCount }], [{ tablesCount }], [{ pendingApprovals }], [{ approvalsCount }], teamAgents, [{ contentCount }], [{ meetingsCount }], [{ programsCount }], [{ outsCount }], [logistics], agentConfigs, [{ routingCount }], [pricingRow], [{ remindersCount }], [{ onboardingCount }], [{ vacanciesCount }]] = await Promise.all([
+  const [[{ agentsCount }], [{ kbCount }], [{ toolsCount }], [{ campaignsCount }], [{ formsCount }], [{ routinesCount }], [{ docTypesCount }], [{ templatesCount }], [{ tablesCount }], [{ pendingApprovals }], [{ approvalsCount }], teamAgents, [{ contentCount }], [{ meetingsCount }], [{ programsCount }], [{ outsCount }], [logistics], agentConfigs, [{ routingCount }], [pricingRow], [{ remindersCount }], [{ onboardingCount }], [{ vacanciesCount }], [{ monitorsCount }], [{ openIncidents }], [{ coursesCount }]] = await Promise.all([
     db.select({ agentsCount: count() }).from(agents).where(eq(agents.clientId, clientId)),
     db.select({ kbCount: count() }).from(kbSources).where(eq(kbSources.clientId, clientId)),
     db.select({ toolsCount: count() }).from(clientTools).where(eq(clientTools.clientId, clientId)),
@@ -75,6 +77,9 @@ export default async function ClientPage({
     db.select({ remindersCount: count() }).from(reminders).where(eq(reminders.clientId, clientId)),
     db.select({ onboardingCount: count() }).from(onboardings).where(and(eq(onboardings.clientId, clientId), eq(onboardings.status, "active"))),
     db.select({ vacanciesCount: count() }).from(vacancies).where(eq(vacancies.clientId, clientId)),
+    db.select({ monitorsCount: count() }).from(monitors).where(eq(monitors.clientId, clientId)),
+    db.select({ openIncidents: count() }).from(incidents).where(and(eq(incidents.clientId, clientId), eq(incidents.status, "open"))),
+    db.select({ coursesCount: count() }).from(courses).where(eq(courses.clientId, clientId)),
   ]);
 
   const base = `/clients/${client.id}`;
@@ -116,6 +121,7 @@ export default async function ClientPage({
         { key: "content", label: t.content.tab, icon: PenLine, n: contentCount },
         { key: "meetings", label: t.meetings.tab, icon: Mic, n: meetingsCount },
         { key: "routines", label: t.routines.tab, icon: FileBarChart2, n: routinesCount },
+        { key: "monitor", label: t.monitor.tab, icon: Activity, n: monitorsCount, alert: openIncidents },
       ],
     },
     {
@@ -123,6 +129,7 @@ export default async function ClientPage({
       items: [
         { key: "onboarding", label: t.onboarding.tab, icon: GraduationCap, n: onboardingCount },
         { key: "hiring", label: t.hiring.tab, icon: Users, n: vacanciesCount },
+        { key: "learning", label: t.learning.tab, icon: BookOpenCheck, n: coursesCount },
       ],
     },
   ];
@@ -190,6 +197,10 @@ export default async function ClientPage({
         <CampaignsTab clientId={client.id} />
       ) : active === "forms" ? (
         <FormsTab clientId={client.id} />
+      ) : active === "monitor" ? (
+        <MonitorTab clientId={client.id} />
+      ) : active === "learning" ? (
+        <LearningTab clientId={client.id} />
       ) : active === "reminders" ? (
         <RemindersTab clientId={client.id} />
       ) : active === "repeat" ? (
@@ -279,6 +290,68 @@ async function tablesAndMail(clientId: string) {
     db.select({ id: channels.id, name: channels.name }).from(channels).where(and(eq(channels.clientId, clientId), eq(channels.type, "email"))),
   ]);
   return { tables: tables.map((x) => ({ id: x.id, name: x.name, columns: x.columns.map((c) => c.name) })), mail };
+}
+
+async function MonitorTab({ clientId }: { clientId: string }) {
+  const [rows, incs] = await Promise.all([
+    db.select().from(monitors).where(eq(monitors.clientId, clientId)).orderBy(asc(monitors.createdAt)),
+    db.select({ i: incidents, name: monitors.name }).from(incidents).innerJoin(monitors, eq(monitors.id, incidents.monitorId)).where(eq(incidents.clientId, clientId)).orderBy(desc(incidents.startedAt)).limit(10),
+  ]);
+  return (
+    <MonitorManager
+      clientId={clientId}
+      apiBase={publicUrl() || ""}
+      rows={rows.map((m) => ({
+        id: m.id,
+        name: m.name,
+        kind: m.kind,
+        url: m.url,
+        expectText: m.expectText,
+        maxMs: m.maxMs,
+        intervalMin: m.intervalMin,
+        failThreshold: m.failThreshold,
+        audience: m.audience,
+        enabled: m.enabled,
+        status: m.status,
+        lastCheckAt: m.lastCheckAt?.getTime() ?? null,
+        lastMs: m.lastMs,
+        lastError: m.lastError,
+        apiKey: m.apiKey,
+      }))}
+      incidents={incs.map(({ i, name }) => ({ id: i.id, monitorId: i.monitorId, monitor: name, error: i.error, draft: i.draft, resolvedDraft: i.resolvedDraft, status: i.status, campaignId: i.campaignId, startedAt: i.startedAt.getTime(), resolvedAt: i.resolvedAt?.getTime() ?? null }))}
+    />
+  );
+}
+
+async function LearningTab({ clientId }: { clientId: string }) {
+  const [list, people, programs, agentList] = await Promise.all([
+    db.select().from(courses).where(eq(courses.clientId, clientId)).orderBy(asc(courses.position), asc(courses.createdAt)),
+    db.select().from(learners).where(eq(learners.clientId, clientId)).orderBy(desc(learners.lastActivityAt)).limit(300),
+    db.select({ id: loyaltyPrograms.id, name: loyaltyPrograms.name }).from(loyaltyPrograms).where(eq(loyaltyPrograms.clientId, clientId)),
+    db.select({ config: agents.config }).from(agents).where(eq(agents.clientId, clientId)),
+  ]);
+  const ls = list.length ? await db.select().from(lessons).where(inArray(lessons.courseId, list.map((c) => c.id))).orderBy(asc(lessons.position), asc(lessons.createdAt)) : [];
+  return (
+    <LearningManager
+      clientId={clientId}
+      programs={programs}
+      agentOn={agentList.some((a) => a.config.learning)}
+      stats={await import("@/lib/learning").then((m) => m.learningStats(clientId))}
+      rows={list.map((c) => ({
+        id: c.id,
+        title: c.title,
+        description: c.description,
+        level: c.level,
+        topics: c.topics,
+        points: c.points,
+        programId: c.programId,
+        enabled: c.enabled,
+        position: c.position,
+        lessons: ls.filter((x) => x.courseId === c.id).map((x) => ({ id: x.id, position: x.position, title: x.title, body: x.body, videoUrl: x.videoUrl, quiz: x.quiz, passScore: x.passScore, points: x.points })),
+      }))}
+      learners={people.map((p) => ({ id: p.id, name: p.name, contact: p.contact, goal: p.goal, level: p.level, points: p.points, passed: Object.values(p.results).filter((r) => r.passed).length, lastActivityAt: p.lastActivityAt?.getTime() ?? null }))}
+    />
+  );
 }
 
 async function RemindersTab({ clientId }: { clientId: string }) {
@@ -469,11 +542,31 @@ async function OutreachTab({ clientId }: { clientId: string }) {
 }
 
 async function LogisticsTab({ clientId }: { clientId: string }) {
-  const [l] = await db.select().from(clientLogistics).where(eq(clientLogistics.clientId, clientId));
+  const [[l], tripRows] = await Promise.all([
+    db.select().from(clientLogistics).where(eq(clientLogistics.clientId, clientId)),
+    db.select().from(trips).where(eq(trips.clientId, clientId)).orderBy(desc(trips.departure)).limit(30),
+  ]);
+  const { tripStats } = await import("@/lib/logistics/trips");
   return (
     <LogisticsManager
       clientId={clientId}
       mapsKey={await hasKey(clientId, "googleMaps")}
+      stats={await tripStats(clientId)}
+      trips={tripRows.map((r) => ({
+        id: r.id,
+        name: r.name,
+        vehicle: r.vehicle,
+        driver: r.driver,
+        driverName: r.driverName,
+        departure: r.departure.getTime(),
+        stops: r.stops,
+        km: r.km,
+        minutes: r.minutes,
+        mapsUrl: r.mapsUrl,
+        status: r.status,
+        risk: r.risk,
+        notifyCustomers: r.notifyCustomers,
+      }))}
       settings={{ baseAddress: l?.baseAddress ?? "", stopMinutes: l?.stopMinutes ?? 10, vehicles: l?.vehicles ?? [], deliveryNote: l?.deliveryNote ?? "" }}
     />
   );
