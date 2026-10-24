@@ -11,6 +11,7 @@ import { Button, Input, Select, Spinner, cx } from "@/components/ui";
 import { BUILDER_GROUPS, Builder, BuilderGroupContext, groupOf, type BuilderGroup } from "./builder";
 import { Playground } from "./playground";
 import { VersionsPanel } from "./versions";
+import { toast } from "@/components/toast";
 import type { BuilderDocTemplate, BuilderProgram, BuilderTable, BuilderForm, BuilderProcedure, BuilderSource, BuilderTool, ExampleItem } from "./builder";
 
 type Status = "draft" | "active" | "paused";
@@ -84,6 +85,7 @@ export function AgentStudio({
         setSaved({ name, status, config });
         setNotice(null);
         setJustSaved(true);
+        toast(`${t.common.saved} · v${res.version}`);
         clearTimeout(savedTimer.current);
         savedTimer.current = setTimeout(() => setJustSaved(false), 2500);
         // Шапка агента (название, статус, версия) — свежая

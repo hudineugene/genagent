@@ -84,6 +84,18 @@
   --radius-2xl: 0.75rem;
   --animate-page-in: page-in 0.22s ease-out;
   --animate-shimmer: shimmer 1.4s ease-in-out infinite;
+  --animate-toast-in: toast-in 0.24s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  --animate-pop-in: pop-in 0.16s ease-out;
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes pop-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to { opacity: 1; transform: none; }
 }
 
 @keyframes page-in {
@@ -131,6 +143,75 @@ h1, h2 {
   border-radius: 0.5rem;
 }
 
+/*
+ * Панель слева открыта (компьютер от 1024 px): меню разделов клиента и вкладки агента внутри страниц дублируют её —
+ * прячем. Свернули панель — меню снова на странице.
+ */
+/* Верхняя строка липкая: прокрутка к началу страницы или к якорю не прячет заголовок под ней */
+@media (min-width: 48rem) {
+  html { scroll-padding-top: 4.5rem; }
+}
+
+@media (min-width: 64rem) {
+  [data-panel="on"] .ctx-inline { display: none !important; }
+  [data-panel="on"] .ctx-grid { grid-template-columns: minmax(0, 1fr) !important; }
+}
+
+/* Общие правила — в базовом слое: классы Tailwind на элементах главнее */
+@layer base {
+  /* Фокус с клавиатуры — заметная рамка у ссылок и кнопок (мышью — без рамки) */
+  a:focus-visible,
+  button:focus-visible,
+  [role="button"]:focus-visible,
+  summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* Отклик на нажатие */
+  button:not(:disabled):active {
+    transform: scale(0.97);
+  }
+
+  /* Таблицы: подсветка строки при наведении, цифры одной ширины */
+  main table tbody tr {
+    transition: background-color 0.12s;
+  }
+  main table tbody tr:hover {
+    background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+  }
+  main table td,
+  main table th {
+    font-variant-numeric: tabular-nums;
+  }
+  main table thead th {
+    background: var(--surface);
+  }
+
+  /* Компактная плотность (меню профиля): меньше отступов в таблицах и строках списков */
+  [data-density="compact"] main table td,
+  [data-density="compact"] main table th {
+    padding-top: 0.3rem !important;
+    padding-bottom: 0.3rem !important;
+  }
+  [data-density="compact"] main .divide-y > li > *,
+  [data-density="compact"] main .divide-y > a {
+    padding-top: 0.45rem !important;
+    padding-bottom: 0.45rem !important;
+  }
+
+  /* Полоса прокрутки поскромнее */
+  * {
+    scrollbar-color: color-mix(in srgb, var(--muted) 35%, transparent) transparent;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .skeleton, .animate-page-in { animation: none; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  button:not(:disabled):active { transform: none; }
 }

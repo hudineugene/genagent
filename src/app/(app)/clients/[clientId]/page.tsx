@@ -1,14 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, asc, count, desc, eq, inArray } from "drizzle-orm";
-import { Network, Activity, BarChart3, BellRing, BookOpenCheck, GraduationCap, Repeat, Users, Blocks, BookOpen, Bot, Calculator, CreditCard, ListChecks, LayoutDashboard, ClipboardList, ClipboardCheck, FileBarChart2, FileText, Gift, Mail, Mic, PenLine, Route, Truck, Table2, Megaphone, Plus, Settings, Wrench } from "lucide-react";
+import { BarChart3, Bot, Plus, Settings } from "lucide-react";
 import { db } from "@/db";
 import { agents, approvals, campaigns, candidates, courses, incidents, learners, lessons, monitors, trips, clientRepeat, onboardingPlans, onboardings, reminders, vacancies, clientPricing, clientPayments, payments, procedures, routingRules, contactLists, contacts, outreach, outreachMessages, channels, clientLogistics, contentItems, loyaltyAccounts, loyaltyPrograms, loyaltyTx, meetings, clientDocTypes, clientDocuments, clientForms, dataTables, clientIntegrations, clientTools, clients, conversations, docTemplates, formResponses, generatedDocs, kbSources, knowledgeGaps, routines } from "@/db/schema";
 import { getT } from "@/lib/i18n/server";
 import { findModel } from "@/lib/models";
 import type { Dict, Locale } from "@/lib/i18n";
 import { BackLink } from "@/components/back-link";
-import { Badge, Card, ClientAvatar, EmptyState, PageHeader, buttonClass, cx } from "@/components/ui";
+import { Badge, Card, ClientAvatar, EmptyState, buttonClass, cx } from "@/components/ui";
 import { KnowledgeBase } from "./knowledge-base";
 import { ToolsManager } from "./tools";
 import { ConnectorsManager } from "./connectors";
@@ -46,6 +46,9 @@ import { guardPage } from "@/lib/access";
 import { getGeneral, studioTz } from "@/lib/general";
 import { ClientMapTab } from "./client-map";
 import { logoVersions } from "@/lib/client-logo";
+import { dashboardData } from "@/lib/dashboard";
+import { CLIENT_TABS, clientSections, type ModuleCard } from "@/lib/client-sections";
+import { NAV_ICONS, visibleNav } from "@/lib/nav-icons";
 export default async function ClientPage({
   params,
   searchParams,
@@ -59,126 +62,70 @@ export default async function ClientPage({
   const [client] = await db.select().from(clients).where(eq(clients.id, clientId));
   if (!client) notFound();
 
-  const SECTIONS = ["kb", "data", "modules", "map", "outreach", "routing", "pricing", "payments", "reminders", "repeat", "onboarding", "hiring", "monitor", "learning", "tools", "forms", "procedures", "documents", "loyalty", "logistics", "approvals", "campaigns", "content", "meetings", "routines"] as const;
-  const active = (SECTIONS as readonly string[]).includes(tab ?? "") ? (tab as (typeof SECTIONS)[number]) : "agents";
-  const [[{ agentsCount }], [{ kbCount }], [{ toolsCount }], [{ campaignsCount }], [{ formsCount }], [{ routinesCount }], [{ docTypesCount }], [{ templatesCount }], [{ tablesCount }], [{ pendingApprovals }], [{ approvalsCount }], teamAgents, [{ contentCount }], [{ meetingsCount }], [{ programsCount }], [{ outsCount }], [logistics], agentConfigs, [{ routingCount }], [pricingRow], [{ remindersCount }], [{ onboardingCount }], [{ vacanciesCount }], [{ monitorsCount }], [{ openIncidents }], [{ coursesCount }], [{ outreachCount }], [repeatRow], [payRow], [{ procCount }]] = await Promise.all([
-    db.select({ agentsCount: count() }).from(agents).where(eq(agents.clientId, clientId)),
-    db.select({ kbCount: count() }).from(kbSources).where(eq(kbSources.clientId, clientId)),
-    db.select({ toolsCount: count() }).from(clientTools).where(eq(clientTools.clientId, clientId)),
-    db.select({ campaignsCount: count() }).from(campaigns).where(eq(campaigns.clientId, clientId)),
-    db.select({ formsCount: count() }).from(clientForms).where(eq(clientForms.clientId, clientId)),
-    db.select({ routinesCount: count() }).from(routines).where(eq(routines.clientId, clientId)),
-    db.select({ docTypesCount: count() }).from(clientDocTypes).where(eq(clientDocTypes.clientId, clientId)),
-    db.select({ templatesCount: count() }).from(docTemplates).where(eq(docTemplates.clientId, clientId)),
-    db.select({ tablesCount: count() }).from(dataTables).where(eq(dataTables.clientId, clientId)),
-    db.select({ pendingApprovals: count() }).from(approvals).where(and(eq(approvals.clientId, clientId), eq(approvals.status, "pending"))),
-    db.select({ approvalsCount: count() }).from(approvals).where(eq(approvals.clientId, clientId)),
-    hasTeamAgents(clientId),
-    db.select({ contentCount: count() }).from(contentItems).where(eq(contentItems.clientId, clientId)),
-    db.select({ meetingsCount: count() }).from(meetings).where(eq(meetings.clientId, clientId)),
-    db.select({ programsCount: count() }).from(loyaltyPrograms).where(eq(loyaltyPrograms.clientId, clientId)),
-    db.select({ outsCount: count() }).from(clientIntegrations).where(eq(clientIntegrations.clientId, clientId)),
-    db.select({ base: clientLogistics.baseAddress }).from(clientLogistics).where(eq(clientLogistics.clientId, clientId)),
-    db.select({ config: agents.config }).from(agents).where(eq(agents.clientId, clientId)),
-    db.select({ routingCount: count() }).from(routingRules).where(eq(routingRules.clientId, clientId)),
-    db.select({ tableId: clientPricing.tableId }).from(clientPricing).where(eq(clientPricing.clientId, clientId)),
-    db.select({ remindersCount: count() }).from(reminders).where(eq(reminders.clientId, clientId)),
-    db.select({ onboardingCount: count() }).from(onboardings).where(and(eq(onboardings.clientId, clientId), eq(onboardings.status, "active"))),
-    db.select({ vacanciesCount: count() }).from(vacancies).where(eq(vacancies.clientId, clientId)),
-    db.select({ monitorsCount: count() }).from(monitors).where(eq(monitors.clientId, clientId)),
-    db.select({ openIncidents: count() }).from(incidents).where(and(eq(incidents.clientId, clientId), eq(incidents.status, "open"))),
-    db.select({ coursesCount: count() }).from(courses).where(eq(courses.clientId, clientId)),
-    db.select({ outreachCount: count() }).from(contactLists).where(eq(contactLists.clientId, clientId)),
-    db.select({ tableId: clientRepeat.tableId }).from(clientRepeat).where(eq(clientRepeat.clientId, clientId)),
-    db.select({ provider: clientPayments.provider }).from(clientPayments).where(eq(clientPayments.clientId, clientId)),
-    db.select({ procCount: count() }).from(procedures).where(eq(procedures.clientId, clientId)),
-  ]);
-
+  const active = (CLIENT_TABS as readonly string[]).includes(tab ?? "") ? tab! : "agents";
+  const { sections, nav: allNav } = await clientSections(clientId, t);
   const base = `/clients/${client.id}`;
-  const used = (f: (c: (typeof agentConfigs)[number]["config"]) => boolean) => agentConfigs.filter((a) => f(a.config)).length;
-  // Все разделы клиента по группам. В меню — только настроенные (и открытый сейчас), остальные — в «Все разделы»
-  const sections: ModuleCard[] = [
-    { group: "agent", key: "tools", icon: Wrench, title: t.tools.tab, text: t.ws.mod.tools, n: toolsCount + outsCount, used: used((c) => Boolean(c.toolIds?.length)) },
-    { group: "agent", key: "forms", icon: ClipboardList, title: t.forms.tab, text: t.ws.mod.forms, n: formsCount, used: used((c) => Boolean(c.formIds?.length)) },
-    { group: "agent", key: "procedures", icon: ListChecks, title: t.procedures.tab, text: t.ws.mod.procedures, n: procCount, used: used((c) => Boolean(c.procedureIds?.length)) },
-    { group: "agent", key: "documents", icon: FileText, title: t.documents.tab, text: t.ws.mod.documents, n: docTypesCount + templatesCount, used: used((c) => Boolean(c.docTemplateIds?.length)) },
-    { group: "agent", key: "loyalty", icon: Gift, title: t.loyalty.tab, text: t.ws.mod.loyalty, n: programsCount, used: used((c) => Boolean(c.loyaltyProgramId)) },
-    { group: "agent", key: "pricing", icon: Calculator, title: t.pricing.tab, text: t.ws.mod.pricing, n: pricingRow?.tableId ? 1 : 0, used: used((c) => Boolean(c.pricing)) },
-    { group: "agent", key: "logistics", icon: Truck, title: t.logistics.tab, text: t.ws.mod.logistics, n: logistics?.base ? 1 : 0, used: used((c) => Boolean(c.logistics)) },
-    { group: "agent", key: "routing", icon: Route, title: t.routing.tab, text: t.ws.mod.routing, n: routingCount, used: 0, agentless: true },
-    { group: "sales", key: "payments", icon: CreditCard, title: t.payments.tab, text: t.ws.mod.payments, n: payRow ? 1 : 0, used: used((c) => Boolean(c.payments)) },
-    { group: "sales", key: "campaigns", icon: Megaphone, title: t.campaigns.tab, text: t.ws.mod.campaigns, n: campaignsCount, used: 0, agentless: true },
-    { group: "sales", key: "outreach", icon: Mail, title: t.outreach.tab, text: t.ws.mod.outreach, n: outreachCount, used: 0, agentless: true },
-    { group: "sales", key: "reminders", icon: BellRing, title: t.reminders.tab, text: t.ws.mod.reminders, n: remindersCount, used: 0, agentless: true },
-    { group: "sales", key: "repeat", icon: Repeat, title: t.repeat.tab, text: t.ws.mod.repeat, n: repeatRow?.tableId ? 1 : 0, used: 0, agentless: true },
-    { group: "sales", key: "content", icon: PenLine, title: t.content.tab, text: t.ws.mod.content, n: contentCount, used: 0, agentless: true },
-    { group: "ops", key: "meetings", icon: Mic, title: t.meetings.tab, text: t.ws.mod.meetings, n: meetingsCount, used: 0, agentless: true },
-    { group: "ops", key: "routines", icon: FileBarChart2, title: t.routines.tab, text: t.ws.mod.routines, n: routinesCount, used: 0, agentless: true },
-    { group: "ops", key: "monitor", icon: Activity, title: t.monitor.tab, text: t.ws.mod.monitor, n: monitorsCount, used: 0, agentless: true, badge: openIncidents },
-    { group: "people", key: "approvals", icon: ClipboardCheck, title: t.ws.mod.teamTitle, text: t.ws.mod.team, n: teamAgents ? 1 : approvalsCount, used: used((c) => Boolean(c.team?.enabled)), badge: pendingApprovals },
-    { group: "people", key: "onboarding", icon: GraduationCap, title: t.onboarding.tab, text: t.ws.mod.onboarding, n: onboardingCount, used: 0, agentless: true },
-    { group: "people", key: "hiring", icon: Users, title: t.hiring.tab, text: t.ws.mod.hiring, n: vacanciesCount, used: 0, agentless: true },
-    { group: "people", key: "learning", icon: BookOpenCheck, title: t.learning.tab, text: t.ws.mod.learning, n: coursesCount, used: used((c) => Boolean(c.learning)) },
-  ];
   const modules = sections.filter((m) => m.group === "agent");
-  const shown = (g: ModuleCard["group"]) =>
-    sections.filter((m) => m.group === g && (m.n > 0 || m.key === active || m.badge)).map((m) => ({ key: m.key, label: m.title, icon: m.icon, n: m.n || undefined, alert: m.badge }));
-  const nav: { title?: string; tone: string; items: { key: string; label: string; icon: typeof Bot; n?: number; alert?: number }[] }[] = [
-    {
-      tone: "bg-accent/10 text-accent",
-      items: [
-        { key: "agents", label: t.ws.overview, icon: LayoutDashboard, n: agentsCount },
-        { key: "modules", label: t.ws.catalog, icon: Blocks, n: sections.filter((m) => m.n > 0).length },
-        { key: "map", label: t.help.mapTab, icon: Network },
-      ],
-    },
-    {
-      title: t.ws.knowledge,
-      tone: "bg-sky-500/10 text-sky-600 dark:text-sky-300",
-      items: [
-        { key: "kb", label: t.kb.tab, icon: BookOpen, n: kbCount },
-        { key: "data", label: t.data.tab, icon: Table2, n: tablesCount },
-      ],
-    },
-    { title: t.ws.groups.agent, tone: "bg-violet-500/10 text-violet-600 dark:text-violet-300", items: shown("agent") },
-    { title: t.ws.groups.sales, tone: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-300", items: shown("sales") },
-    { title: t.ws.groups.ops, tone: "bg-orange-500/10 text-orange-600 dark:text-orange-300", items: shown("ops") },
-    { title: t.ws.groups.people, tone: "bg-pink-500/10 text-pink-600 dark:text-pink-300", items: shown("people") },
-  ].filter((g) => g.items.length);
+  const nav = visibleNav(allNav, active);
+  const summary = (await dashboardData([client.id])).clients.find((c) => c.id === client.id);
 
   return (
     <div className="mx-auto max-w-7xl">
       <BackLink href="/clients" label={t.nav.clients} />
-      <PageHeader
-        icon={<ClientAvatar id={client.id} v={(await logoVersions()).get(client.id)} name={client.name} color={client.color} size={40} />}
-        title={client.name}
-        subtitle={[client.industry, client.website].filter(Boolean).join(" · ") || undefined}
-        actions={
-          <>
+      {/* Шапка клиента: логотип, полоса цвета клиента, цифры за 7 дней и главные действия */}
+      <section className="relative mb-6 overflow-hidden rounded-2xl border border-border bg-metal">
+        <span className="absolute inset-x-0 top-0 h-1" style={{ background: client.color }} />
+        <div className="flex flex-wrap items-center gap-x-8 gap-y-4 px-5 pt-6 pb-4">
+          <div className="flex min-w-0 flex-1 basis-72 items-center gap-4">
+            <ClientAvatar id={client.id} v={(await logoVersions()).get(client.id)} name={client.name} color={client.color} size={56} />
+            <div className="min-w-0">
+              <h1 className="truncate text-2xl font-bold tracking-tight">{client.name}</h1>
+              <p className="mt-0.5 truncate text-sm text-muted">
+                {client.industry || "—"}
+                {client.website && (
+                  <>
+                    {" · "}
+                    <a href={/^https?:\/\//i.test(client.website) ? client.website : `https://${client.website}`} target="_blank" rel="noopener noreferrer" className="hover:text-accent hover:underline">
+                      {client.website.replace(/^https?:\/\//i, "").replace(/\/$/, "")}
+                    </a>
+                  </>
+                )}
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
             {/* Отчёт владельцу бизнеса за прошлый месяц — открыть, распечатать в PDF, переслать */}
             <a href={`/api/reports/${client.id}?month=${previousMonth()}`} target="_blank" rel="noopener" className={buttonClass("secondary")} title={t.client.reportHint}>
               <BarChart3 className="size-4" />
-              {t.client.report}
+              <span className="max-sm:sr-only">{t.client.report}</span>
             </a>
-            <Link href={`/clients/${client.id}/edit`} className={buttonClass("secondary")}>
+            <Link href={`/clients/${client.id}/edit`} className={buttonClass("secondary")} title={t.client.settings}>
               <Settings className="size-4" />
-              {t.client.settings}
+              <span className="max-sm:sr-only">{t.client.settings}</span>
             </Link>
             <Link href={`/clients/${client.id}/agents/new`} className={buttonClass()}>
               <Plus className="size-4" />
               {t.client.newAgent}
             </Link>
-          </>
-        }
-      />
+          </div>
+        </div>
+        <dl className="grid grid-cols-2 border-t border-border/80 sm:grid-cols-4 [&>div]:px-5 [&>div]:py-3 sm:[&>div+div]:border-l sm:[&>div+div]:border-border/80">
+          <HeroStat label={t.client.agents} value={summary?.agents.length ?? 0} />
+          <HeroStat label={t.agentHeader.conversations} value={summary?.conversations ?? 0} />
+          <HeroStat label={t.agentHeader.waiting} value={summary?.waiting ?? 0} tone={summary?.waiting ? "danger" : undefined} href={summary?.waiting ? `/inbox?client=${client.id}&f=attention` : undefined} />
+          <HeroStat label={t.shell.spendWeek} value={`$${(summary?.cost ?? 0).toFixed(2)}`} />
+        </dl>
+      </section>
 
-      <div className="grid gap-6 md:grid-cols-[200px_minmax(0,1fr)] md:gap-8">
+      <div className="ctx-grid grid gap-6 md:grid-cols-[200px_minmax(0,1fr)] md:gap-8">
         {/* Разделы клиента: на компьютере — колонка слева, на телефоне — строка с прокруткой */}
-        <nav className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1 [scrollbar-width:none] md:sticky md:top-6 md:mx-0 md:flex-col md:gap-4 md:self-start md:overflow-visible md:p-0">
+        <nav className="ctx-inline -mx-1 flex gap-1 overflow-x-auto px-1 pb-1 [scrollbar-width:none] md:sticky md:top-6 md:mx-0 md:flex-col md:gap-4 md:self-start md:overflow-visible md:p-0">
           {nav.map((g, i) => (
             <div key={i} className="flex shrink-0 gap-1 md:flex-col md:gap-0.5">
               {g.title && <div className="hidden px-2.5 pb-1 text-[11px] font-medium tracking-wide text-muted uppercase md:block">{g.title}</div>}
-              {g.items.map(({ key, label, icon: Icon, n, alert }) => (
+              {g.items.map(({ key, label, icon, n, alert }) => {
+                const Icon = NAV_ICONS[icon];
+                return (
                 <Link
                   key={key}
                   href={key === "agents" ? base : `${base}?tab=${key}`}
@@ -198,7 +145,8 @@ export default async function ClientPage({
                     <span className="text-xs text-muted">{n}</span>
                   ) : null}
                 </Link>
-              ))}
+                );
+              })}
             </div>
           ))}
         </nav>
@@ -262,8 +210,25 @@ export default async function ClientPage({
   );
 }
 
-type ModuleCard = { group: "agent" | "sales" | "ops" | "people"; key: string; icon: typeof Bot; title: string; text: string; n: number; used: number; badge?: number; agentless?: boolean };
 const GROUPS = ["agent", "sales", "ops", "people"] as const;
+
+/** Цифра в шапке клиента: крупное число и подпись; с тревогой — красным и ссылкой. */
+function HeroStat({ label, value, tone, href }: { label: string; value: number | string; tone?: "danger"; href?: string }) {
+  return (
+    <div className="flex flex-col-reverse">
+      <dt className="text-xs text-muted">{label}</dt>
+      <dd className={cx("font-display text-xl font-bold tabular-nums", tone === "danger" && "text-danger")}>
+        {href ? (
+          <Link href={href} className="hover:underline">
+            {value}
+          </Link>
+        ) : (
+          value
+        )}
+      </dd>
+    </div>
+  );
+}
 
 /** Все разделы клиента по группам: что настроено, что можно подключить; с чего начать. */
 function ModulesCatalog({ base, modules, t }: { base: string; modules: ModuleCard[]; t: Dict }) {
@@ -280,7 +245,7 @@ function ModulesCatalog({ base, modules, t }: { base: string; modules: ModuleCar
             <h3 className="text-sm font-semibold">{t.ws.groups[g]}</h3>
             <p className="text-xs text-muted">{t.ws.groupHints[g]}</p>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,16rem),1fr))] gap-3">
             {modules
               .filter((m) => m.group === g)
               .map((m) => (
@@ -295,12 +260,13 @@ function ModulesCatalog({ base, modules, t }: { base: string; modules: ModuleCar
 
 function ModuleTile({ base, m, t, compact }: { base: string; m: ModuleCard; t: Dict; compact?: boolean }) {
   const on = m.n > 0;
+  const Icon = NAV_ICONS[m.icon];
   return (
     <Link href={`${base}?tab=${m.key}`} replace className="group">
       <Card className={cx("flex h-full flex-col gap-2 transition group-hover:border-accent/50", compact ? "p-3.5" : "p-4", !on && "border-dashed bg-surface/60")}>
         <div className="flex items-center gap-2.5">
           <span className={cx("grid size-8 shrink-0 place-items-center rounded-lg", on ? "bg-accent-soft text-accent" : "bg-surface-2 text-muted")}>
-            <m.icon className="size-4" />
+            <Icon className="size-4" />
           </span>
           <span className="min-w-0 flex-1 text-sm leading-tight font-medium">{m.title}</span>
           {m.badge ? <Badge tone="warning">{m.badge}</Badge> : null}
@@ -1112,7 +1078,7 @@ async function AgentsTab({ clientId, t, locale, base, modules }: { clientId: str
   return (
     <>
     <h2 className="mb-3 text-base font-semibold">{t.client.agents}</h2>
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,16rem),1fr))] gap-3">
       {list.map((a) => (
         <Link key={a.id} href={`/agents/${a.id}`} className="group">
           <Card className="flex h-full flex-col gap-3 p-4 transition group-hover:border-accent/50">
@@ -1145,7 +1111,7 @@ async function AgentsTab({ clientId, t, locale, base, modules }: { clientId: str
         {t.ws.catalog}
       </Link>
     </div>
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,12rem),1fr))] gap-3">
       {modules.map((m) => (
         <ModuleTile key={m.key} base={base} m={m} t={t} compact />
       ))}

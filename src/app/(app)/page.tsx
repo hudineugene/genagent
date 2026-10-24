@@ -42,7 +42,7 @@ export default async function TodayPage() {
     <div className="mx-auto max-w-6xl space-y-8">
       <header>
         <p className="text-sm font-medium text-muted first-letter:uppercase">{date}</p>
-        <h1 className="mt-1 text-3xl font-semibold tracking-tight">{t.home.title}</h1>
+        <h1 className="mt-1 text-3xl font-bold tracking-tight">{t.home.title}</h1>
       </header>
 
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">

@@ -7,8 +7,8 @@ const inter = Inter({ subsets: ["latin", "cyrillic"], variable: "--font-inter" }
 const montserrat = Montserrat({ subsets: ["latin", "cyrillic"], weight: ["600", "700", "800"], variable: "--font-montserrat" });
 
 // Тема до первой отрисовки (без мигания): выбор из localStorage («light» / «dark»), иначе — как в системе.
-// Переключатель в меню меняет localStorage и data-theme; системную смену ловим здесь же.
-const THEME_SCRIPT = `(function(){try{var d=document.documentElement,m=matchMedia('(prefers-color-scheme: dark)');function a(){var t=localStorage.getItem('theme');d.dataset.theme=t==='light'||t==='dark'?t:(m.matches?'dark':'light')}a();m.addEventListener('change',a);window.__applyTheme=a}catch(e){}})()`;
+// Переключатель в меню меняет localStorage и data-theme; системную смену ловим здесь же. Здесь же — плотность таблиц.
+const THEME_SCRIPT = `(function(){try{var d=document.documentElement,m=matchMedia('(prefers-color-scheme: dark)');function a(){var t=localStorage.getItem('theme');d.dataset.theme=t==='light'||t==='dark'?t:(m.matches?'dark':'light')}a();m.addEventListener('change',a);window.__applyTheme=a;if(localStorage.getItem('density')==='compact')d.dataset.density='compact'}catch(e){}})()`;
 
 export const metadata: Metadata = {
   title: "GenAgent — студия ИИ-агентов",

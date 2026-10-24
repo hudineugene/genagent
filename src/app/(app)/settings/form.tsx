@@ -6,6 +6,7 @@ import { saveGeneralAction } from "@/app/actions/general";
 import type { General } from "@/lib/general";
 import { useI18n } from "@/lib/i18n/client";
 import { Button, Card, Field, Input, Select, Switch } from "@/components/ui";
+import { toast } from "@/components/toast";
 
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
 const num = (v: string) => (v.trim() === "" ? null : Math.max(0, Number(v)));
@@ -30,7 +31,11 @@ export function GeneralForm({ initial, spent, models, timeZones }: { initial: Ge
       className="space-y-5"
       onSubmit={(e) => {
         e.preventDefault();
-        start(async () => setStatus((await saveGeneralAction(v)).ok ? "saved" : "error"));
+        start(async () => {
+          const ok = (await saveGeneralAction(v)).ok;
+          setStatus(ok ? "saved" : "error");
+          toast(ok ? g.saved : g.error, ok ? "success" : "error");
+        });
       }}
     >
       <Section icon={<Clock className="size-4" />} title={g.studio}>

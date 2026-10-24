@@ -5,6 +5,7 @@ import { ImageUp, Trash2 } from "lucide-react";
 import { removeClientLogo, uploadClientLogo } from "@/app/actions/clients";
 import { useI18n } from "@/lib/i18n/client";
 import { Button, Card } from "@/components/ui";
+import { toast } from "@/components/toast";
 
 /** Логотип клиента: загрузить свой (PNG, JPEG, WEBP до 1 МБ) или оставить значок с сайта клиента. */
 export function ClientLogo({ clientId, hasCustom, version }: { clientId: string; hasCustom: boolean; version: number }) {
@@ -46,6 +47,7 @@ export function ClientLogo({ clientId, hasCustom, version }: { clientId: string;
           start(async () => {
             const r = await uploadClientLogo(clientId, fd);
             setError(r.error ? errText(r.error) : null);
+            toast(r.error ? errText(r.error) : uk ? "Логотип завантажено" : "Логотип загружен", r.error ? "error" : "success");
             setV((x) => x + 1);
           });
           e.target.value = "";

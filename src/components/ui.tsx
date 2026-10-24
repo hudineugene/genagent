@@ -123,7 +123,7 @@ export function PageHeader({
       <div className="flex min-w-0 items-center gap-4">
         {icon}
         <div className="min-w-0">
-          <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
           {subtitle && <p className="mt-1 text-sm text-muted">{subtitle}</p>}
         </div>
       </div>

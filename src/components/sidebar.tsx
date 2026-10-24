@@ -8,6 +8,7 @@ import {
   useState,
   useSyncExternalStore,
   useTransition,
+  type ReactNode,
 } from "react";
 import {
   BarChart3,
@@ -20,7 +21,11 @@ import {
   Monitor,
   MoreHorizontal,
   Moon,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plug,
+  Rows3,
+  Rows4,
   SlidersHorizontal,
   Search,
   Sun,
@@ -38,6 +43,7 @@ import {
 } from "./command-palette";
 import { cx } from "./ui";
 import { BrandMark } from "./brand";
+import { useShell } from "./shell/frame";
 
 type NavItem = PalettePage & { active: boolean; badge?: number };
 
@@ -45,179 +51,100 @@ export function Sidebar({
   userName,
   isAdmin,
   inboxBadge,
-  studioName,
 }: {
   userName: string;
   isAdmin: boolean;
   inboxBadge: number;
-  studioName?: string;
 }) {
   const { t } = useI18n();
   const pathname = usePathname();
+  const { panel, togglePanel } = useShell();
   const work: NavItem[] = [
     { href: "/", label: t.nav.today, icon: House, active: pathname === "/" },
-    {
-      href: "/inbox",
-      label: t.nav.inbox,
-      icon: MessagesSquare,
-      active: pathname.startsWith("/inbox"),
-      badge: inboxBadge,
-    },
-    {
-      href: "/clients",
-      label: t.nav.clients,
-      icon: Building2,
-      active: pathname.startsWith("/clients") || pathname.startsWith("/agents"),
-    },
-    {
-      href: "/analytics",
-      label: t.nav.analytics,
-      icon: BarChart3,
-      active: pathname.startsWith("/analytics"),
-    },
-    {
-      href: "/templates",
-      label: t.nav.templates,
-      icon: LayoutTemplate,
-      active: pathname.startsWith("/templates"),
-    },
+    { href: "/inbox", label: t.nav.inbox, icon: MessagesSquare, active: pathname.startsWith("/inbox"), badge: inboxBadge },
+    { href: "/clients", label: t.nav.clients, icon: Building2, active: pathname.startsWith("/clients") || pathname.startsWith("/agents") },
+    { href: "/analytics", label: t.nav.analytics, icon: BarChart3, active: pathname.startsWith("/analytics") },
+    { href: "/templates", label: t.nav.templates, icon: LayoutTemplate, active: pathname.startsWith("/templates") },
   ];
   const settings: NavItem[] = isAdmin
     ? [
-        {
-          href: "/team",
-          label: t.nav.team,
-          icon: Users,
-          active: pathname.startsWith("/team"),
-        },
-        {
-          href: "/billing",
-          label: t.nav.billing,
-          icon: Wallet,
-          active: pathname.startsWith("/billing"),
-        },
-        {
-          href: "/integrations",
-          label: t.nav.integrations,
-          icon: Plug,
-          active: pathname.startsWith("/integrations"),
-        },
-        {
-          href: "/settings",
-          label: t.nav.settings,
-          icon: SlidersHorizontal,
-          active: pathname.startsWith("/settings"),
-        },
+        { href: "/team", label: t.nav.team, icon: Users, active: pathname.startsWith("/team") },
+        { href: "/billing", label: t.nav.billing, icon: Wallet, active: pathname.startsWith("/billing") },
+        { href: "/integrations", label: t.nav.integrations, icon: Plug, active: pathname.startsWith("/integrations") },
+        { href: "/settings", label: t.nav.settings, icon: SlidersHorizontal, active: pathname.startsWith("/settings") },
       ]
     : [];
-  const help: NavItem[] = [
-    {
-      href: "/help",
-      label: t.nav.help,
-      icon: CircleHelp,
-      active: pathname.startsWith("/help"),
-    },
-  ];
+  const help: NavItem[] = [{ href: "/help", label: t.nav.help, icon: CircleHelp, active: pathname.startsWith("/help") }];
   const openSearch = () => window.dispatchEvent(new Event(OPEN_PALETTE));
+  const initial = userName.trim().charAt(0).toUpperCase() || "?";
 
   return (
     <>
-      <aside className="z-30 flex shrink-0 items-center gap-2 border-b border-border bg-surface/90 px-3 py-2.5 backdrop-blur md:sticky md:top-0 md:h-dvh md:w-60 md:flex-col md:items-stretch md:gap-1 md:border-r md:border-b-0 md:bg-surface md:px-3 md:py-4">
-        <CommandPalette
-          pages={[
-            ...work,
-            ...settings,
-            ...help,
-            { href: "/profile", label: t.nav.profile, icon: UserRound },
-          ]}
-        />
+      {/* Телефон — строка сверху (знак, поиск, профиль); компьютер — узкая рельса со значками разделов */}
+      <aside className="z-30 flex shrink-0 items-center gap-2 border-b border-border bg-surface/90 px-3 py-2.5 backdrop-blur md:sticky md:top-0 md:h-dvh md:w-[68px] md:flex-col md:gap-1 md:border-r md:border-b-0 md:bg-surface md:px-2.5 md:py-3 md:backdrop-blur-none">
+        <CommandPalette pages={[...work, ...settings, ...help, { href: "/profile", label: t.nav.profile, icon: UserRound }]} />
 
-        <Link
-          href="/"
-          className="flex min-w-0 shrink items-center gap-2.5 md:mb-4 md:px-2"
-        >
-          <BrandMark size={32} />
-          <span className="truncate font-display font-bold tracking-tight">
-            {studioName || t.app.name}
-          </span>
+        <Link href="/" title={t.app.name} className="flex min-w-0 shrink items-center gap-2.5 md:mb-3">
+          <BrandMark size={36} />
+          <span className="truncate font-display font-bold tracking-tight md:hidden">{t.app.name}</span>
         </Link>
 
-        {/* Поиск: на телефоне — иконка, на компьютере — поле с подсказкой Ctrl K */}
-        <button
-          type="button"
-          onClick={openSearch}
-          title={`${t.nav.search} (Ctrl K)`}
-          className="order-last ml-auto grid size-9 shrink-0 place-items-center rounded-xl text-muted hover:bg-surface-2 hover:text-text md:order-none md:mb-3 md:ml-0 md:flex md:h-9 md:w-full md:items-center md:gap-2.5 md:border md:border-border md:bg-surface-2/60 md:px-3 md:text-sm"
-        >
+        <button type="button" onClick={openSearch} aria-label={t.nav.search} className="order-last ml-auto grid size-9 shrink-0 place-items-center rounded-xl text-muted hover:bg-surface-2 hover:text-text md:hidden">
           <Search className="size-4" />
-          <span className="hidden flex-1 text-left md:inline">
-            {t.nav.search}
-          </span>
-          <kbd className="hidden rounded-md border border-border bg-surface px-1.5 text-[11px] font-medium md:inline">
-            Ctrl K
-          </kbd>
         </button>
 
-        {/* Компьютер: меню слева, значки окрашены по группам */}
-        <nav className="hidden min-w-0 flex-1 flex-col items-stretch gap-2 md:flex [&>div+div]:border-t [&>div+div]:border-border [&>div+div]:pt-2">
-          <NavGroup items={work} tone="work" />
-          {settings.length > 0 && <NavGroup items={settings} tone="settings" />}
-          <NavGroup items={help} tone="help" />
+        <nav aria-label={t.nav.groupWork} className="hidden flex-1 flex-col items-center gap-2 md:flex [&>div+div]:border-t [&>div+div]:border-border [&>div+div]:pt-2">
+          <RailGroup items={work} tone="work" />
+          {settings.length > 0 && <RailGroup items={settings} tone="settings" />}
+          <RailGroup items={help} tone="help" />
         </nav>
         <span className="flex-1 md:hidden" />
 
         {/* Телефон: профиль (там же язык и выход) — аватаром в конце строки */}
-        <Link
-          href="/profile"
-          title={t.nav.profile}
-          className="order-last grid size-8 shrink-0 place-items-center rounded-full bg-accent-soft text-sm font-semibold text-accent md:hidden"
-        >
-          {userName.trim().charAt(0).toUpperCase() || "?"}
+        <Link href="/profile" title={t.nav.profile} className="order-last grid size-8 shrink-0 place-items-center rounded-full bg-accent-soft text-sm font-semibold text-accent md:hidden">
+          {initial}
         </Link>
 
-        {/* Компьютер: внизу — профиль; язык, тема и выход — в меню «⋯» */}
-        <div className="relative hidden items-center gap-1 md:flex md:border-t md:border-border md:pt-3">
-          <Link
-            href="/profile"
-            className={cx(
-              "flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-2 py-1.5 transition hover:bg-surface-2",
-              pathname.startsWith("/profile") && "bg-surface-2",
-            )}
-            title={t.nav.profile}
+        {/* Компьютер: свернуть или показать панель, профиль с меню (язык, тема, плотность, выход) */}
+        <div className="hidden flex-col items-center gap-1.5 md:flex">
+          <button
+            type="button"
+            onClick={togglePanel}
+            aria-label={panel ? t.shell.collapse : t.shell.expand}
+            aria-pressed={panel}
+            className="group/rail relative hidden size-10 place-items-center rounded-xl text-muted transition hover:bg-surface-2 hover:text-text lg:grid"
           >
-            <span className="grid size-8 shrink-0 place-items-center rounded-full bg-accent-soft text-sm font-semibold text-accent">
-              {userName.trim().charAt(0).toUpperCase() || "?"}
-            </span>
-            <span className="truncate text-sm font-medium">{userName}</span>
-          </Link>
-          <ProfileMenu />
+            {panel ? <PanelLeftClose className="size-[18px]" /> : <PanelLeftOpen className="size-[18px]" />}
+            <RailTip>{panel ? t.shell.collapse : t.shell.expand}</RailTip>
+          </button>
+          <ProfileMenu userName={userName} initial={initial} active={pathname.startsWith("/profile")} />
         </div>
       </aside>
       {/* Телефон: нижняя панель — главные разделы и «Ещё» со всеми остальными (вне aside: у него размытие фона,
         которое сделало бы fixed относительным самому меню) */}
-      <MobileTabs
-        main={work.slice(0, 3)}
-        more={[...work.slice(3), ...settings, ...help]}
-        moreLabel={t.nav.more}
-      />
+      <MobileTabs main={work.slice(0, 3)} more={[...work.slice(3), ...settings, ...help]} moreLabel={t.nav.more} />
     </>
   );
 }
 
-/** Меню «⋯» у профиля: язык, тема, выход. Закрывается кликом мимо и Esc. */
-function ProfileMenu() {
+/** Подпись значка рельсы справа от него — при наведении и при переходе с клавиатуры. */
+function RailTip({ children }: { children: ReactNode }) {
+  return (
+    <span className="pointer-events-none absolute top-1/2 left-full z-50 ml-3 -translate-x-1 -translate-y-1/2 rounded-lg bg-text px-2.5 py-1 text-xs font-medium whitespace-nowrap text-bg opacity-0 shadow-lg transition group-hover/rail:translate-x-0 group-hover/rail:opacity-100 group-focus-visible/rail:translate-x-0 group-focus-visible/rail:opacity-100">
+      {children}
+    </span>
+  );
+}
+
+/** Меню профиля в рельсе: имя, «Мой профиль», язык, тема, плотность таблиц, выход. Закрывается кликом мимо и Esc. */
+function ProfileMenu({ userName, initial, active }: { userName: string; initial: string; active: boolean }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
     const close = (e: MouseEvent | KeyboardEvent) => {
-      if (
-        e instanceof KeyboardEvent
-          ? e.key === "Escape"
-          : !ref.current?.contains(e.target as Node)
-      )
-        setOpen(false);
+      if (e instanceof KeyboardEvent ? e.key === "Escape" : !ref.current?.contains(e.target as Node)) setOpen(false);
     };
     document.addEventListener("mousedown", close);
     document.addEventListener("keydown", close);
@@ -227,28 +154,40 @@ function ProfileMenu() {
     };
   }, [open]);
   return (
-    <div ref={ref}>
+    <div ref={ref} className="relative">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        title={t.nav.groupSettings}
+        aria-label={t.shell.profileMenu}
         className={cx(
-          "grid size-9 place-items-center rounded-xl text-muted transition hover:bg-surface-2 hover:text-text",
-          open && "bg-surface-2 text-text",
+          "group/rail relative grid size-10 place-items-center rounded-full bg-accent-soft text-sm font-semibold text-accent ring-2 ring-transparent transition hover:ring-accent/30",
+          (open || active) && "ring-accent/40",
         )}
       >
-        <MoreHorizontal className="size-4" />
+        {initial}
+        {!open && <RailTip>{userName}</RailTip>}
       </button>
       {open && (
-        <div className="absolute right-0 bottom-full left-0 mb-2 space-y-3 rounded-2xl border border-border bg-surface p-3 shadow-xl">
-          <div className="flex items-center justify-between gap-2">
+        <div className="animate-pop-in absolute bottom-0 left-full z-50 ml-3 w-64 space-y-3 rounded-2xl border border-border bg-surface p-3 shadow-2xl shadow-black/15">
+          <Link href="/profile" onClick={() => setOpen(false)} className="flex items-center gap-2.5 rounded-xl px-1.5 py-1.5 transition hover:bg-surface-2">
+            <span className="grid size-8 shrink-0 place-items-center rounded-full bg-accent-soft text-sm font-semibold text-accent">{initial}</span>
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-medium">{userName}</span>
+              <span className="block text-xs text-muted">{t.nav.profile}</span>
+            </span>
+          </Link>
+          <div className="flex items-center justify-between gap-2 border-t border-border pt-3">
             <span className="text-xs text-muted">{t.nav.language}</span>
             <LocaleSwitch />
           </div>
           <div className="flex items-center justify-between gap-2">
             <span className="text-xs text-muted">{t.nav.theme}</span>
             <ThemeSwitch />
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs text-muted">{t.shell.density}</span>
+            <DensitySwitch />
           </div>
           <form action={logout} className="border-t border-border pt-2">
             <button className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-muted transition hover:bg-surface-2 hover:text-danger">
@@ -264,52 +203,88 @@ function ProfileMenu() {
 
 /** Цвет значков группы меню: работа — сталь (акцент), настройки — фиолетовый, помощь — янтарный. */
 const TONES = {
-  work: "bg-accent/10 text-accent",
-  settings: "bg-violet-500/10 text-violet-600 dark:text-violet-300",
-  help: "bg-amber-500/12 text-amber-600 dark:text-amber-300",
+  work: "text-accent",
+  settings: "text-violet-600 dark:text-violet-300",
+  help: "text-amber-600 dark:text-amber-300",
+} as const;
+const ACTIVE_BG = {
+  work: "bg-accent/12",
+  settings: "bg-violet-500/12",
+  help: "bg-amber-500/14",
 } as const;
 
-function NavGroup({
-  items,
-  tone,
-}: {
-  items: NavItem[];
-  tone: keyof typeof TONES;
-}) {
+/** Группа значков рельсы: активный раздел — плашка цвета группы и полоска слева, подпись — при наведении. */
+function RailGroup({ items, tone }: { items: NavItem[]; tone: keyof typeof TONES }) {
   return (
-    <div className="flex gap-0.5 md:flex-col">
+    <div className="flex flex-col items-center gap-1">
       {items.map(({ href, label, icon: Icon, active, badge }) => (
         <Link
           key={href}
           href={href}
-          title={label}
+          aria-label={label}
+          aria-current={active ? "page" : undefined}
           className={cx(
-            "relative flex shrink-0 items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm font-medium transition",
-            active
-              ? "bg-surface-2 text-text shadow-[inset_0_0_0_1px_var(--border)]"
-              : "text-muted hover:bg-surface-2 hover:text-text",
+            "group/rail relative grid size-10 place-items-center rounded-xl transition active:scale-95",
+            active ? cx(ACTIVE_BG[tone], TONES[tone]) : "text-muted hover:bg-surface-2 hover:text-text",
           )}
         >
-          <span
-            className={cx(
-              "relative grid size-6 place-items-center rounded-md transition",
-              active ? TONES[tone] : cx("opacity-80", TONES[tone]),
-            )}
-          >
-            <Icon className="size-3.5" />
-            {badge ? (
-              <span className="absolute -top-1.5 -right-2 rounded-full bg-danger px-1 text-[10px] leading-4 font-semibold text-white md:hidden">
-                {badge}
-              </span>
-            ) : null}
-          </span>
-          <span className="hidden md:inline">{label}</span>
-          {badge ? (
-            <span className="ml-auto hidden min-w-5 rounded-full bg-danger px-1.5 text-center text-xs leading-5 font-semibold text-white md:inline">
-              {badge}
-            </span>
-          ) : null}
+          {active && <span className="absolute top-2 bottom-2 -left-2.5 w-[3px] rounded-r-full bg-current" />}
+          <Icon className="size-[18px]" />
+          {badge ? <span className="absolute -top-0.5 -right-0.5 min-w-4 rounded-full bg-danger px-1 text-center text-[10px] leading-4 font-semibold text-white ring-2 ring-surface">{badge > 99 ? "99+" : badge}</span> : null}
+          <RailTip>{label}</RailTip>
         </Link>
+      ))}
+    </div>
+  );
+}
+
+type Density = "comfort" | "compact";
+const DENSITY_EVENT = "genagent:density";
+
+function readDensity(): Density {
+  try {
+    return localStorage.getItem("density") === "compact" ? "compact" : "comfort";
+  } catch {
+    return "comfort";
+  }
+}
+
+function subscribeDensity(onChange: () => void) {
+  window.addEventListener(DENSITY_EVENT, onChange);
+  return () => window.removeEventListener(DENSITY_EVENT, onChange);
+}
+
+function setDensity(next: Density) {
+  try {
+    if (next === "compact") localStorage.setItem("density", "compact");
+    else localStorage.removeItem("density");
+  } catch {}
+  document.documentElement.dataset.density = next;
+  window.dispatchEvent(new Event(DENSITY_EVENT));
+}
+
+/** Плотность таблиц и списков: «просторно» или «компактно» — хранится в браузере, применяется атрибутом на <html>. */
+export function DensitySwitch() {
+  const { t } = useI18n();
+  const density = useSyncExternalStore(subscribeDensity, readDensity, () => "comfort" as Density);
+  const options: { value: Density; label: string; icon: typeof Rows3 }[] = [
+    { value: "comfort", label: t.shell.densityComfort, icon: Rows3 },
+    { value: "compact", label: t.shell.densityCompact, icon: Rows4 },
+  ];
+  return (
+    <div className="inline-flex rounded-xl bg-surface-2 p-1" role="group" aria-label={t.shell.density}>
+      {options.map(({ value, label, icon: Icon }) => (
+        <button
+          key={value}
+          type="button"
+          title={label}
+          aria-label={label}
+          aria-pressed={density === value}
+          onClick={() => setDensity(value)}
+          className={cx("grid size-6 place-items-center rounded-lg transition", density === value ? "bg-surface text-text shadow-sm" : "text-muted hover:text-text")}
+        >
+          <Icon className="size-3.5" />
+        </button>
       ))}
     </div>
   );
@@ -399,6 +374,7 @@ export function ThemeSwitch() {
           key={value}
           type="button"
           title={label}
+          aria-label={label}
           aria-pressed={theme === value}
           onClick={() => pick(value)}
           className={cx(

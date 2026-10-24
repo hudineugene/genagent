@@ -1,6 +1,7 @@
 import Image from "next/image";
 import mark from "@/assets/brand/genagent-mark.png";
 import logo from "@/assets/brand/genagent-logo.png";
+import logoDark from "@/assets/brand/genagent-logo-dark.png";
 import { cx } from "./ui";
 
 /*
@@ -17,7 +18,19 @@ export function BrandMark({ size = 32, className }: { size?: number; className?:
   );
 }
 
-/** Полный логотип «G | GenAgent · AI AGENTS PLATFORM»; в тёмной теме — светлый. */
-export function BrandLogo({ width = 220, className }: { width?: number; className?: string }) {
-  return <Image src={logo} alt="GenAgent — AI agents platform" width={width} height={Math.round((width * logo.height) / logo.width)} unoptimized priority className={cx("dark:invert", className)} />;
+/**
+ * Полный логотип «G | GenAgent · AI AGENTS PLATFORM»: в тёмной теме — свой вариант со светлой надписью и свечением.
+ * dark — всегда тёмный вариант (для тёмного фона независимо от темы).
+ */
+export function BrandLogo({ width = 220, dark, className }: { width?: number; dark?: boolean; className?: string }) {
+  const darkImg = (cls: string) => (
+    <Image src={logoDark} alt="GenAgent — AI agents platform" width={width} height={Math.round((width * logoDark.height) / logoDark.width)} unoptimized priority className={cx(cls, className)} />
+  );
+  if (dark) return darkImg("");
+  return (
+    <>
+      <Image src={logo} alt="GenAgent — AI agents platform" width={width} height={Math.round((width * logo.height) / logo.width)} unoptimized priority className={cx("dark:hidden", className)} />
+      {darkImg("hidden dark:block")}
+    </>
+  );
 }

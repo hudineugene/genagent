@@ -20,7 +20,7 @@ export function AgentTabs({ agentId, channels, gaps, proposals }: { agentId: str
     { href: `${base}/review`, label: t.review.tab, icon: Sparkles, n: proposals || null, tone: "accent" },
   ] as const;
   return (
-    <nav className="-mb-px flex gap-1 overflow-x-auto [scrollbar-width:none]">
+    <nav className="ctx-inline -mb-px flex gap-1 overflow-x-auto [scrollbar-width:none]">
       {tabs.map(({ href, label, icon: Icon, n, tone }) => {
         const active = href === base ? pathname === base : pathname.startsWith(href);
         return (

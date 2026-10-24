@@ -147,7 +147,7 @@ export default async function InboxPage({
     <div className="mx-auto flex max-w-[1500px] flex-col md:h-[calc(100dvh-5rem)]">
       <InboxPoller />
       <div className={cx("mb-4 flex-wrap items-center gap-x-6 gap-y-3", thread ? "hidden md:flex" : "flex")}>
-        <h1 className="text-2xl font-semibold tracking-tight">{t.inbox.title}</h1>
+        <h1 className="text-2xl font-bold tracking-tight">{t.inbox.title}</h1>
         <InboxToolbar clients={clientList} />
       </div>
 

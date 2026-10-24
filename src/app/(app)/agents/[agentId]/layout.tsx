@@ -49,19 +49,20 @@ export default async function AgentLayout({ children, params }: { children: Reac
 
   return (
     <div className="mx-auto max-w-[1400px]">
-      <header className="mb-6 border-b border-border">
-        <nav className="mb-3 flex items-center gap-1 text-sm text-muted">
+      <header className="mb-6 border-b border-border lg:[[data-panel=on]_&]:border-b-0">
+        <nav className="mb-3 flex items-center gap-1 text-sm text-muted md:hidden">
           <Link href={`/clients/${row.clientId}`} className="flex min-w-0 items-center gap-1.5 hover:text-text">
             <span className="size-2 shrink-0 rounded-full" style={{ background: row.clientColor }} />
             <span className="truncate">{row.clientName}</span>
           </Link>
         </nav>
-        <div className="mb-4 flex flex-wrap items-center gap-x-6 gap-y-3">
+        <div className="relative mb-4 flex flex-wrap items-center gap-x-6 gap-y-3 overflow-hidden rounded-2xl border border-border bg-metal px-5 pt-5 pb-4">
+          <span className="absolute inset-x-0 top-0 h-1" style={{ background: row.clientColor }} />
           <div className="flex min-w-0 items-center gap-3.5">
-            <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-surface-2 text-2xl">{config.icon || "🤖"}</span>
+            <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-surface text-2xl shadow-sm ring-1 ring-border">{config.icon || "🤖"}</span>
             <div className="min-w-0">
               <div className="flex items-center gap-2.5">
-                <h1 className="truncate text-xl font-semibold tracking-tight">{agent.name}</h1>
+                <h1 className="truncate text-xl font-bold tracking-tight">{agent.name}</h1>
                 <span
                   className={cx(
                     "inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium",

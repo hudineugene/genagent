@@ -9,11 +9,9 @@ export const instant = false;
 
 export default function LoginPage() {
   return (
-    <div className="grid min-h-dvh place-items-center px-4">
-      <Suspense>
-        <Login />
-      </Suspense>
-    </div>
+    <Suspense>
+      <Login />
+    </Suspense>
   );
 }
 
