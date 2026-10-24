@@ -151,6 +151,22 @@ export async function readLimited(res: Response, limit = MAX_BODY_BYTES) {
   return new TextDecoder().decode(Buffer.concat(chunks).subarray(0, limit));
 }
 
+/** Тело ответа байтами, не больше limit (картинки и другие двоичные данные). */
+export async function readBytes(res: Response, limit = MAX_BODY_BYTES): Promise<Buffer> {
+  if (!res.body) return Buffer.alloc(0);
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  while (size < limit) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    size += value.length;
+  }
+  await reader.cancel().catch(() => {});
+  return Buffer.concat(chunks).subarray(0, limit);
+}
+
 function inputSchema(params: ToolParam[]) {
   return {
     type: "object",

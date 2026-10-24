@@ -2,11 +2,14 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { ChevronDown, FlaskConical, Plus, Radio, TrendingDown, TrendingUp, type LucideIcon } from "lucide-react";
+import { ChevronDown, FlaskConical, Plus, Radio, type LucideIcon } from "lucide-react";
 import { CHANNEL_LABEL, DEPENDENCIES, GROUPS, MODULES, TESTABLE, type Ctx, type GroupKey, type L, type MapStats, type Mod } from "@/lib/agent/map-modules";
 import type { AgentConfig } from "@/lib/agent/types";
 import { SwitchButton, cx } from "@/components/ui";
 import { ChannelIcon } from "./channel-icon";
+import { Spark } from "@/components/spark";
+
+export { Spark };
 
 export type MapChannel = { id: string; type: string; name: string; enabled: boolean };
 export type ModState = "on" | "off" | "warn";
@@ -194,7 +197,7 @@ export function MapCanvas({
           onClick={() => onSelect?.("core")}
           style={glow ? { animation: "map-glow 1.6s ease-in-out infinite" } : undefined}
           className={cx(
-            "rounded-2xl border-2 bg-gradient-to-br from-accent-soft/60 to-surface p-4 text-left shadow-sm transition",
+            "bg-metal rounded-2xl border-2 p-4 text-left shadow-md transition",
             onSelect && "hover:border-accent",
             selectedKey === "core" || focusKey === "core" ? "border-accent" : "border-accent/40",
           )}
@@ -323,29 +326,6 @@ export function MapCanvas({
 
 /** Модули, срабатывание которых видно в переписке: только у них «0 за неделю» что-то значит. */
 const USAGE_TRACKED = new Set(["kb", "tools", "tables", "forms", "procedures", "docs", "calendar", "logistics", "payments", "pricing", "loyalty", "learning", "web", "answerCheck", "quickReplies"]);
-
-/** Тренд за 30 дней: маленький график и стрелка (последние 7 дней против предыдущих 7). */
-export function Spark({ data, wide }: { data?: number[]; wide?: boolean }) {
-  if (!data || data.every((x) => x === 0)) return null;
-  const w = wide ? 90 : 48;
-  const h = 16;
-  const max = Math.max(1, ...data);
-  const pts = data.map((v, i) => `${((i / (data.length - 1)) * w).toFixed(1)},${(h - 1 - (v / max) * (h - 2)).toFixed(1)}`).join(" ");
-  const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
-  const now = sum(data.slice(-7));
-  const before = sum(data.slice(-14, -7));
-  const up = now > before * 1.15 && now > 0;
-  const down = now < before * 0.85;
-  return (
-    <span className="flex shrink-0 items-center gap-0.5">
-      <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden className="overflow-visible">
-        <polyline points={pts} fill="none" strokeWidth={1.5} strokeLinejoin="round" className="stroke-accent/70" />
-      </svg>
-      {up && <TrendingUp className="size-3 text-success" />}
-      {down && <TrendingDown className="size-3 text-danger" />}
-    </span>
-  );
-}
 
 function Metric({ v, l }: { v: string; l: string }) {
   return (

@@ -122,8 +122,9 @@ export default async function ClientPage({
   const modules = sections.filter((m) => m.group === "agent");
   const shown = (g: ModuleCard["group"]) =>
     sections.filter((m) => m.group === g && (m.n > 0 || m.key === active || m.badge)).map((m) => ({ key: m.key, label: m.title, icon: m.icon, n: m.n || undefined, alert: m.badge }));
-  const nav: { title?: string; items: { key: string; label: string; icon: typeof Bot; n?: number; alert?: number }[] }[] = [
+  const nav: { title?: string; tone: string; items: { key: string; label: string; icon: typeof Bot; n?: number; alert?: number }[] }[] = [
     {
+      tone: "bg-accent/10 text-accent",
       items: [
         { key: "agents", label: t.ws.overview, icon: LayoutDashboard, n: agentsCount },
         { key: "modules", label: t.ws.catalog, icon: Blocks, n: sections.filter((m) => m.n > 0).length },
@@ -132,22 +133,23 @@ export default async function ClientPage({
     },
     {
       title: t.ws.knowledge,
+      tone: "bg-sky-500/10 text-sky-600 dark:text-sky-300",
       items: [
         { key: "kb", label: t.kb.tab, icon: BookOpen, n: kbCount },
         { key: "data", label: t.data.tab, icon: Table2, n: tablesCount },
       ],
     },
-    { title: t.ws.groups.agent, items: shown("agent") },
-    { title: t.ws.groups.sales, items: shown("sales") },
-    { title: t.ws.groups.ops, items: shown("ops") },
-    { title: t.ws.groups.people, items: shown("people") },
+    { title: t.ws.groups.agent, tone: "bg-violet-500/10 text-violet-600 dark:text-violet-300", items: shown("agent") },
+    { title: t.ws.groups.sales, tone: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-300", items: shown("sales") },
+    { title: t.ws.groups.ops, tone: "bg-orange-500/10 text-orange-600 dark:text-orange-300", items: shown("ops") },
+    { title: t.ws.groups.people, tone: "bg-pink-500/10 text-pink-600 dark:text-pink-300", items: shown("people") },
   ].filter((g) => g.items.length);
 
   return (
     <div className="mx-auto max-w-7xl">
       <BackLink href="/clients" label={t.nav.clients} />
       <PageHeader
-        icon={<ClientAvatar name={client.name} color={client.color} size={40} />}
+        icon={<ClientAvatar id={client.id} name={client.name} color={client.color} size={40} />}
         title={client.name}
         subtitle={[client.industry, client.website].filter(Boolean).join(" · ") || undefined}
         actions={
@@ -182,10 +184,12 @@ export default async function ClientPage({
                   replace
                   className={cx(
                     "flex shrink-0 items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm whitespace-nowrap transition",
-                    active === key ? "bg-surface font-medium text-text shadow-[0_0_0_1px_var(--border)] [&>svg]:text-accent" : "text-muted hover:bg-surface hover:text-text",
+                    active === key ? "bg-surface font-medium text-text shadow-[0_0_0_1px_var(--border)]" : "text-muted hover:bg-surface hover:text-text",
                   )}
                 >
-                  <Icon className="size-4 shrink-0" />
+                  <span className={cx("grid size-6 shrink-0 place-items-center rounded-md", g.tone)}>
+                    <Icon className="size-3.5" />
+                  </span>
                   <span className="flex-1">{label}</span>
                   {alert ? (
                     <span className="min-w-5 rounded-full bg-danger px-1.5 text-center text-[11px] leading-5 font-semibold text-white">{alert}</span>

@@ -143,7 +143,13 @@ export function Spinner({ className }: { className?: string }) {
   );
 }
 
-export function ClientAvatar({ name, color, size = 40 }: { name: string; color: string; size?: number }) {
+/** Аватар клиента: с id — логотип с его сайта (или буква на цвете клиента, если значка нет), без id — буква. */
+export function ClientAvatar({ name, color, size = 40, id }: { name: string; color: string; size?: number; id?: string }) {
+  if (id)
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- значок сайта клиента, отдаёт наш маршрут
+      <img src={`/api/client-logo/${id}`} alt="" width={size} height={size} className="shrink-0 rounded-xl bg-white object-contain ring-1 ring-border" style={{ width: size, height: size }} />
+    );
   return (
     <span
       className="inline-flex shrink-0 items-center justify-center rounded-xl font-semibold text-white"
@@ -154,7 +160,10 @@ export function ClientAvatar({ name, color, size = 40 }: { name: string; color: 
   );
 }
 
-/** Пустое состояние: значок в круге, заголовок, пояснение и действие — одинаково во всех разделах. */
+/**
+ * Пустое состояние: иллюстрация (металлические карточки и значок в центре), заголовок, пояснение и действие —
+ * одинаково во всех разделах.
+ */
 export function EmptyState({
   icon,
   title,
@@ -172,21 +181,42 @@ export function EmptyState({
 }) {
   return (
     <div className={cx("flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border bg-surface px-6 py-10 text-center", className)}>
-      {icon && (
-        <span
-          className={cx(
-            "grid size-12 place-items-center rounded-full [&>svg]:size-5",
-            tone === "success" ? "bg-success/10 text-success" : "bg-surface-2 text-muted",
-          )}
-        >
-          {icon}
-        </span>
-      )}
+      <EmptyArt icon={icon} tone={tone} />
       {title && <p className="font-medium">{title}</p>}
       <p className="max-w-md text-sm text-muted">{text}</p>
       {action && <div className="mt-1">{action}</div>}
     </div>
   );
+}
+
+/** Иллюстрация пустого экрана: две наклонные карточки за металлическим диском со значком. */
+function EmptyArt({ icon, tone }: { icon?: ReactNode; tone: "neutral" | "success" }) {
+  return (
+    <span className="relative mb-1 block h-20 w-28" aria-hidden>
+      <span className="absolute top-3 left-1 h-14 w-16 -rotate-12 rounded-xl border border-border bg-surface-2" />
+      <span className="absolute top-2 right-1 h-14 w-16 rotate-[10deg] rounded-xl border border-border bg-surface-2">
+        <span className="absolute top-3 left-3 h-1.5 w-8 rounded-full bg-border" />
+        <span className="absolute top-6 left-3 h-1.5 w-5 rounded-full bg-border" />
+      </span>
+      <span
+        className={cx(
+          "bg-metal absolute top-1/2 left-1/2 grid size-14 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border shadow-md [&>svg]:size-6",
+          tone === "success" ? "text-success" : "text-accent",
+        )}
+      >
+        {icon ?? (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M4 7h16M4 12h10M4 17h7" />
+          </svg>
+        )}
+      </span>
+    </span>
+  );
+}
+
+/** Заготовка загрузки (мерцающий прямоугольник) — вместо крутящегося колёсика. */
+export function Skeleton({ className }: { className?: string }) {
+  return <span className={cx("skeleton block", className)} />;
 }
 
 /** Переключатель «вкл/выкл» со строкой подписи (только в клиентских компонентах — обработчик нажатия). */

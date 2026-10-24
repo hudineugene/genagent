@@ -38,7 +38,7 @@ async function Shell({ children }: { children: ReactNode }) {
     <I18nProvider locale={locale} timeZone={general.timeZone}>
       <div className="flex min-h-dvh flex-col md:flex-row">
         <Sidebar userName={user.name} isAdmin={user.role === "admin"} inboxBadge={attention} studioName={general.studioName} />
-        <main className="min-w-0 flex-1 px-4 py-6 md:px-8 md:py-8">{children}</main>
+        <main className="min-w-0 flex-1 px-4 pt-6 pb-24 md:px-8 md:py-8">{children}</main>
       </div>
     </I18nProvider>
   );

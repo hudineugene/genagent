@@ -2,7 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState, useSyncExternalStore, useTransition } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  useTransition,
+} from "react";
 import {
   BarChart3,
   Building2,
@@ -25,92 +31,176 @@ import {
 import { useI18n } from "@/lib/i18n/client";
 import { LOCALES, LOCALE_LABELS } from "@/lib/i18n";
 import { logout, setLocale } from "@/app/actions/auth";
-import { CommandPalette, OPEN_PALETTE, type PalettePage } from "./command-palette";
+import {
+  CommandPalette,
+  OPEN_PALETTE,
+  type PalettePage,
+} from "./command-palette";
 import { cx } from "./ui";
 import { BrandMark } from "./brand";
 
 type NavItem = PalettePage & { active: boolean; badge?: number };
 
-export function Sidebar({ userName, isAdmin, inboxBadge, studioName }: { userName: string; isAdmin: boolean; inboxBadge: number; studioName?: string }) {
+export function Sidebar({
+  userName,
+  isAdmin,
+  inboxBadge,
+  studioName,
+}: {
+  userName: string;
+  isAdmin: boolean;
+  inboxBadge: number;
+  studioName?: string;
+}) {
   const { t } = useI18n();
   const pathname = usePathname();
   const work: NavItem[] = [
     { href: "/", label: t.nav.today, icon: House, active: pathname === "/" },
-    { href: "/inbox", label: t.nav.inbox, icon: MessagesSquare, active: pathname.startsWith("/inbox"), badge: inboxBadge },
+    {
+      href: "/inbox",
+      label: t.nav.inbox,
+      icon: MessagesSquare,
+      active: pathname.startsWith("/inbox"),
+      badge: inboxBadge,
+    },
     {
       href: "/clients",
       label: t.nav.clients,
       icon: Building2,
       active: pathname.startsWith("/clients") || pathname.startsWith("/agents"),
     },
-    { href: "/analytics", label: t.nav.analytics, icon: BarChart3, active: pathname.startsWith("/analytics") },
-    { href: "/templates", label: t.nav.templates, icon: LayoutTemplate, active: pathname.startsWith("/templates") },
+    {
+      href: "/analytics",
+      label: t.nav.analytics,
+      icon: BarChart3,
+      active: pathname.startsWith("/analytics"),
+    },
+    {
+      href: "/templates",
+      label: t.nav.templates,
+      icon: LayoutTemplate,
+      active: pathname.startsWith("/templates"),
+    },
   ];
   const settings: NavItem[] = isAdmin
     ? [
-        { href: "/team", label: t.nav.team, icon: Users, active: pathname.startsWith("/team") },
-        { href: "/billing", label: t.nav.billing, icon: Wallet, active: pathname.startsWith("/billing") },
-        { href: "/integrations", label: t.nav.integrations, icon: Plug, active: pathname.startsWith("/integrations") },
-        { href: "/settings", label: t.nav.settings, icon: SlidersHorizontal, active: pathname.startsWith("/settings") },
+        {
+          href: "/team",
+          label: t.nav.team,
+          icon: Users,
+          active: pathname.startsWith("/team"),
+        },
+        {
+          href: "/billing",
+          label: t.nav.billing,
+          icon: Wallet,
+          active: pathname.startsWith("/billing"),
+        },
+        {
+          href: "/integrations",
+          label: t.nav.integrations,
+          icon: Plug,
+          active: pathname.startsWith("/integrations"),
+        },
+        {
+          href: "/settings",
+          label: t.nav.settings,
+          icon: SlidersHorizontal,
+          active: pathname.startsWith("/settings"),
+        },
       ]
     : [];
-  const help: NavItem[] = [{ href: "/help", label: t.nav.help, icon: CircleHelp, active: pathname.startsWith("/help") }];
+  const help: NavItem[] = [
+    {
+      href: "/help",
+      label: t.nav.help,
+      icon: CircleHelp,
+      active: pathname.startsWith("/help"),
+    },
+  ];
   const openSearch = () => window.dispatchEvent(new Event(OPEN_PALETTE));
 
   return (
-    <aside className="z-30 flex shrink-0 items-center gap-2 border-b border-border bg-surface/90 px-3 py-2.5 backdrop-blur md:sticky md:top-0 md:h-dvh md:w-60 md:flex-col md:items-stretch md:gap-1 md:border-r md:border-b-0 md:bg-surface md:px-3 md:py-4">
-      <CommandPalette pages={[...work, ...settings, ...help, { href: "/profile", label: t.nav.profile, icon: UserRound }]} />
+    <>
+      <aside className="z-30 flex shrink-0 items-center gap-2 border-b border-border bg-surface/90 px-3 py-2.5 backdrop-blur md:sticky md:top-0 md:h-dvh md:w-60 md:flex-col md:items-stretch md:gap-1 md:border-r md:border-b-0 md:bg-surface md:px-3 md:py-4">
+        <CommandPalette
+          pages={[
+            ...work,
+            ...settings,
+            ...help,
+            { href: "/profile", label: t.nav.profile, icon: UserRound },
+          ]}
+        />
 
-      <Link href="/" className="flex shrink-0 items-center gap-2.5 md:mb-4 md:px-2">
-        <BrandMark size={32} />
-        <span className="hidden truncate font-semibold tracking-tight md:block">{studioName || t.app.name}</span>
-      </Link>
+        <Link
+          href="/"
+          className="flex min-w-0 shrink items-center gap-2.5 md:mb-4 md:px-2"
+        >
+          <BrandMark size={32} />
+          <span className="truncate font-display font-bold tracking-tight">
+            {studioName || t.app.name}
+          </span>
+        </Link>
 
-      {/* Поиск: на телефоне — иконка, на компьютере — поле с подсказкой Ctrl K */}
-      <button
-        type="button"
-        onClick={openSearch}
-        title={`${t.nav.search} (Ctrl K)`}
-        className="order-last ml-auto grid size-9 shrink-0 place-items-center rounded-xl text-muted hover:bg-surface-2 hover:text-text md:order-none md:mb-3 md:ml-0 md:flex md:h-9 md:w-full md:items-center md:gap-2.5 md:border md:border-border md:bg-surface-2/60 md:px-3 md:text-sm"
-      >
-        <Search className="size-4" />
-        <span className="hidden flex-1 text-left md:inline">{t.nav.search}</span>
-        <kbd className="hidden rounded-md border border-border bg-surface px-1.5 text-[11px] font-medium md:inline">Ctrl K</kbd>
-      </button>
+        {/* Поиск: на телефоне — иконка, на компьютере — поле с подсказкой Ctrl K */}
+        <button
+          type="button"
+          onClick={openSearch}
+          title={`${t.nav.search} (Ctrl K)`}
+          className="order-last ml-auto grid size-9 shrink-0 place-items-center rounded-xl text-muted hover:bg-surface-2 hover:text-text md:order-none md:mb-3 md:ml-0 md:flex md:h-9 md:w-full md:items-center md:gap-2.5 md:border md:border-border md:bg-surface-2/60 md:px-3 md:text-sm"
+        >
+          <Search className="size-4" />
+          <span className="hidden flex-1 text-left md:inline">
+            {t.nav.search}
+          </span>
+          <kbd className="hidden rounded-md border border-border bg-surface px-1.5 text-[11px] font-medium md:inline">
+            Ctrl K
+          </kbd>
+        </button>
 
-      <nav className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none] md:flex-col md:items-stretch md:gap-2 md:overflow-visible md:[&>div+div]:border-t md:[&>div+div]:border-border md:[&>div+div]:pt-2">
-        <NavGroup items={work} />
-        {settings.length > 0 && <NavGroup items={settings} />}
-        <NavGroup items={help} />
-      </nav>
+        {/* Компьютер: меню слева, значки окрашены по группам */}
+        <nav className="hidden min-w-0 flex-1 flex-col items-stretch gap-2 md:flex [&>div+div]:border-t [&>div+div]:border-border [&>div+div]:pt-2">
+          <NavGroup items={work} tone="work" />
+          {settings.length > 0 && <NavGroup items={settings} tone="settings" />}
+          <NavGroup items={help} tone="help" />
+        </nav>
+        <span className="flex-1 md:hidden" />
 
-      {/* Телефон: профиль (там же язык и выход) — аватаром в конце строки */}
-      <Link
-        href="/profile"
-        title={t.nav.profile}
-        className="order-last grid size-8 shrink-0 place-items-center rounded-full bg-accent-soft text-sm font-semibold text-accent md:hidden"
-      >
-        {userName.trim().charAt(0).toUpperCase() || "?"}
-      </Link>
-
-      {/* Компьютер: внизу — профиль; язык, тема и выход — в меню «⋯» */}
-      <div className="relative hidden items-center gap-1 md:flex md:border-t md:border-border md:pt-3">
+        {/* Телефон: профиль (там же язык и выход) — аватаром в конце строки */}
         <Link
           href="/profile"
-          className={cx(
-            "flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-2 py-1.5 transition hover:bg-surface-2",
-            pathname.startsWith("/profile") && "bg-surface-2",
-          )}
           title={t.nav.profile}
+          className="order-last grid size-8 shrink-0 place-items-center rounded-full bg-accent-soft text-sm font-semibold text-accent md:hidden"
         >
-          <span className="grid size-8 shrink-0 place-items-center rounded-full bg-accent-soft text-sm font-semibold text-accent">
-            {userName.trim().charAt(0).toUpperCase() || "?"}
-          </span>
-          <span className="truncate text-sm font-medium">{userName}</span>
+          {userName.trim().charAt(0).toUpperCase() || "?"}
         </Link>
-        <ProfileMenu />
-      </div>
-    </aside>
+
+        {/* Компьютер: внизу — профиль; язык, тема и выход — в меню «⋯» */}
+        <div className="relative hidden items-center gap-1 md:flex md:border-t md:border-border md:pt-3">
+          <Link
+            href="/profile"
+            className={cx(
+              "flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-2 py-1.5 transition hover:bg-surface-2",
+              pathname.startsWith("/profile") && "bg-surface-2",
+            )}
+            title={t.nav.profile}
+          >
+            <span className="grid size-8 shrink-0 place-items-center rounded-full bg-accent-soft text-sm font-semibold text-accent">
+              {userName.trim().charAt(0).toUpperCase() || "?"}
+            </span>
+            <span className="truncate text-sm font-medium">{userName}</span>
+          </Link>
+          <ProfileMenu />
+        </div>
+      </aside>
+      {/* Телефон: нижняя панель — главные разделы и «Ещё» со всеми остальными (вне aside: у него размытие фона,
+        которое сделало бы fixed относительным самому меню) */}
+      <MobileTabs
+        main={work.slice(0, 3)}
+        more={[...work.slice(3), ...settings, ...help]}
+        moreLabel={t.nav.more}
+      />
+    </>
   );
 }
 
@@ -122,7 +212,12 @@ function ProfileMenu() {
   useEffect(() => {
     if (!open) return;
     const close = (e: MouseEvent | KeyboardEvent) => {
-      if (e instanceof KeyboardEvent ? e.key === "Escape" : !ref.current?.contains(e.target as Node)) setOpen(false);
+      if (
+        e instanceof KeyboardEvent
+          ? e.key === "Escape"
+          : !ref.current?.contains(e.target as Node)
+      )
+        setOpen(false);
     };
     document.addEventListener("mousedown", close);
     document.addEventListener("keydown", close);
@@ -138,7 +233,10 @@ function ProfileMenu() {
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         title={t.nav.groupSettings}
-        className={cx("grid size-9 place-items-center rounded-xl text-muted transition hover:bg-surface-2 hover:text-text", open && "bg-surface-2 text-text")}
+        className={cx(
+          "grid size-9 place-items-center rounded-xl text-muted transition hover:bg-surface-2 hover:text-text",
+          open && "bg-surface-2 text-text",
+        )}
       >
         <MoreHorizontal className="size-4" />
       </button>
@@ -164,7 +262,20 @@ function ProfileMenu() {
   );
 }
 
-function NavGroup({ items }: { items: NavItem[] }) {
+/** Цвет значков группы меню: работа — сталь (акцент), настройки — фиолетовый, помощь — янтарный. */
+const TONES = {
+  work: "bg-accent/10 text-accent",
+  settings: "bg-violet-500/10 text-violet-600 dark:text-violet-300",
+  help: "bg-amber-500/12 text-amber-600 dark:text-amber-300",
+} as const;
+
+function NavGroup({
+  items,
+  tone,
+}: {
+  items: NavItem[];
+  tone: keyof typeof TONES;
+}) {
   return (
     <div className="flex gap-0.5 md:flex-col">
       {items.map(({ href, label, icon: Icon, active, badge }) => (
@@ -173,19 +284,30 @@ function NavGroup({ items }: { items: NavItem[] }) {
           href={href}
           title={label}
           className={cx(
-            "relative flex shrink-0 items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition",
-            active ? "bg-surface-2 text-text [&_svg]:text-accent" : "text-muted hover:bg-surface-2 hover:text-text",
+            "relative flex shrink-0 items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm font-medium transition",
+            active
+              ? "bg-surface-2 text-text shadow-[inset_0_0_0_1px_var(--border)]"
+              : "text-muted hover:bg-surface-2 hover:text-text",
           )}
         >
-          <span className="relative">
-            <Icon className="size-4" />
+          <span
+            className={cx(
+              "relative grid size-6 place-items-center rounded-md transition",
+              active ? TONES[tone] : cx("opacity-80", TONES[tone]),
+            )}
+          >
+            <Icon className="size-3.5" />
             {badge ? (
-              <span className="absolute -top-1.5 -right-2 rounded-full bg-danger px-1 text-[10px] leading-4 font-semibold text-white md:hidden">{badge}</span>
+              <span className="absolute -top-1.5 -right-2 rounded-full bg-danger px-1 text-[10px] leading-4 font-semibold text-white md:hidden">
+                {badge}
+              </span>
             ) : null}
           </span>
           <span className="hidden md:inline">{label}</span>
           {badge ? (
-            <span className="ml-auto hidden min-w-5 rounded-full bg-danger px-1.5 text-center text-xs leading-5 font-semibold text-white md:inline">{badge}</span>
+            <span className="ml-auto hidden min-w-5 rounded-full bg-danger px-1.5 text-center text-xs leading-5 font-semibold text-white md:inline">
+              {badge}
+            </span>
           ) : null}
         </Link>
       ))}
@@ -197,13 +319,25 @@ export function LocaleSwitch() {
   const { locale, t } = useI18n();
   const [pending, start] = useTransition();
   return (
-    <div className={cx("inline-flex rounded-xl bg-surface-2 p-1 text-xs font-semibold", pending && "opacity-60")} role="group" aria-label={t.nav.language}>
+    <div
+      className={cx(
+        "inline-flex rounded-xl bg-surface-2 p-1 text-xs font-semibold",
+        pending && "opacity-60",
+      )}
+      role="group"
+      aria-label={t.nav.language}
+    >
       {LOCALES.map((l) => (
         <button
           key={l}
           type="button"
           onClick={() => start(() => setLocale(l))}
-          className={cx("rounded-lg px-2.5 py-1 transition", l === locale ? "bg-surface text-text shadow-sm" : "text-muted hover:text-text")}
+          className={cx(
+            "rounded-lg px-2.5 py-1 transition",
+            l === locale
+              ? "bg-surface text-text shadow-sm"
+              : "text-muted hover:text-text",
+          )}
         >
           {LOCALE_LABELS[l]}
         </button>
@@ -236,7 +370,11 @@ function subscribeTheme(onChange: () => void) {
 /** Светлая / тёмная / как в системе — выбор хранится в браузере (скрипт в layout применяет его до отрисовки). */
 export function ThemeSwitch() {
   const { t } = useI18n();
-  const theme = useSyncExternalStore(subscribeTheme, readTheme, () => "system" as Theme);
+  const theme = useSyncExternalStore(
+    subscribeTheme,
+    readTheme,
+    () => "system" as Theme,
+  );
   const pick = (next: Theme) => {
     try {
       if (next === "system") localStorage.removeItem("theme");
@@ -251,7 +389,11 @@ export function ThemeSwitch() {
     { value: "system", label: t.nav.themeSystem, icon: Monitor },
   ];
   return (
-    <div className="inline-flex rounded-xl bg-surface-2 p-1" role="group" aria-label={t.nav.theme}>
+    <div
+      className="inline-flex rounded-xl bg-surface-2 p-1"
+      role="group"
+      aria-label={t.nav.theme}
+    >
       {options.map(({ value, label, icon: Icon }) => (
         <button
           key={value}
@@ -259,11 +401,91 @@ export function ThemeSwitch() {
           title={label}
           aria-pressed={theme === value}
           onClick={() => pick(value)}
-          className={cx("grid size-6 place-items-center rounded-lg transition", theme === value ? "bg-surface text-text shadow-sm" : "text-muted hover:text-text")}
+          className={cx(
+            "grid size-6 place-items-center rounded-lg transition",
+            theme === value
+              ? "bg-surface text-text shadow-sm"
+              : "text-muted hover:text-text",
+          )}
         >
           <Icon className="size-3.5" />
         </button>
       ))}
     </div>
+  );
+}
+
+/** Нижняя панель на телефоне: 3 главных раздела, поиск и «Ещё» (лист со всеми остальными разделами). */
+function MobileTabs({
+  main,
+  more,
+  moreLabel,
+}: {
+  main: NavItem[];
+  more: NavItem[];
+  moreLabel: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const moreActive = more.some((m) => m.active);
+  const tab =
+    "flex flex-1 flex-col items-center gap-0.5 py-1.5 text-[11px] font-medium transition";
+  return (
+    <>
+      {open && (
+        <div
+          className="fixed inset-0 z-40 bg-black/30 md:hidden"
+          onClick={() => setOpen(false)}
+        >
+          <div
+            className="absolute inset-x-0 bottom-[calc(3.75rem+env(safe-area-inset-bottom))] mx-3 grid grid-cols-3 gap-2 rounded-2xl border border-border bg-surface p-3 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {more.map(({ href, label, icon: Icon, active }) => (
+              <Link
+                key={href}
+                href={href}
+                onClick={() => setOpen(false)}
+                className={cx(
+                  "flex flex-col items-center gap-1 rounded-xl p-2 text-center text-xs",
+                  active
+                    ? "bg-accent-soft text-accent"
+                    : "text-muted hover:bg-surface-2",
+                )}
+              >
+                <Icon className="size-5" />
+                <span className="leading-tight">{label}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+      <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border bg-surface/95 px-2 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+        {main.map(({ href, label, icon: Icon, active, badge }) => (
+          <Link
+            key={href}
+            href={href}
+            className={cx(tab, active ? "text-accent" : "text-muted")}
+          >
+            <span className="relative">
+              <Icon className="size-5" />
+              {badge ? (
+                <span className="absolute -top-1.5 -right-2.5 rounded-full bg-danger px-1 text-[10px] leading-4 font-semibold text-white">
+                  {badge}
+                </span>
+              ) : null}
+            </span>
+            {label}
+          </Link>
+        ))}
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className={cx(tab, open || moreActive ? "text-accent" : "text-muted")}
+        >
+          <MoreHorizontal className="size-5" />
+          {moreLabel}
+        </button>
+      </nav>
+    </>
   );
 }

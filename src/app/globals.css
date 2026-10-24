@@ -1,17 +1,25 @@
 @import "tailwindcss";
 
+/*
+ * Фирменный стиль GenAgent: графит + сталь (под логотип). Светлая тема — холодный светлый графит с синим стальным
+ * акцентом, тёмная — «металл»: глубокий графит, светлый стальной акцент, тёмный текст на кнопках для контраста.
+ */
 :root {
-  --bg: #f7f7f8;
+  --bg: #f4f5f7;
   --surface: #ffffff;
-  --surface-2: #f3f3f5;
-  --border: #e5e5ea;
-  --text: #18181b;
-  --muted: #6b6b76;
-  --accent: #5e6ad2;
-  --accent-soft: #eef0fb;
+  --surface-2: #eef0f3;
+  --border: #e1e4e9;
+  --text: #14161a;
+  --muted: #646b78;
+  --accent: #2f5fd0;
+  --accent-soft: #e8eefb;
   --accent-text: #ffffff;
-  --danger: #d93f3f;
-  --success: #1a8a4f;
+  --danger: #d33a3a;
+  --success: #17864c;
+  /* Металл: поверхности с мягким бликом (ядро карты, главные карточки, плитка логотипа) */
+  --metal: linear-gradient(135deg, #ffffff 0%, #eef1f5 38%, #fbfcfd 52%, #e4e8ee 100%);
+  --metal-edge: #d5dae2;
+  --sheen: linear-gradient(115deg, transparent 30%, rgb(255 255 255 / 0.55) 48%, transparent 66%);
 }
 
 /* Тема: data-theme на <html> ставит скрипт в layout (выбор пользователя или системная); без скрипта — как в системе. */
@@ -19,32 +27,38 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0f0f11;
-    --surface: #17171a;
-    --surface-2: #1f1f23;
-    --border: #2a2a30;
-    --text: #ededf0;
-    --muted: #8b8b96;
-    --accent: #8189ea;
-    --accent-soft: #23264a;
-    --accent-text: #ffffff;
+    --bg: #0b0c0f;
+    --surface: #14161a;
+    --surface-2: #1b1e23;
+    --border: #282c33;
+    --text: #e8ebf0;
+    --muted: #8c94a3;
+    --accent: #7aa2ff;
+    --accent-soft: #1a2540;
+    --accent-text: #0b1020;
     --danger: #f06b6b;
     --success: #3ccf7f;
+    --metal: linear-gradient(135deg, #22252b 0%, #15171b 40%, #262a31 55%, #111316 100%);
+    --metal-edge: #343942;
+    --sheen: linear-gradient(115deg, transparent 30%, rgb(255 255 255 / 0.07) 48%, transparent 66%);
   }
 }
 
 :root[data-theme="dark"] {
-  --bg: #0f0f11;
-  --surface: #17171a;
-  --surface-2: #1f1f23;
-  --border: #2a2a30;
-  --text: #ededf0;
-  --muted: #8b8b96;
-  --accent: #8189ea;
-  --accent-soft: #23264a;
-  --accent-text: #ffffff;
+  --bg: #0b0c0f;
+  --surface: #14161a;
+  --surface-2: #1b1e23;
+  --border: #282c33;
+  --text: #e8ebf0;
+  --muted: #8c94a3;
+  --accent: #7aa2ff;
+  --accent-soft: #1a2540;
+  --accent-text: #0b1020;
   --danger: #f06b6b;
   --success: #3ccf7f;
+  --metal: linear-gradient(135deg, #22252b 0%, #15171b 40%, #262a31 55%, #111316 100%);
+  --metal-edge: #343942;
+  --sheen: linear-gradient(115deg, transparent 30%, rgb(255 255 255 / 0.07) 48%, transparent 66%);
 }
 
 :root { color-scheme: light; }
@@ -62,10 +76,24 @@
   --color-accent-text: var(--accent-text);
   --color-danger: var(--danger);
   --color-success: var(--success);
+  --color-metal-edge: var(--metal-edge);
   --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-display: var(--font-montserrat), var(--font-inter), system-ui, sans-serif;
   --radius-lg: 0.4375rem;
   --radius-xl: 0.5625rem;
   --radius-2xl: 0.75rem;
+  --animate-page-in: page-in 0.22s ease-out;
+  --animate-shimmer: shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes page-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
 }
 
 html,
@@ -79,6 +107,30 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Заголовки страниц и разделов — шрифтом в духе надписи GenAgent */
+h1, h2 {
+  font-family: var(--font-montserrat), var(--font-inter), system-ui, sans-serif;
+  letter-spacing: -0.015em;
+}
+
 ::selection {
   background: var(--accent-soft);
+}
+
+/* Металлическая поверхность с бликом */
+.bg-metal {
+  background: var(--sheen), var(--metal);
+  border-color: var(--metal-edge);
+}
+
+/* Заготовка загрузки: мерцающая полоса */
+.skeleton {
+  background: linear-gradient(90deg, var(--surface-2) 0%, var(--border) 50%, var(--surface-2) 100%);
+  background-size: 200% 100%;
+  animation: var(--animate-shimmer);
+  border-radius: 0.5rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton, .animate-page-in { animation: none; }
 }

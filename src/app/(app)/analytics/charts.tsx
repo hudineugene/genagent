@@ -1,7 +1,7 @@
 "use client";
 
 import { useI18n } from "@/lib/i18n/client";
-import { ColumnChart, StatTile, type Column } from "@/components/charts";
+import { AreaChart, ColumnChart, StatTile, type Column } from "@/components/charts";
 import { Card } from "@/components/ui";
 
 /** Плитки показателей и два отдельных графика (диалоги и расходы — разные шкалы, поэтому не на одной оси). */
@@ -31,7 +31,7 @@ export function AnalyticsCharts({
       </div>
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card className="p-5">
-          <ColumnChart
+          <AreaChart
             title={t.analytics.conversationsByDay}
             data={conversations}
             integer

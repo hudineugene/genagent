@@ -5,8 +5,10 @@ import {
   CircleDollarSign,
   CircleHelp,
   Clock,
+  Flame,
   Hand,
   MessagesSquare,
+  Radio,
   RefreshCwOff,
   Sparkles,
   UserRound,
@@ -22,12 +24,15 @@ import { Card, EmptyState, cx } from "@/components/ui";
 import { SetupChecklist } from "@/components/setup-checklist";
 import { setupChecklist } from "@/lib/setup-checklist";
 import { studioTz } from "@/lib/general";
+import { homeFeed, homeTrends, type FeedItem } from "@/lib/home-live";
+import { Spark } from "@/components/spark";
+import { AutoRefresh } from "@/components/auto-refresh";
 
 /** Главная «Сегодня»: кто ждёт человека, что требует решения, сводка за сутки и клиенты. */
 export default async function TodayPage() {
   const { t, locale } = await getT();
   const ids = await scope();
-  const [data, setup] = await Promise.all([dashboardData(ids), setupChecklist(undefined, ids)]);
+  const [data, setup, trends, feed] = await Promise.all([dashboardData(ids), setupChecklist(undefined, ids), homeTrends(ids), homeFeed(ids)]);
   const { today, waiting, decisions } = data;
   const gaps = decisions.filter((d): d is Extract<Decision, { kind: "gaps" }> => d.kind === "gaps");
   const decisionRows = decisions.length - gaps.length + (gaps.length ? 1 : 0);
@@ -41,7 +46,7 @@ export default async function TodayPage() {
       </header>
 
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat icon={<MessagesSquare className="size-4" />} label={t.home.statWrote} value={today.wrote} sub={`${today.answered} ${t.home.statAnswered}`} />
+        <Stat icon={<MessagesSquare className="size-4" />} label={t.home.statWrote} value={today.wrote} sub={`${today.answered} ${t.home.statAnswered}`} trend={trends.wrote} />
         <Stat
           icon={<Clock className="size-4" />}
           label={t.home.statWaiting}
@@ -49,13 +54,14 @@ export default async function TodayPage() {
           tone={waiting.length ? "danger" : "neutral"}
           href="/inbox"
         />
-        <Stat icon={<Hand className="size-4" />} label={t.home.statHandoffs} value={today.handoffs} />
+        <Stat icon={<Hand className="size-4" />} label={t.home.statHandoffs} value={today.handoffs} trend={trends.handoffs} />
         <Stat
           icon={<Wallet className="size-4" />}
           label={t.home.statSpendDay}
           value={`$${today.spendDay.toFixed(2)}`}
           sub={`$${today.spendMonth.toFixed(2)} ${t.home.statSpendMonth}`}
           href="/analytics"
+          trend={trends.spend}
         />
       </section>
 
@@ -127,6 +133,24 @@ export default async function TodayPage() {
         </Card>
       </section>
 
+      <section>
+        <Card className="overflow-hidden">
+          <SectionHead title={t.home.feedTitle} count={0} tone="accent" />
+          <AutoRefresh seconds={30} />
+          {feed.length === 0 ? (
+            <EmptyState icon={<Radio />} text={t.home.feedEmpty} className="rounded-none border-0" />
+          ) : (
+            <ul className="grid divide-y divide-border sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-2">
+              {feed.map((f, i) => (
+                <li key={`${f.kind}-${f.conversationId}-${f.at}-${i}`} className="sm:border-b sm:border-border sm:odd:border-r">
+                  <FeedRow f={f} t={t} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      </section>
+
       {setup.length > 0 && (
         <section>
           <SetupChecklist items={setup.map(({ key, kind, title, n, href }) => ({ key, kind, title, n, href }))} />
@@ -158,6 +182,7 @@ function Stat({
   sub,
   tone = "neutral",
   href,
+  trend,
 }: {
   icon: ReactNode;
   label: string;
@@ -165,18 +190,58 @@ function Stat({
   sub?: string;
   tone?: "neutral" | "danger";
   href?: string;
+  /** Ряд за 14 дней — мини-график и стрелка тренда */
+  trend?: number[];
 }) {
   const body = (
-    <Card className={cx("h-full p-4 transition", href && "hover:border-accent/40 hover:shadow-md hover:shadow-black/5", tone === "danger" && "border-danger/30 bg-danger/[0.04]")}>
+    <Card className={cx("h-full p-4 transition", tone === "danger" ? "border-danger/30 bg-danger/[0.04]" : "bg-metal", href && "hover:border-accent/40 hover:shadow-md hover:shadow-black/5")}>
       <div className={cx("flex items-center gap-1.5 text-xs font-medium text-muted", tone === "danger" && "text-danger")}>
         <span className="opacity-70 [&>svg]:size-3.5">{icon}</span>
         {label}
       </div>
-      <div className={cx("mt-2 text-2xl font-semibold tracking-tight tabular-nums", tone === "danger" && "text-danger")}>{value}</div>
+      <div className="mt-2 flex items-end justify-between gap-2">
+        <div className={cx("font-display text-2xl font-bold tracking-tight tabular-nums", tone === "danger" && "text-danger")}>{value}</div>
+        <span className="hidden sm:block">
+          <Spark data={trend} wide height={22} />
+        </span>
+      </div>
       {sub && <div className="mt-0.5 text-xs text-muted">{sub}</div>}
     </Card>
   );
   return href ? <Link href={href}>{body}</Link> : body;
+}
+
+/** Строка живой ленты: что случилось, у кого и когда. */
+function FeedRow({ f, t }: { f: FeedItem; t: Dict }) {
+  const look = {
+    new: { icon: <MessagesSquare className="size-4" />, cls: "bg-accent-soft text-accent", text: t.home.feedNew },
+    handoff: { icon: <Hand className="size-4" />, cls: "bg-amber-500/12 text-amber-600 dark:text-amber-400", text: t.home.feedHandoff },
+    hot: { icon: <Flame className="size-4" />, cls: "bg-danger/10 text-danger", text: t.home.feedHot },
+    paid: { icon: <CircleDollarSign className="size-4" />, cls: "bg-success/10 text-success", text: t.home.feedPaid },
+  }[f.kind];
+  const body = (
+    <span className="flex items-center gap-3 px-5 py-3">
+      <span className={cx("grid size-9 shrink-0 place-items-center rounded-xl", look.cls)}>{look.icon}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium">
+          {look.text}
+          {f.amount ? ` · ${f.amount}` : f.contact ? ` · ${f.contact}` : ""}
+        </span>
+        <span className="flex items-center gap-1.5 truncate text-xs text-muted">
+          <span className="size-1.5 shrink-0 rounded-full" style={{ background: f.color }} />
+          {f.client}
+        </span>
+      </span>
+      <span className="shrink-0 text-xs text-muted">{ago(new Date(f.at), t)}</span>
+    </span>
+  );
+  return f.conversationId ? (
+    <Link href={`/inbox?c=${f.conversationId}`} className="block transition hover:bg-surface-2/60">
+      {body}
+    </Link>
+  ) : (
+    body
+  );
 }
 
 function SectionHead({ title, count, tone, link }: { title: string; count: number; tone: "danger" | "accent"; link?: { href: string; label: string } }) {
