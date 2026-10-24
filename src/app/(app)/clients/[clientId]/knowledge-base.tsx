@@ -8,7 +8,7 @@ import { addTextSource, addUrlSource, deleteSource, refreshSource } from "@/app/
 import { FULL_CONTEXT_MAX_CHARS, estimateTokens } from "@/lib/kb/text";
 import { useI18n } from "@/lib/i18n/client";
 import { Badge, Button, Card, EmptyState, Field, Input, Spinner, Textarea, cx } from "@/components/ui";
-import { ask } from "@/components/confirm-dialog";
+import { deleteWithUndo, useHiddenIds } from "@/components/undo-delete";
 
 export type SourceRow = {
   id: string;
@@ -45,6 +45,7 @@ export function KnowledgeBase({
   semantic: SemanticState;
 }) {
   const { t } = useI18n();
+  const hiddenIds = useHiddenIds();
   const router = useRouter();
   const [panel, setPanel] = useState<"file" | "url" | "text">("file");
 
@@ -122,7 +123,7 @@ export function KnowledgeBase({
         <EmptyState icon={<BookOpen />} text={t.kb.empty} />
       ) : (
         <Card className="divide-y divide-border">
-          {sources.map((s) => (
+          {sources.filter((s) => !hiddenIds.has(s.id)).map((s) => (
             <SourceItem key={s.id} clientId={clientId} s={s} />
           ))}
         </Card>
@@ -190,7 +191,7 @@ function SourceItem({ clientId, s }: { clientId: string; s: SourceRow }) {
           className="hover:text-danger"
           disabled={pending}
           onClick={async () => {
-            if (await ask(`${t.common.confirmDelete}\n${s.title}`)) start(async () => void (await deleteSource(s.id)));
+            deleteWithUndo({ id: s.id, text: `${t.shell.deleted}: ${s.title}`, undoLabel: t.shell.undo, failText: t.shell.saveFailed, run: () => deleteSource(s.id) });
           }}
         >
           <Trash2 className="size-4" />

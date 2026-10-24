@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Fragment, Suspense, useEffect, useRef, useState } from "react";
-import { Bell, ChevronRight, CircleDollarSign, Flame, Hand, MessagesSquare, Moon, Search, Sun } from "lucide-react";
+import { AtSign, Bell, ChevronRight, CircleDollarSign, Flame, Hand, MessagesSquare, Moon, Search, Sun } from "lucide-react";
 import { bellFeed, type NavCtx } from "@/app/actions/nav";
 import type { FeedItem } from "@/lib/home-live";
 import type { Dict } from "@/lib/i18n";
@@ -179,11 +179,11 @@ function BellMenu() {
         .then((list) => {
           if (!alive) return;
           setItems(list);
-          const important = list.filter((x) => (x.kind === "handoff" || x.kind === "hot") && x.at > since);
+          const important = list.filter((x) => (x.kind === "handoff" || x.kind === "hot" || x.kind === "mention") && x.at > since);
           if (important.length && notifyOn()) {
             chime();
             for (const f of important.slice(0, 3)) {
-              const n = new Notification(f.kind === "hot" ? t.home.feedHot : t.home.feedHandoff, { body: [f.client, f.contact].filter(Boolean).join(" · "), tag: `${f.kind}-${f.conversationId}` });
+              const n = new Notification(f.kind === "hot" ? t.home.feedHot : f.kind === "mention" ? t.inbox.team.mentioned : t.home.feedHandoff, { body: [f.client, f.contact].filter(Boolean).join(" · "), tag: `${f.kind}-${f.conversationId}` });
               n.onclick = () => {
                 window.focus();
                 if (f.conversationId) router.push(`/inbox?c=${f.conversationId}`);
@@ -233,6 +233,7 @@ function BellMenu() {
     handoff: { icon: Hand, cls: "bg-amber-500/12 text-amber-600 dark:text-amber-400", text: t.home.feedHandoff },
     hot: { icon: Flame, cls: "bg-danger/10 text-danger", text: t.home.feedHot },
     paid: { icon: CircleDollarSign, cls: "bg-success/10 text-success", text: t.home.feedPaid },
+    mention: { icon: AtSign, cls: "bg-amber-500/15 text-amber-600 dark:text-amber-400", text: t.inbox.team.mentioned },
   };
   return (
     <div ref={ref} className="relative">

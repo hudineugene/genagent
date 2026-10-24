@@ -141,6 +141,7 @@ export function GeneralForm({ initial, spent, models, timeZones }: { initial: Ge
           <Switch label={g.jobQuality} checked={v.jobs.qualityCheck} onChange={(x) => setJob("qualityCheck", x)} />
           <Switch label={g.jobGaps} checked={v.jobs.gapsAnalysis} onChange={(x) => setJob("gapsAnalysis", x)} />
           <Switch label={g.jobReview} checked={v.jobs.agentReview} onChange={(x) => setJob("agentReview", x)} />
+          <Switch label={g.jobDaySummary} hint={g.jobDaySummaryHint} checked={v.jobs.daySummary} onChange={(x) => setJob("daySummary", x)} />
         </div>
       </Section>
 

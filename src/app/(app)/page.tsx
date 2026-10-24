@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import {
   ArrowRight,
   CircleDollarSign,
@@ -30,6 +30,7 @@ import { Spark } from "@/components/spark";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { RelTime } from "@/components/rel-time";
 import { CountUp } from "@/components/count-up";
+import { daySummary } from "@/lib/day-summary";
 
 /** Главная «Сегодня»: кто ждёт человека, что требует решения, сводка за сутки и клиенты. */
 export default async function TodayPage() {
@@ -63,6 +64,10 @@ export default async function TodayPage() {
         </div>
         {share !== null && <Ring value={share} label={t.home.ringLabel} />}
       </header>
+
+      <Suspense fallback={null}>
+        <DaySummaryCard ids={ids} locale={locale} title={t.home.daySummary} />
+      </Suspense>
 
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat icon={<MessagesSquare className="size-4" />} label={t.home.statWrote} value={today.wrote} sub={`${today.answered} ${t.home.statAnswered}`} trend={trends.wrote} />
@@ -237,6 +242,7 @@ function FeedRow({ f, t }: { f: FeedItem; t: Dict }) {
     handoff: { icon: <Hand className="size-4" />, cls: "bg-amber-500/12 text-amber-600 dark:text-amber-400", text: t.home.feedHandoff },
     hot: { icon: <Flame className="size-4" />, cls: "bg-danger/10 text-danger", text: t.home.feedHot },
     paid: { icon: <CircleDollarSign className="size-4" />, cls: "bg-success/10 text-success", text: t.home.feedPaid },
+    mention: { icon: <MessagesSquare className="size-4" />, cls: "bg-amber-500/15 text-amber-600 dark:text-amber-400", text: t.inbox.team.mentioned },
   }[f.kind];
   const body = (
     <span className="flex items-center gap-3 px-5 py-3">
@@ -260,6 +266,21 @@ function FeedRow({ f, t }: { f: FeedItem; t: Dict }) {
     </Link>
   ) : (
     body
+  );
+}
+
+/** Сводка дня от ИИ (если включена в «Общих настройках»): грузится отдельно, страница её не ждёт. */
+async function DaySummaryCard({ ids, locale, title }: { ids: string[] | null; locale: string; title: string }) {
+  const text = await daySummary(ids, locale).catch(() => null);
+  if (!text) return null;
+  return (
+    <section className="animate-page-in relative overflow-hidden rounded-2xl border border-accent/25 bg-accent-soft/50 px-5 py-4">
+      <div className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-accent">
+        <Sparkles className="size-4" />
+        {title}
+      </div>
+      <p className="text-sm leading-relaxed whitespace-pre-line">{text}</p>
+    </section>
   );
 }
 

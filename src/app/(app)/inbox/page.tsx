@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { and, asc, desc, eq, inArray, like, ne, or, sql, type SQL } from "drizzle-orm";
 import { ArrowRight, Bot, Building2, CheckCircle2, MessagesSquare, SearchX, X } from "lucide-react";
 import { db } from "@/db";
-import { agents, channels, clients, conversations, messages, users } from "@/db/schema";
+import { agents, channels, clients, conversationNotes, conversations, messages, users } from "@/db/schema";
 import { getT } from "@/lib/i18n/server";
 import { inScope, scope } from "@/lib/access";
 import type { Dict } from "@/lib/i18n";
@@ -18,20 +18,25 @@ import { InboxToolbar } from "./toolbar";
 import { InfoColumn } from "./info-panel";
 import { ForgetMemory } from "./forget-memory";
 import { TestToggle } from "./test-toggle";
+import { TeamPanel, type TeamState } from "./team-panel";
+import { requireUser } from "@/lib/auth";
+import { avatarVersions } from "@/lib/avatar";
 import { jsonText, messageSeq } from "@/db/dialect";
 
-type Filter = "all" | "attention" | "human" | "closed" | "test";
-const FILTERS = ["all", "attention", "human", "closed", "test"] as const;
+const FILTERS = ["all", "mine", "attention", "human", "snoozed", "closed", "test"] as const;
+type Filter = (typeof FILTERS)[number];
 
 export default async function InboxPage({
   searchParams,
 }: {
-  searchParams: Promise<{ c?: string; f?: string; client?: string; agent?: string; q?: string }>;
+  searchParams: Promise<{ c?: string; f?: string; client?: string; agent?: string; q?: string; tag?: string }>;
 }) {
   const sp = await searchParams;
   const { t, locale } = await getT();
   const filter: Filter = FILTERS.find((f) => f === sp.f) ?? "all";
   const q = (sp.q ?? "").trim().slice(0, 100);
+  const tag = (sp.tag ?? "").trim().slice(0, 24);
+  const me = await requireUser();
 
   // Клиент и поиск — общие для всех вкладок (и для счётчиков на вкладках)
   const base: SQL[] = [];
@@ -40,6 +45,7 @@ export default async function InboxPage({
   if (own) base.push(own);
   if (sp.client) base.push(eq(conversations.clientId, sp.client));
   if (sp.agent) base.push(eq(conversations.agentId, sp.agent));
+  if (tag) base.push(sql`exists (select 1 from json_each(${conversations.tags}) where json_each.value = ${tag})`);
   if (q) {
     const pattern = `%${q.replace(/[%_]/g, "")}%`;
     base.push(
@@ -53,10 +59,15 @@ export default async function InboxPage({
   }
   // Тестовые разговоры (свои, сотрудников) — только на вкладке «Тест»
   const real = eq(conversations.isTest, false);
+  const open = ne(conversations.status, "closed");
+  // Отложенный разговор скрыт до срока или до нового сообщения клиента после того, как его отложили
+  const awake = sql`(${conversations.snoozedUntil} is null or ${conversations.snoozedUntil} <= cast(strftime('%s','now') as integer) * 1000 or ${conversations.lastMessageAt} > ${conversations.snoozedAt})`;
   const byFilter: Record<Filter, SQL[]> = {
-    all: [real, ne(conversations.status, "closed")],
-    attention: [real, eq(conversations.needsAttention, true), ne(conversations.status, "closed")],
-    human: [real, eq(conversations.mode, "human"), ne(conversations.status, "closed")],
+    all: [real, open, awake],
+    mine: [real, open, awake, eq(conversations.assigneeId, me.id)],
+    attention: [real, eq(conversations.needsAttention, true), open, awake],
+    human: [real, eq(conversations.mode, "human"), open, awake],
+    snoozed: [real, open, sql`not ${awake}`],
     closed: [real, eq(conversations.status, "closed")],
     test: [eq(conversations.isTest, true)],
   };
@@ -74,6 +85,9 @@ export default async function InboxPage({
         unread: conversations.unread,
         lastMessageText: conversations.lastMessageText,
         lastMessageAt: conversations.lastMessageAt,
+        assigneeId: conversations.assigneeId,
+        assigneeName: users.name,
+        tags: conversations.tags,
         // «Горячесть» лида — значок в списке
         lead: sql<"hot" | "warm" | "cold" | null>`${jsonText(conversations.context, "lead.temperature")}`,
         clientName: clients.name,
@@ -83,15 +97,18 @@ export default async function InboxPage({
       .from(conversations)
       .innerJoin(clients, eq(clients.id, conversations.clientId))
       .innerJoin(agents, eq(agents.id, conversations.agentId))
+      .leftJoin(users, eq(users.id, conversations.assigneeId))
       .where(and(...base, ...byFilter[filter]))
       .orderBy(desc(conversations.lastMessageAt))
       .limit(200),
     db.select({ id: clients.id, name: clients.name }).from(clients).where(inScope(clients.id, ids)).orderBy(asc(clients.name)),
     db
       .select({
-        all: sql<number>`coalesce(sum(case when ${conversations.isTest} = 0 and ${conversations.status} != 'closed' then 1 end), 0)`,
-        attention: sql<number>`coalesce(sum(case when ${conversations.isTest} = 0 and ${conversations.needsAttention} = 1 and ${conversations.status} != 'closed' then 1 end), 0)`,
-        human: sql<number>`coalesce(sum(case when ${conversations.isTest} = 0 and ${conversations.mode} = 'human' and ${conversations.status} != 'closed' then 1 end), 0)`,
+        all: sql<number>`coalesce(sum(case when ${conversations.isTest} = 0 and ${conversations.status} != 'closed' and ${awake} then 1 end), 0)`,
+        mine: sql<number>`coalesce(sum(case when ${conversations.isTest} = 0 and ${conversations.status} != 'closed' and ${awake} and ${conversations.assigneeId} = ${me.id} then 1 end), 0)`,
+        attention: sql<number>`coalesce(sum(case when ${conversations.isTest} = 0 and ${conversations.needsAttention} = 1 and ${conversations.status} != 'closed' and ${awake} then 1 end), 0)`,
+        human: sql<number>`coalesce(sum(case when ${conversations.isTest} = 0 and ${conversations.mode} = 'human' and ${conversations.status} != 'closed' and ${awake} then 1 end), 0)`,
+        snoozed: sql<number>`coalesce(sum(case when ${conversations.isTest} = 0 and ${conversations.status} != 'closed' and not ${awake} then 1 end), 0)`,
         closed: sql<number>`coalesce(sum(case when ${conversations.isTest} = 0 and ${conversations.status} = 'closed' then 1 end), 0)`,
         test: sql<number>`coalesce(sum(case when ${conversations.isTest} = 1 then 1 end), 0)`,
       })
@@ -130,18 +147,25 @@ export default async function InboxPage({
   }
 
   const { canAccess } = await import("@/lib/access");
-  const thread = sp.c && (await canAccess("conversation", sp.c)) ? await loadThread(sp.c) : null;
+  const thread = sp.c && (await canAccess("conversation", sp.c)) ? await loadThread(sp.c, me.id) : null;
+  const avatars = await avatarVersions();
   const agentFilter = sp.agent ? (await db.select({ name: agents.name }).from(agents).where(eq(agents.id, sp.agent)))[0]?.name : undefined;
 
   const qs = (patch: Record<string, string | undefined>) => {
     const p = new URLSearchParams();
-    const next = { f: filter === "all" ? undefined : filter, client: sp.client, agent: sp.agent, q: q || undefined, c: sp.c, ...patch };
+    const next = { f: filter === "all" ? undefined : filter, client: sp.client, agent: sp.agent, q: q || undefined, tag: tag || undefined, c: sp.c, ...patch };
     for (const [k, v] of Object.entries(next)) if (v) p.set(k, v);
     const s = p.toString();
     return `/inbox${s ? `?${s}` : ""}`;
   };
 
-  const items: ListItem[] = rows.map((r) => ({ ...r, upset: upset.has(r.id), typing: isTyping(r.id), href: qs({ c: r.id }) }));
+  const items: ListItem[] = rows.map(({ assigneeId, assigneeName, ...r }) => ({
+    ...r,
+    assignee: assigneeId ? { id: assigneeId, name: assigneeName ?? "", v: avatars.get(assigneeId) ?? 0 } : null,
+    upset: upset.has(r.id),
+    typing: isTyping(r.id),
+    href: qs({ c: r.id }),
+  }));
 
   return (
     <div className="mx-auto flex max-w-[1500px] flex-col md:h-[calc(100dvh-7rem)]">
@@ -173,6 +197,12 @@ export default async function InboxPage({
             </span>
           </Link>
         ))}
+        {tag && (
+          <Link href={qs({ tag: undefined, c: undefined })} replace className="ml-2 flex shrink-0 items-center gap-1.5 rounded-lg bg-accent-soft px-3 py-1.5 text-sm font-medium text-accent" title="×">
+            # {tag}
+            <X className="size-3.5" />
+          </Link>
+        )}
         {agentFilter && (
           <Link
             href={qs({ agent: undefined, c: undefined })}
@@ -208,6 +238,7 @@ export default async function InboxPage({
         </div>
         {thread && (
           <InfoColumn>
+            <TeamPanel conversationId={thread.data.id} meId={me.id} team={thread.team} tagLink={qs({ tag: "__TAG__", c: undefined })} staff={thread.staff.map((u) => ({ ...u, v: avatars.get(u.id) ?? 0 }))} />
             <ConversationInfo info={thread.info} data={thread.data} t={t} locale={locale} />
           </InfoColumn>
         )}
@@ -227,7 +258,7 @@ type Info = {
   isTest: boolean;
 };
 
-async function loadThread(id: string): Promise<{ data: ThreadData; info: Info } | null> {
+async function loadThread(id: string, meId: string): Promise<{ data: ThreadData; info: Info; team: TeamState; staff: { id: string; name: string }[] } | null> {
   const [row] = await db
     .select({
       conversation: conversations,
@@ -262,6 +293,12 @@ async function loadThread(id: string): Promise<{ data: ThreadData; info: Info } 
 
   const c = row.conversation;
   const visible = msgs.filter((m) => m.role !== "system");
+  const [notes, staff, tagRows] = await Promise.all([
+    db.select().from(conversationNotes).where(eq(conversationNotes.conversationId, id)).orderBy(asc(conversationNotes.createdAt)),
+    db.select({ id: users.id, name: users.name }).from(users).where(ne(users.role, "client")).orderBy(asc(users.name)),
+    // Подсказки меток: уже используемые в разговорах этого клиента
+    Promise.resolve(db.$sqlite.prepare("select distinct j.value as value from conversations c, json_each(c.tags) j where c.client_id = ? limit 30").all(c.clientId) as { value: string }[]),
+  ]);
   return {
     data: {
       id: c.id,
@@ -282,6 +319,7 @@ async function loadThread(id: string): Promise<{ data: ThreadData; info: Info } 
       botReplies: c.channelType !== "api" || c.kind === "comment" || Boolean((row.channelConfig as { dmAt?: number }).dmAt),
       typing: isTyping(c.id),
       messages: msgs,
+      notes: notes.map((n) => ({ id: n.id, authorName: n.authorName, text: n.text, createdAt: n.createdAt, mine: n.authorId === meId })),
     },
     info: {
       clientId: c.clientId,
@@ -293,6 +331,8 @@ async function loadThread(id: string): Promise<{ data: ThreadData; info: Info } 
       language: c.context?.language ?? null,
       isTest: c.isTest,
     },
+    team: { assigneeId: c.assigneeId, tags: c.tags, snoozedUntil: c.snoozedUntil && c.snoozedUntil.getTime() > Date.now() ? c.snoozedUntil.getTime() : null, suggestions: tagRows.map((r) => r.value).filter((x) => !c.tags.includes(x)) },
+    staff,
   };
 }
 

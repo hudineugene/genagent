@@ -6,13 +6,15 @@ import { useI18n } from "@/lib/i18n/client";
 import { cx } from "./ui";
 
 type Tone = "success" | "error" | "info";
-type Item = { id: number; text: string; tone: Tone };
+type Action = { label: string; onClick: () => void };
+type Opts = { duration?: number; action?: Action };
+type Item = { id: number; text: string; tone: Tone; action?: Action };
 
 const EVENT = "genagent:toast";
 
 /** Всплывающее уведомление в углу экрана: «Сохранено», «Не удалось…» — без надписей посреди страницы. */
-export function toast(text: string, tone: Tone = "success") {
-  window.dispatchEvent(new CustomEvent<{ text: string; tone: Tone }>(EVENT, { detail: { text, tone } }));
+export function toast(text: string, tone: Tone = "success", opts: Opts = {}) {
+  window.dispatchEvent(new CustomEvent<{ text: string; tone: Tone } & Opts>(EVENT, { detail: { text, tone, ...opts } }));
 }
 
 const LOOK: Record<Tone, { icon: typeof Info; cls: string }> = {
@@ -28,17 +30,17 @@ export function Toaster() {
   useEffect(() => {
     let seq = 0;
     const on = (e: Event) => {
-      const { text, tone } = (e as CustomEvent<{ text: string; tone: Tone }>).detail;
+      const { text, tone, duration, action } = (e as CustomEvent<{ text: string; tone: Tone } & Opts>).detail;
       const id = ++seq;
-      setItems((list) => [...list.slice(-3), { id, text, tone }]);
-      setTimeout(() => setItems((list) => list.filter((x) => x.id !== id)), tone === "error" ? 7000 : 4000);
+      setItems((list) => [...list.slice(-3), { id, text, tone, action }]);
+      setTimeout(() => setItems((list) => list.filter((x) => x.id !== id)), duration ?? (tone === "error" ? 7000 : 4000));
     };
     window.addEventListener(EVENT, on);
     return () => window.removeEventListener(EVENT, on);
   }, []);
   return (
     <div aria-live="polite" className="pointer-events-none fixed inset-x-3 bottom-20 z-[60] flex flex-col items-center gap-2 md:inset-x-auto md:right-5 md:bottom-5 md:items-end">
-      {items.map(({ id, text, tone }) => {
+      {items.map(({ id, text, tone, action }) => {
         const { icon: Icon, cls } = LOOK[tone];
         return (
           <div
@@ -48,6 +50,18 @@ export function Toaster() {
           >
             <Icon className={cx("mt-0.5 size-4 shrink-0", cls)} />
             <span className="min-w-0 flex-1">{text}</span>
+            {action && (
+              <button
+                type="button"
+                onClick={() => {
+                  action.onClick();
+                  setItems((list) => list.filter((x) => x.id !== id));
+                }}
+                className="shrink-0 rounded-md px-1.5 text-sm font-semibold text-accent hover:bg-accent-soft"
+              >
+                {action.label}
+              </button>
+            )}
             <button type="button" aria-label={t.shell.close} onClick={() => setItems((list) => list.filter((x) => x.id !== id))} className="grid size-5 shrink-0 place-items-center rounded text-muted hover:text-text">
               <X className="size-3.5" />
             </button>

@@ -6,7 +6,7 @@ import { deleteForm, saveForm } from "@/app/actions/forms";
 import { useI18n } from "@/lib/i18n/client";
 import { Badge, Button, Card, EmptyState, Field, Input, Select, Textarea, buttonClass } from "@/components/ui";
 import type { FormField } from "@/db/schema";
-import { ask } from "@/components/confirm-dialog";
+import { deleteWithUndo, useHiddenIds } from "@/components/undo-delete";
 
 type Kind = "form" | "quiz";
 export type FormRow = {
@@ -30,6 +30,7 @@ const newField = (n: number): FormField => ({ key: `q${n}`, label: "", type: "te
 const empty = (kind: Kind): Draft => ({ kind, name: "", purpose: "", fields: [newField(1)], thanks: "", notify: true, enabled: true });
 
 export function FormsManager({ clientId, rows }: { clientId: string; rows: FormRow[] }) {
+  const hiddenIds = useHiddenIds();
   const { t, locale } = useI18n();
   const f = t.forms;
   const [editing, setEditing] = useState<string | Kind | null>(null);
@@ -53,7 +54,7 @@ export function FormsManager({ clientId, rows }: { clientId: string; rows: FormR
       )}
       {(editing === "form" || editing === "quiz") && <FormEditor clientId={clientId} initial={empty(editing)} onDone={() => setEditing(null)} />}
       {rows.length === 0 && editing === null && <EmptyState icon={<ClipboardList />} text={f.empty} action={<Button variant="secondary" onClick={() => setEditing("form")}><ClipboardList className="size-4" />{f.newForm}</Button>} />}
-      {rows.map((r) =>
+      {rows.filter((r) => !hiddenIds.has(r.id)).map((r) =>
         editing === r.id ? (
           <FormEditor key={r.id} clientId={clientId} id={r.id} initial={r} onDone={() => setEditing(null)} />
         ) : (
@@ -122,9 +123,8 @@ export function FormsManager({ clientId, rows }: { clientId: string; rows: FormR
 
 function DeleteButton({ id }: { id: string }) {
   const { t } = useI18n();
-  const [pending, start] = useTransition();
   return (
-    <Button variant="ghost" size="sm" disabled={pending} title={t.forms.delete} onClick={async () => await ask(t.forms.confirmDelete) && start(() => deleteForm(id))}>
+    <Button variant="ghost" size="sm" title={t.forms.delete} onClick={() => deleteWithUndo({ id, text: t.shell.deleted, undoLabel: t.shell.undo, failText: t.shell.saveFailed, run: () => deleteForm(id) })}>
       <Trash2 className="size-4" />
     </Button>
   );

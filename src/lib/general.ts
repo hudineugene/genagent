@@ -49,6 +49,8 @@ export const generalSchema = z.object({
       qualityCheck: z.boolean().default(true),
       gapsAnalysis: z.boolean().default(true),
       agentReview: z.boolean().default(true),
+      // Сводка дня от ИИ на «Сегодня» — новая функция, по умолчанию выключена
+      daySummary: z.boolean().default(false),
     })
     .prefault({}),
 });

@@ -33,8 +33,12 @@ import {
   ClipboardList,
   Download,
   UserX,
+  StickyNote,
 } from "lucide-react";
 import { scenarioFromConversationAction } from "@/app/actions/tests";
+import { addNote, deleteNote } from "@/app/actions/team-inbox";
+import { FOCUS_NOTE } from "./list";
+import { RelTime } from "@/components/rel-time";
 import {
   deleteConversation,
   erasePersonAction,
@@ -101,6 +105,8 @@ export type ThreadData = {
     createdAt: Date;
     author: string | null;
   }[];
+  /** Внутренние заметки команды (клиент не видит) */
+  notes: { id: string; authorName: string; text: string; createdAt: Date; mine: boolean }[];
 };
 
 export function Thread({ data, backHref }: { data: ThreadData; backHref: string }) {
@@ -108,6 +114,17 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
   const { t, locale } = useI18n();
   const [pending, start] = useTransition();
   const [text, setText] = useState("");
+  // Режим поля: ответ клиенту или заметка команде (своего бота без ответов отсюда — только заметки)
+  const [noteMode, setNoteMode] = useState(!data.botReplies);
+  const replyRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const focusNote = () => {
+      setNoteMode(true);
+      setTimeout(() => replyRef.current?.focus(), 0);
+    };
+    window.addEventListener(FOCUS_NOTE, focusNote);
+    return () => window.removeEventListener(FOCUS_NOTE, focusNote);
+  }, []);
   const [error, setError] = useState<string | null>(null);
   // «Проверить ответ»: оценка черновика менеджера и улучшенный вариант
   const [review, setReview] = useState<{ score: number; problems: string[]; better: string } | null>(null);
@@ -137,6 +154,35 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
       </div>
     );
   };
+  /** Заметки команды со временем в [from, to): жёлтые пузыри по центру, клиент их не видит. */
+  const notesIn = (from: number, to: number) =>
+    data.notes
+      .filter((n) => {
+        const at = new Date(n.createdAt).getTime();
+        return at >= from && at < to;
+      })
+      .map((n) => (
+        <div key={n.id} className="mx-auto w-full max-w-[85%] rounded-2xl border border-amber-500/40 bg-amber-500/10 px-3.5 py-2 text-sm">
+          <div className="mb-0.5 flex items-center gap-1.5 text-[11px] font-medium text-amber-700 dark:text-amber-300">
+            <StickyNote className="size-3" />
+            {t.inbox.team.note} · {n.authorName} · <RelTime at={n.createdAt} />
+            {n.mine && (
+              <button
+                type="button"
+                className="ml-auto text-amber-700/70 hover:text-danger dark:text-amber-300/70"
+                aria-label={t.inbox.team.deleteNote}
+                title={t.inbox.team.deleteNote}
+                onClick={async () => {
+                  if (await ask(t.common.confirmDelete)) void deleteNote(n.id);
+                }}
+              >
+                <X className="size-3.5" />
+              </button>
+            )}
+          </div>
+          <p className="whitespace-pre-wrap break-words">{n.text.split(/(@[\p{L}\d_.-]+(?:\s[\p{Lu}][\p{L}]+)?)/u).map((part, k) => (part.startsWith("@") ? <b key={k} className="text-amber-800 dark:text-amber-200">{part}</b> : part))}</p>
+        </div>
+      ));
   /** Аватар у последнего сообщения подряд от того же отправителя — как в мессенджерах. */
   const lastOfGroup = (i: number) => {
     const m = data.messages[i];
@@ -180,6 +226,14 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
     if (!body) return;
     setText("");
     setReview(null);
+    if (noteMode) {
+      run(async () => {
+        const r = await addNote(data.id, body);
+        if (r.error) setText(body);
+        return r;
+      });
+      return;
+    }
     run(async () => {
       const r = await sendOperatorMessage(data.id, body);
       if (r.error) setText(body);
@@ -342,6 +396,7 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
         )}
         {data.messages.map((m, i) => (
           <Fragment key={m.id}>
+          {i === 0 && notesIn(0, new Date(m.createdAt).getTime())}
           {daySep(i)}
           {((): ReactNode => {
           if (m.status === "draft") return <DraftMessage key={m.id} id={m.id} text={m.text} />;
@@ -507,8 +562,10 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
             </div>
           );
           })()}
+          {notesIn(new Date(m.createdAt).getTime(), i + 1 < data.messages.length ? new Date(data.messages[i + 1].createdAt).getTime() : Number.POSITIVE_INFINITY)}
           </Fragment>
         ))}
+        {data.messages.length === 0 && notesIn(0, Number.POSITIVE_INFINITY)}
         {data.typing && data.mode === "ai" && (
           <div className="flex items-center justify-end gap-2 text-xs text-muted">
             <Spinner className="size-3" />
@@ -538,11 +595,20 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
           </button>
         </div>
       )}
-      {!data.botReplies ? (
-        <p className="border-t border-border px-4 py-3 text-xs text-muted">{t.inbox.apiReplyInBot}</p>
-      ) : (
+      {!data.botReplies && <p className="border-t border-border px-4 pt-3 text-xs text-muted">{t.inbox.apiReplyInBot}</p>}
       <>
-      <QuickReplies text={text} onPick={(q) => setText((v) => (v.trim() ? `${v.trimEnd()} ${q}` : q))} />
+      <div className="flex items-center gap-1 border-t border-border px-3 pt-2">
+        {data.botReplies && (
+          <button type="button" onClick={() => setNoteMode(false)} aria-pressed={!noteMode} className={cx("rounded-lg px-2.5 py-1 text-xs font-medium transition", !noteMode ? "bg-surface-2 text-text" : "text-muted hover:text-text")}>
+            {t.inbox.team.replyMode}
+          </button>
+        )}
+        <button type="button" onClick={() => setNoteMode(true)} aria-pressed={noteMode} className={cx("flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition", noteMode ? "bg-amber-500/15 text-amber-700 dark:text-amber-300" : "text-muted hover:text-text")}>
+          <StickyNote className="size-3.5" />
+          {t.inbox.team.noteMode}
+        </button>
+      </div>
+      {!noteMode && <QuickReplies text={text} onPick={(q) => setText((v) => (v.trim() ? `${v.trimEnd()} ${q}` : q))} />}
       <form
         className="flex items-end gap-2 p-3 pt-2"
         onSubmit={(e) => {
@@ -551,6 +617,8 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
         }}
       >
         <textarea
+          ref={replyRef}
+          data-reply
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
@@ -560,9 +628,13 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
             }
           }}
           rows={2}
-          placeholder={data.mode === "ai" ? t.inbox.placeholderAi : t.inbox.placeholder}
-          className="max-h-40 min-h-11 flex-1 resize-y rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-accent focus:ring-4 focus:ring-accent/15"
+          placeholder={noteMode ? t.inbox.team.notePlaceholder : data.mode === "ai" ? t.inbox.placeholderAi : t.inbox.placeholder}
+          className={cx(
+            "max-h-40 min-h-11 flex-1 resize-y rounded-xl border px-3 py-2.5 text-sm outline-none focus:ring-4",
+            noteMode ? "border-amber-500/50 bg-amber-500/5 focus:border-amber-500 focus:ring-amber-500/15" : "border-border bg-surface focus:border-accent focus:ring-accent/15",
+          )}
         />
+        {!noteMode && (
         <Button
           type="button"
           variant="secondary"
@@ -577,12 +649,12 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
         >
           {checking ? <Spinner /> : <ShieldCheck className="size-4" />}
         </Button>
-        <Button type="submit" disabled={!text.trim() || pending} title={t.inbox.send}>
+        )}
+        <Button type="submit" disabled={!text.trim() || pending} title={noteMode ? t.inbox.team.note : t.inbox.send} className={noteMode ? "bg-amber-500 text-white hover:brightness-105" : undefined}>
           <SendHorizontal className="size-4" />
         </Button>
       </form>
       </>
-      )}
       {review && (
         <div className="mx-3 mb-3 rounded-xl border border-border bg-surface-2/60 p-3 text-sm">
           <div className={cx("flex items-center gap-1.5 font-medium", review.score >= 8 ? "text-success" : review.score >= 6 ? "text-amber-600" : "text-danger")}>

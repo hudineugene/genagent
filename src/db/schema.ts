@@ -1661,6 +1661,13 @@ export const conversations = sqliteTable(
     /** Тестовый разговор (свой или сотрудника): не в аналитике, памяти, обучении и проверках */
     isTest: integer("is_test", { mode: "boolean" }).notNull().default(false),
     unread: integer("unread").notNull().default(0),
+    /** Сотрудник студии, ответственный за разговор (null — никто не взял) */
+    assigneeId: text("assignee_id").references(() => users.id, { onDelete: "set null" }),
+    /** Метки команды: «VIP», «жалоба», свои — для фильтра в «Диалогах» */
+    tags: text("tags", { mode: "json" }).$type<string[]>().notNull().default([]),
+    /** «Отложить до…»: разговор скрыт из списка до этого времени или до нового сообщения клиента после snoozedAt */
+    snoozedUntil: integer("snoozed_until", { mode: "timestamp_ms" }),
+    snoozedAt: integer("snoozed_at", { mode: "timestamp_ms" }),
     lastMessageText: text("last_message_text").notNull().default(""),
     lastMessageAt: integer("last_message_at", { mode: "timestamp_ms" })
       .notNull()
@@ -1671,6 +1678,23 @@ export const conversations = sqliteTable(
     uniqueIndex("conversations_channel_external_idx").on(t.channelId, t.externalId),
     index("conversations_last_idx").on(t.lastMessageAt),
   ],
+);
+
+/** Внутренние заметки команды к разговору: клиент их не видит; mentions — id упомянутых сотрудников (@имя). */
+export const conversationNotes = sqliteTable(
+  "conversation_notes",
+  {
+    id: id(),
+    conversationId: text("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    authorId: text("author_id").references(() => users.id, { onDelete: "set null" }),
+    authorName: text("author_name").notNull().default(""),
+    text: text("text").notNull(),
+    mentions: text("mentions", { mode: "json" }).$type<string[]>().notNull().default([]),
+    createdAt: createdAt(),
+  },
+  (t) => [index("conversation_notes_conv_idx").on(t.conversationId, t.createdAt)],
 );
 
 /** Долгая память о клиенте: короткие факты из прошлых разговоров (src/lib/agent/memory.ts) */

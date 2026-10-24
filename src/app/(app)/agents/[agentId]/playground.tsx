@@ -5,6 +5,20 @@ import { BookOpen, CalendarCheck, CalendarSearch, FlaskConical, Hand, RotateCcw,
 import type { AgentConfig } from "@/lib/agent/types";
 import { useI18n } from "@/lib/i18n/client";
 import { Button, Card, Spinner, cx } from "@/components/ui";
+import { ChannelIcon } from "@/components/agent-map/channel-icon";
+
+/**
+ * Вид тест-чата «как в канале»: фон и пузыри Telegram, WhatsApp, Instagram или виджета на сайте — чтобы показать
+ * клиенту, как ответ увидят его покупатели. limit — длина сообщения, после которой канал его разобьёт или обрежет.
+ */
+const SKINS = {
+  plain: { area: "bg-surface-2/50", user: "rounded-br-md bg-accent text-accent-text", bot: "rounded-bl-md border border-border bg-surface", limit: 0 },
+  telegram: { area: "bg-[#cfe3c4] dark:bg-[#0e1621]", user: "rounded-br-sm bg-[#effdde] text-[#0f1419] shadow-sm dark:bg-[#2b5278] dark:text-white", bot: "rounded-bl-sm bg-white text-[#0f1419] shadow-sm dark:bg-[#182533] dark:text-white", limit: 4096 },
+  whatsapp: { area: "bg-[#efeae2] dark:bg-[#0b141a]", user: "rounded-tr-sm bg-[#d9fdd3] text-[#111b21] shadow-sm dark:bg-[#005c4b] dark:text-[#e9edef]", bot: "rounded-tl-sm bg-white text-[#111b21] shadow-sm dark:bg-[#202c33] dark:text-[#e9edef]", limit: 4096 },
+  instagram: { area: "bg-white dark:bg-black", user: "rounded-3xl bg-[#3797f0] text-white", bot: "rounded-3xl bg-[#efefef] text-black dark:bg-[#262626] dark:text-white", limit: 1000 },
+  widget: { area: "bg-surface", user: "rounded-br-md bg-accent text-accent-text", bot: "rounded-bl-md bg-surface-2", limit: 0 },
+} as const;
+type Skin = keyof typeof SKINS;
 
 type Msg = { role: "user" | "assistant"; content: string };
 type KbInfo = { mode: "full" | "search"; sources: { title: string; url: string | null }[] } | null;
@@ -35,6 +49,8 @@ export function Playground({ clientId, config }: { clientId: string; config: Age
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ErrorInfo | null>(null);
+  const [skin, setSkin] = useState<Skin>("plain");
+  const look = SKINS[skin];
   const abortRef = useRef<AbortController | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -141,12 +157,29 @@ export function Playground({ clientId, config }: { clientId: string; config: Age
             {t.playground.title}
           </div>
         </div>
-        <Button variant="ghost" size="sm" onClick={reset} title={t.playground.reset}>
-          <RotateCcw className="size-4" />
-        </Button>
+        <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5 rounded-lg bg-surface-2 p-0.5" role="group" aria-label={t.playground.skin}>
+            {(Object.keys(SKINS) as Skin[]).map((k) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setSkin(k)}
+                aria-pressed={skin === k}
+                title={t.playground.skins[k]}
+                aria-label={t.playground.skins[k]}
+                className={cx("grid h-6 min-w-6 place-items-center rounded-md px-1 text-[11px] font-medium transition", skin === k ? "bg-surface shadow-sm" : "opacity-60 hover:opacity-100")}
+              >
+                {k === "plain" ? "Aa" : <ChannelIcon type={k} size={18} />}
+              </button>
+            ))}
+          </div>
+          <Button variant="ghost" size="sm" onClick={reset} title={t.playground.reset}>
+            <RotateCcw className="size-4" />
+          </Button>
+        </div>
       </div>
 
-      <div className="flex-1 space-y-3 overflow-y-auto bg-surface-2/50 px-4 py-4">
+      <div className={cx("flex-1 space-y-3 overflow-y-auto px-4 py-4 transition-colors", look.area)}>
         {shown.length === 0 && (
           <div className="grid h-full place-items-center text-center">
             <div className="max-w-64">
@@ -169,15 +202,16 @@ export function Playground({ clientId, config }: { clientId: string; config: Age
         {shown.map((m, i) => (
           <div key={i} className={cx("flex flex-col", m.role === "user" ? "items-end" : "items-start")}>
             <div
-              className={cx(
-                "max-w-[85%] whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed",
-                m.role === "user"
-                  ? "rounded-br-md bg-accent text-accent-text"
-                  : "rounded-bl-md border border-border bg-surface",
-              )}
+              className={cx("max-w-[85%] whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed", m.role === "user" ? look.user : look.bot)}
             >
               {m.content || <Spinner className="size-3.5 text-muted" />}
             </div>
+            {m.role === "assistant" && look.limit > 0 && m.content.length > look.limit && (
+              <div className="mt-1 flex items-center gap-1 px-1 text-[11px] font-medium text-amber-700 dark:text-amber-400">
+                <TriangleAlert className="size-3" />
+                {t.playground.tooLong.replace("{n}", String(look.limit))}
+              </div>
+            )}
             {tools[i]?.map((c, j) => <ToolNote key={j} call={c} />)}
             {meta[i] && (
               <div className="mt-1 px-1 text-[11px] text-muted">

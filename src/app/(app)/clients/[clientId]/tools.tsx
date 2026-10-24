@@ -6,7 +6,7 @@ import { deleteTool, saveTool, testTool } from "@/app/actions/tools";
 import { useI18n } from "@/lib/i18n/client";
 import { Badge, Button, Card, EmptyState, Field, Input, Select, Textarea, cx } from "@/components/ui";
 import type { ToolParam } from "@/db/schema";
-import { ask } from "@/components/confirm-dialog";
+import { deleteWithUndo, useHiddenIds } from "@/components/undo-delete";
 
 export type ToolRow = {
   id: string;
@@ -43,6 +43,7 @@ const toDraft = (r: ToolRow): Draft => ({
 const mask = (v: string) => (v.length > 8 ? `${v.slice(0, 6)}••••` : "••••");
 
 export function ToolsManager({ clientId, tools, googleEmail, children }: { clientId: string; tools: ToolRow[]; googleEmail: string | null; children?: React.ReactNode }) {
+  const hiddenIds = useHiddenIds();
   const { t, locale } = useI18n();
   const tt = t.tools;
   const [editing, setEditing] = useState<string | "new" | null>(null);
@@ -66,7 +67,7 @@ export function ToolsManager({ clientId, tools, googleEmail, children }: { clien
       {tools.length === 0 && editing !== "new" ? (
         <EmptyState icon={<Wrench />} text={tt.empty} action={<Button variant="secondary" onClick={() => setEditing("new")}><Plus className="size-4" />{tt.add}</Button>} />
       ) : (
-        tools.map((r) =>
+        tools.filter((r) => !hiddenIds.has(r.id)).map((r) =>
           editing === r.id ? (
             <ToolForm key={r.id} clientId={clientId} id={r.id} initial={toDraft(r)} googleEmail={googleEmail} onDone={() => setEditing(null)} />
           ) : (
@@ -120,15 +121,13 @@ export function ToolsManager({ clientId, tools, googleEmail, children }: { clien
 
 function DeleteButton({ id }: { id: string }) {
   const { t } = useI18n();
-  const [pending, start] = useTransition();
   return (
     <Button
       variant="ghost"
       size="sm"
-      disabled={pending}
       title={t.tools.delete}
       onClick={async () => {
-        if (await ask(t.tools.confirmDelete)) start(() => deleteTool(id));
+        deleteWithUndo({ id, text: t.shell.deleted, undoLabel: t.shell.undo, failText: t.shell.saveFailed, run: () => deleteTool(id) });
       }}
     >
       <Trash2 className="size-4" />

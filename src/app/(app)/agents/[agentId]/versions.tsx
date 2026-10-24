@@ -284,13 +284,8 @@ export function VersionsPanel({
                             {changes.map(({ f, from, to }) => (
                               <div key={f}>
                                 <dt className="text-xs font-medium text-muted">{label(f)}</dt>
-                                <dd className="mt-1 grid gap-1 text-sm">
-                                  <span className="whitespace-pre-wrap rounded-lg bg-danger/8 px-2 py-1 text-danger line-through decoration-danger/40">
-                                    {from}
-                                  </span>
-                                  <span className="whitespace-pre-wrap rounded-lg bg-success/10 px-2 py-1 text-success">
-                                    {to}
-                                  </span>
+                                <dd className="mt-1 text-sm">
+                                  <WordDiff from={from} to={to} />
                                 </dd>
                               </div>
                             ))}
@@ -394,6 +389,67 @@ function StartAb({ agentId, versionId, version }: { agentId: string; versionId: 
       <Button size="sm" variant="secondary" disabled={pending} onClick={() => start(async () => { await startExperimentAction(agentId, versionId, share); setDone(true); })}>
         {a.start.replace("{v}", String(version))}
       </Button>
+    </span>
+  );
+}
+
+type Seg = { t: string; k: "same" | "del" | "add" };
+
+/** Разница по словам (наибольшая общая подпоследовательность); слишком длинные тексты — целиком «было/стало». */
+function wordDiff(a: string, b: string): Seg[] | null {
+  const x = a.split(/(\s+)/);
+  const y = b.split(/(\s+)/);
+  if (x.length * y.length > 400_000) return null;
+  const m = x.length;
+  const n = y.length;
+  const dp = Array.from({ length: m + 1 }, () => new Uint16Array(n + 1));
+  for (let i = m - 1; i >= 0; i--) for (let j = n - 1; j >= 0; j--) dp[i][j] = x[i] === y[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+  const out: Seg[] = [];
+  const push = (t: string, k: Seg["k"]) => {
+    const last = out[out.length - 1];
+    if (last && last.k === k) last.t += t;
+    else out.push({ t, k });
+  };
+  let i = 0;
+  let j = 0;
+  while (i < m && j < n) {
+    if (x[i] === y[j]) {
+      push(x[i], "same");
+      i++;
+      j++;
+    } else if (dp[i + 1][j] >= dp[i][j + 1]) push(x[i++], "del");
+    else push(y[j++], "add");
+  }
+  while (i < m) push(x[i++], "del");
+  while (j < n) push(y[j++], "add");
+  return out;
+}
+
+/** Было → стало одним текстом: убранное — зачёркнуто красным, добавленное — зелёным. */
+function WordDiff({ from, to }: { from: string; to: string }) {
+  const segs = wordDiff(from, to);
+  if (!segs)
+    return (
+      <span className="grid gap-1">
+        <span className="whitespace-pre-wrap rounded-lg bg-danger/8 px-2 py-1 text-danger line-through decoration-danger/40">{from}</span>
+        <span className="whitespace-pre-wrap rounded-lg bg-success/10 px-2 py-1 text-success">{to}</span>
+      </span>
+    );
+  return (
+    <span className="block whitespace-pre-wrap rounded-lg bg-surface-2/60 px-2 py-1.5 leading-relaxed">
+      {segs.map((s, i) =>
+        s.k === "same" ? (
+          <span key={i}>{s.t}</span>
+        ) : s.k === "del" ? (
+          <del key={i} className="rounded bg-danger/12 text-danger decoration-danger/50">
+            {s.t}
+          </del>
+        ) : (
+          <ins key={i} className="rounded bg-success/15 text-success no-underline">
+            {s.t}
+          </ins>
+        ),
+      )}
     </span>
   );
 }

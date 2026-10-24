@@ -10,7 +10,7 @@ const DAYS = 14;
 
 export type HomeTrends = { wrote: number[]; answered: number[]; handoffs: number[]; spend: number[]; byClient: Record<string, number[]> };
 export type FeedItem = {
-  kind: "new" | "handoff" | "hot" | "paid";
+  kind: "new" | "handoff" | "hot" | "paid" | "mention";
   at: number;
   conversationId: string | null;
   contact: string;

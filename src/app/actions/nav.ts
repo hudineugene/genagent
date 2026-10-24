@@ -1,8 +1,8 @@
 "use server";
 
-import { and, count, desc, eq, ne } from "drizzle-orm";
+import { and, count, desc, eq, gt, like, ne } from "drizzle-orm";
 import { db } from "@/db";
-import { agents, channels, clients, conversations, knowledgeGaps } from "@/db/schema";
+import { agents, channels, clients, conversationNotes, conversations, knowledgeGaps } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
 import { canClient, inScope, scopeOf } from "@/lib/access";
 import { getT } from "@/lib/i18n/server";
@@ -80,5 +80,15 @@ export async function navContext(pathname: string): Promise<NavCtx> {
 export async function bellFeed() {
   const user = await requireUser();
   const { homeFeed } = await import("@/lib/home-live");
-  return homeFeed(scopeOf(user), 20);
+  // Упоминания этого сотрудника в заметках команды за 3 дня (свои заметки не в счёт)
+  const mentions = await db
+    .select({ at: conversationNotes.createdAt, conversationId: conversationNotes.conversationId, author: conversationNotes.authorName, client: clients.name, color: clients.color })
+    .from(conversationNotes)
+    .innerJoin(conversations, eq(conversations.id, conversationNotes.conversationId))
+    .innerJoin(clients, eq(clients.id, conversations.clientId))
+    .where(and(like(conversationNotes.mentions, `%"${user.id}"%`), ne(conversationNotes.authorId, user.id), gt(conversationNotes.createdAt, new Date(Date.now() - 3 * 86_400_000)), inScope(conversations.clientId, scopeOf(user))))
+    .orderBy(desc(conversationNotes.createdAt))
+    .limit(10);
+  const feed = await homeFeed(scopeOf(user), 20);
+  return [...mentions.map((m) => ({ kind: "mention" as const, at: m.at.getTime(), conversationId: m.conversationId, contact: m.author, client: m.client, color: m.color })), ...feed].sort((a, b) => b.at - a.at).slice(0, 24);
 }
