@@ -1,4 +1,6 @@
 import "server-only";
+import { withKeys } from "@/lib/keys";
+import { apiKey as keyOf } from "@/lib/keys";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
@@ -48,8 +50,8 @@ function chartTool(out: ChartSpec[]): AgentTool {
   };
 }
 
-export async function askData(clientId: string, question: string, history: ChatMessage[] = [], tableIds?: string[]) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+async function askData__(clientId: string, question: string, history: ChatMessage[] = [], tableIds?: string[]) {
+  const apiKey = keyOf("anthropic");
   if (!apiKey) return { answer: "", charts: [], queries: 0, error: "no_key" as const };
   const [client] = await db.select({ name: clients.name }).from(clients).where(eq(clients.id, clientId));
   let tables = await db.select().from(dataTables).where(and(eq(dataTables.clientId, clientId), eq(dataTables.enabled, true)));
@@ -77,4 +79,9 @@ export async function askData(clientId: string, question: string, history: ChatM
     else if (ev.type === "done") await logUsage({ source: "insights", model: ev.servedBy, usage: ev.usage, clientId, ms: Date.now() - started }).catch(() => {});
   }
   return { answer: answer.trim(), charts, queries };
+}
+
+/** askData — в области ключей клиента (его ключи ИИ, если заданы). */
+export async function askData(...a: Parameters<typeof askData__>): ReturnType<typeof askData__> {
+  return withKeys({ clientId: a[0] }, () => askData__(...a));
 }

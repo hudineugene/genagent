@@ -1,4 +1,5 @@
 import "server-only";
+import { apiKey, withKeys } from "@/lib/keys";
 import { and, desc, eq, gt, lt } from "drizzle-orm";
 import { db } from "@/db";
 import { agentEvents, agents, channels, clients, conversations, messages, type ApiConfig } from "@/db/schema";
@@ -24,7 +25,7 @@ const LANGS: Record<string, string> = { ru: "русский", uk: "україн�
 
 /** dryRun — только отобрать, кому напомнить (без модели и без записи): для проверки. Возвращает число напоминаний (или кандидатов). */
 export async function runFollowUps({ dryRun = false }: { dryRun?: boolean } = {}): Promise<number> {
-  const key = process.env.ANTHROPIC_API_KEY ?? "";
+  const key = apiKey("anthropic") ?? "";
   if (!key && !dryRun) return 0;
   const apiChannels = (await db.select().from(channels).where(and(eq(channels.type, "api"), eq(channels.enabled, true)))).filter(
     (c) => (c.config as ApiConfig).followUps,
@@ -84,7 +85,7 @@ export async function runFollowUps({ dryRun = false }: { dryRun?: boolean } = {}
       const cfg = agent.config as { replyLanguage?: string; toneCustom?: string };
       const started = Date.now();
       try {
-        const { data, usage, model } = await generateJson<{ send: boolean; text: string }>(key, MODEL, {
+        const { data, usage, model } = await withKeys({ clientId: ch.clientId }, () => generateJson<{ send: boolean; text: string }>(key, MODEL, {
           system: [
             `Ты пишешь одно короткое напоминание от компании «${agent.client}» клиенту, который вчера переписывался с консультантом и не дошёл до следующего шага.`,
             "1–2 предложения, тепло и без давления: вспомни, о чём он спрашивал, и предложи один понятный следующий шаг (кнопки бота можно называть). Не повторяй цены и факты, которых нет в переписке. Без markdown, максимум одно эмодзи.",
@@ -98,7 +99,7 @@ export async function runFollowUps({ dryRun = false }: { dryRun?: boolean } = {}
           prompt: dialog.map((m) => `${m.role === "user" ? "Клиент" : "Консультант"}: ${m.text.slice(0, 800)}`).join("\n"),
           schema: { type: "object", additionalProperties: false, required: ["send", "text"], properties: { send: { type: "boolean" }, text: { type: "string" } } },
           effort: "low",
-        });
+        }));
         await logUsage({ source: "insights", model, usage, agentId: agent.id, clientId: ch.clientId, conversationId: c.id, ms: Date.now() - started }).catch(() => {});
         await db.update(conversations).set({ context: { ...c.context, followUpAt: now } }).where(eq(conversations.id, c.id));
         const text = data.text.trim();

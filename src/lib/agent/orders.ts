@@ -1,4 +1,6 @@
 import "server-only";
+import { withKeys } from "@/lib/keys";
+import { apiKey } from "@/lib/keys";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { agents, clients, conversations, messages, type ApiConfig, type Channel, type Conversation, type OrderState } from "@/db/schema";
@@ -63,13 +65,13 @@ export function keepsFacts(fallback: string, text: string): boolean {
  * Живой текст о смене статуса или null (выключено, нет разговора с агентом, менеджер ведёт диалог,
  * бюджет исчерпан, модель не ответила или потеряла факты) — тогда бот шлёт свой шаблон.
  */
-export async function writeOrderNote(
+async function writeOrderNote__(
   channel: Pick<Channel, "id" | "agentId" | "clientId" | "config">,
   conversation: Conversation,
   u: OrderUpdate,
   fallback: string,
 ): Promise<string | null> {
-  const key = process.env.ANTHROPIC_API_KEY ?? "";
+  const key = apiKey("anthropic") ?? "";
   const cfg = channel.config as ApiConfig;
   if (!key || !cfg.orderNotes || conversation.mode !== "ai" || !fallback.trim()) return null;
   const [agent] = await db
@@ -133,4 +135,9 @@ export async function saveOrder(conversation: Conversation, u: OrderUpdate, note
   if (note) {
     await db.insert(messages).values({ conversationId: conversation.id, role: "assistant", text: note, status: "sent", meta: { orderNote: true } });
   }
+}
+
+/** writeOrderNote — в области ключей клиента (его ключи ИИ, если заданы). */
+export async function writeOrderNote(...a: Parameters<typeof writeOrderNote__>): ReturnType<typeof writeOrderNote__> {
+  return withKeys({ clientId: a[0].clientId }, () => writeOrderNote__(...a));
 }

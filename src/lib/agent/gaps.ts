@@ -1,4 +1,6 @@
 import "server-only";
+import { withKeys } from "@/lib/keys";
+import { apiKey } from "@/lib/keys";
 import { and, asc, eq, gt, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { agents, conversations, knowledgeGaps, messages } from "@/db/schema";
@@ -74,8 +76,8 @@ async function exchangesSince(agentId: string, since: number): Promise<Exchange[
 type Found = { question: string; missing: string; exchanges: number[]; matchId: string; suggestedAnswer: string };
 
 /** Разобрать новые переписки агента. Возвращает, сколько найдено новых вопросов. */
-export async function analyzeGaps(agentId: string): Promise<{ newGaps: number; updated: number; exchanges: number }> {
-  const key = process.env.ANTHROPIC_API_KEY;
+async function analyzeGaps__(agentId: string): Promise<{ newGaps: number; updated: number; exchanges: number }> {
+  const key = apiKey("anthropic");
   const [agent] = await db.select().from(agents).where(eq(agents.id, agentId));
   if (!key || !agent) return { newGaps: 0, updated: 0, exchanges: 0 };
   const cursors = (await getSetting<Record<string, number>>(CURSOR_KEY)) ?? {};
@@ -202,4 +204,9 @@ export function startGapsAnalysis() {
   setTimeout(() => void run(), 5 * 60_000).unref?.();
   g.__gapsTimer = setInterval(() => void run(), 60 * 60_000);
   g.__gapsTimer.unref?.();
+}
+
+/** analyzeGaps — в области ключей клиента (его ключи ИИ, если заданы). */
+export async function analyzeGaps(...a: Parameters<typeof analyzeGaps__>): ReturnType<typeof analyzeGaps__> {
+  return withKeys({ agentId: a[0] }, () => analyzeGaps__(...a));
 }

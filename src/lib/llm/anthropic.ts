@@ -1,4 +1,5 @@
 import "server-only";
+import { scopedKey } from "@/lib/keys";
 import Anthropic from "@anthropic-ai/sdk";
 import { MAX_TOOL_ROUNDS, runTool, type ChatRequest, type ChatStreamEvent, type ChatUsage } from "./types";
 
@@ -6,7 +7,9 @@ import { MAX_TOOL_ROUNDS, runTool, type ChatRequest, type ChatStreamEvent, type 
 const FALLBACK_MODELS = new Set(["claude-opus-5-5", "claude-sonnet-5-5", "claude-fable-5-1", "claude-opus-5"]);
 
 const clients = new Map<string, Anthropic>();
-function getClient(apiKey: string) {
+/** Ключ клиента (если работа идёт в его области) главнее переданного ключа студии. */
+function getClient(studioKey: string) {
+  const apiKey = scopedKey("anthropic") || studioKey;
   let c = clients.get(apiKey);
   if (!c) clients.set(apiKey, (c = new Anthropic({ apiKey })));
   return c;

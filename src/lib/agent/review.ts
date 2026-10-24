@@ -1,4 +1,6 @@
 import "server-only";
+import { withKeys } from "@/lib/keys";
+import { apiKey as keyOf } from "@/lib/keys";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, gt, inArray } from "drizzle-orm";
 import { db } from "@/db";
@@ -131,8 +133,8 @@ type ModelOut = {
 };
 
 /** Разобрать неделю агента. null — разговоров слишком мало (модель не вызывалась). */
-export async function reviewAgent(agentId: string, sinceMs = Date.now() - WEEK_MS): Promise<AgentReview | null> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+async function reviewAgent__(agentId: string, sinceMs = Date.now() - WEEK_MS): Promise<AgentReview | null> {
+  const apiKey = keyOf("anthropic");
   const [row] = await db
     .select({ agent: agents, client: clients.name })
     .from(agents)
@@ -336,4 +338,9 @@ export function startWeeklyReview() {
   setTimeout(() => void tick(), 6 * 60_000).unref?.();
   g.__reviewTimer = setInterval(() => void tick(), 30 * 60_000);
   g.__reviewTimer.unref?.();
+}
+
+/** reviewAgent — в области ключей клиента (его ключи ИИ, если заданы). */
+export async function reviewAgent(...a: Parameters<typeof reviewAgent__>): ReturnType<typeof reviewAgent__> {
+  return withKeys({ agentId: a[0] }, () => reviewAgent__(...a));
 }

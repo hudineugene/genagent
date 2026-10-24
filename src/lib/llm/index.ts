@@ -1,5 +1,6 @@
 import "server-only";
 import { parseModelId, PROVIDER_ENV } from "@/lib/models";
+import { apiKey } from "@/lib/keys";
 import { streamAnthropic } from "./anthropic";
 import { streamOpenAICompatible } from "./openai";
 import type { ChatRequest, ChatStreamEvent } from "./types";
@@ -15,7 +16,7 @@ export class MissingKeyError extends Error {
 /** Единая точка вызова любой модели: возвращает поток текстовых фрагментов и итог. */
 export async function* streamChat(req: ChatRequest): AsyncGenerator<ChatStreamEvent> {
   const { provider, model } = parseModelId(req.model);
-  const key = process.env[PROVIDER_ENV[provider]];
+  const key = apiKey(provider);
   if (!key) throw new MissingKeyError(PROVIDER_ENV[provider]);
 
   if (provider === "anthropic") {

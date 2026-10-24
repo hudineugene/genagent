@@ -1,4 +1,6 @@
 import "server-only";
+import { withKeys } from "@/lib/keys";
+import { apiKey } from "@/lib/keys";
 import { and, asc, desc, eq, gt, inArray, lt } from "drizzle-orm";
 import { db } from "@/db";
 import { agents, conversations, kbSources, knowledgeGaps, messages } from "@/db/schema";
@@ -26,7 +28,7 @@ type Proposal = { useful: boolean; question: string; answer: string; matchId: st
 
 /** Возвращает id новых/обновлённых предложений (для уведомлений). */
 export async function runLearning(): Promise<string[]> {
-  const key = process.env.ANTHROPIC_API_KEY ?? "";
+  const key = apiKey("anthropic") ?? "";
   if (!key) return [];
   const now = Date.now();
   const cursor = (await getSetting<number>(CURSOR_KEY)) ?? now - FIRST_LOOKBACK_MS;
@@ -68,7 +70,7 @@ export async function runLearning(): Promise<string[]> {
   return proposals;
 }
 
-async function learnFrom(key: string, conversationId: string, at: number): Promise<string | null> {
+async function learnFrom__(key: string, conversationId: string, at: number): Promise<string | null> {
   const [row] = await db
     .select({ conversation: conversations, agentStatus: agents.status, agentName: agents.name })
     .from(conversations)
@@ -161,4 +163,9 @@ export function startLearning() {
   setTimeout(run, 4 * 60_000).unref?.();
   g.__learnTimer = setInterval(run, 10 * 60_000);
   g.__learnTimer.unref?.();
+}
+
+/** learnFrom — в области ключей клиента (его ключи ИИ, если заданы). */
+async function learnFrom(...a: Parameters<typeof learnFrom__>): ReturnType<typeof learnFrom__> {
+  return withKeys({ conversationId: a[1] }, () => learnFrom__(...a));
 }

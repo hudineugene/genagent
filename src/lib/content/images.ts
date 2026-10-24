@@ -1,4 +1,5 @@
 import "server-only";
+import { apiKey } from "@/lib/keys";
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -49,7 +50,7 @@ export function defaultImagePrompt(p: { title: string; brief: string; client: st
 
 /** Сгенерировать картинку 1024×1024; около $0.04 за картинку среднего качества. */
 export async function generateContentImage(prompt: string): Promise<string> {
-  const key = process.env.OPENAI_API_KEY;
+  const key = apiKey("openai");
   if (!key) throw new Error("no_openai");
   const client = new OpenAI({ apiKey: key, baseURL: process.env.OPENAI_BASE_URL || undefined });
   const r = await client.images.generate({ model: "gpt-image-1", prompt: prompt.slice(0, 4000), size: "1024x1024", quality: "medium", n: 1 });

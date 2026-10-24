@@ -1,4 +1,5 @@
 import "server-only";
+import { withKeys } from "@/lib/keys";
 import { and, asc, eq, gt, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { agents, clients, conversations, dataTables, messages, routines, type Routine, type RoutineSchedule, type RoutineSource } from "@/db/schema";
@@ -114,7 +115,7 @@ export function toTelegramHtml(text: string) {
 }
 
 /** Выполнить отчёт сейчас: собрать данные, получить текст, отправить. Возвращает текст отчёта. */
-export async function runRoutine(id: string, opts: { send?: boolean } = {}): Promise<{ ok: boolean; text: string }> {
+async function runRoutine__(id: string, opts: { send?: boolean } = {}): Promise<{ ok: boolean; text: string }> {
   const [r] = await db.select().from(routines).where(eq(routines.id, id));
   if (!r) return { ok: false, text: "not_found" };
   const [client] = await db.select({ name: clients.name }).from(clients).where(eq(clients.id, r.clientId));
@@ -200,3 +201,9 @@ export function startRoutines() {
 }
 
 export type { Routine };
+
+/** runRoutine — в области ключей клиента (его ключи ИИ, если заданы). */
+export async function runRoutine(...a: Parameters<typeof runRoutine__>): ReturnType<typeof runRoutine__> {
+  const [r] = await db.select({ clientId: routines.clientId }).from(routines).where(eq(routines.id, a[0]));
+  return withKeys({ clientId: r?.clientId }, () => runRoutine__(...a));
+}

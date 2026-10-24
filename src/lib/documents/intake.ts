@@ -1,4 +1,6 @@
 import "server-only";
+import { withKeys } from "@/lib/keys";
+import { apiKey as keyOf } from "@/lib/keys";
 import path from "node:path";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
@@ -47,8 +49,8 @@ export async function attachDocument(
 type Extracted = { type: string; fields: { key: string; value: string }[]; summary: string };
 
 /** Определить тип и достать поля. null — у клиента нет типов документов или документ ни под один не подходит. */
-export async function analyzeDocument(d: { clientId: string; agentId: string; conversationId: string | null; messageId: string | null; filename: string; text: string }) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+async function analyzeDocument__(d: { clientId: string; agentId: string; conversationId: string | null; messageId: string | null; filename: string; text: string }) {
+  const apiKey = keyOf("anthropic");
   const types = await db.select().from(clientDocTypes).where(and(eq(clientDocTypes.clientId, d.clientId), eq(clientDocTypes.enabled, true)));
   if (!apiKey || !types.length || !d.text.trim()) return null;
   const started = Date.now();
@@ -88,4 +90,9 @@ export async function analyzeDocument(d: { clientId: string; agentId: string; co
   void import("@/lib/integrations/events").then((m) => m.emitEvent("document", { clientId: d.clientId, agentId: d.agentId, conversationId: d.conversationId, document: payload }));
   if (docType.notify) void import("@/lib/notify/telegram").then((n) => n.notifyDocument(d.conversationId, d.clientId, payload));
   return row;
+}
+
+/** analyzeDocument — в области ключей клиента (его ключи ИИ, если заданы). */
+export async function analyzeDocument(...a: Parameters<typeof analyzeDocument__>): ReturnType<typeof analyzeDocument__> {
+  return withKeys({ clientId: a[0].clientId }, () => analyzeDocument__(...a));
 }

@@ -1,4 +1,6 @@
 import "server-only";
+import { withKeys } from "@/lib/keys";
+import { apiKey as keyOf } from "@/lib/keys";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { agents, clients, conversations, messages } from "@/db/schema";
@@ -32,8 +34,8 @@ async function context(conversationId: string) {
 }
 
 /** Оценить ответ сотрудника. history — разговор до этого ответа (последнее — сообщение клиента). */
-export async function reviewReply(conversationId: string, reply: string, history?: ChatMessage[]): Promise<OperatorReview | null> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+async function reviewReply__(conversationId: string, reply: string, history?: ChatMessage[]): Promise<OperatorReview | null> {
+  const apiKey = keyOf("anthropic");
   const ctx = await context(conversationId);
   if (!apiKey || !ctx) return null;
   const dialog =
@@ -105,4 +107,9 @@ export async function reviewOperatorMessage(messageId: string) {
   } catch (e) {
     console.error("operator review failed", messageId, e);
   }
+}
+
+/** reviewReply — в области ключей клиента (его ключи ИИ, если заданы). */
+export async function reviewReply(...a: Parameters<typeof reviewReply__>): ReturnType<typeof reviewReply__> {
+  return withKeys({ conversationId: a[0] }, () => reviewReply__(...a));
 }

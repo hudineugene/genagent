@@ -1,3 +1,4 @@
+import { apiKey, withKeys } from "@/lib/keys";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
@@ -92,7 +93,7 @@ const SCHEMA = {
 
 const clean = (s: unknown, max: number) => (typeof s === "string" ? s.replace(/\s+/g, " ").trim().slice(0, max) : "");
 
-export async function POST(req: Request, { params }: { params: Promise<{ channelId: string }> }) {
+async function handle(req: Request, { params }: { params: Promise<{ channelId: string }> }) {
   const origin = req.headers.get("origin");
   const headers = cors(origin);
   if (!ORIGINS.has(origin ?? "")) return Response.json({ error: "forbidden" }, { status: 403, headers });
@@ -114,7 +115,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ channel
     return Response.json({ error: "rate_limited" }, { status: 429, headers });
   }
 
-  const key = process.env.ANTHROPIC_API_KEY;
+  const key = apiKey("anthropic");
   if (!key) return Response.json({ error: "unavailable" }, { status: 503, headers });
 
   const uk = b.lang === "uk";
@@ -186,4 +187,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ channel
   }
 
   return Response.json({ passport }, { headers });
+}
+
+/** Всё, что делается по запросу канала, — в области ключей клиента этого канала. */
+export async function POST(req: Request, ctx: { params: Promise<{ channelId: string }> }) {
+  const { channelId } = await ctx.params;
+  const [ch] = await db.select({ clientId: channels.clientId }).from(channels).where(eq(channels.id, channelId));
+  return withKeys({ clientId: ch?.clientId }, () => handle(req, { params: Promise.resolve({ channelId }) }));
 }

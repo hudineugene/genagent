@@ -1,4 +1,6 @@
 import "server-only";
+import { withKeys } from "@/lib/keys";
+import { apiKey } from "@/lib/keys";
 import fs from "node:fs";
 import path from "node:path";
 import Anthropic from "@anthropic-ai/sdk";
@@ -33,13 +35,13 @@ const DESCRIBE_MODEL = "claude-haiku-5-5";
  * Что на фото — для консультанта компании: предмет, детали, надписи. 2–4 предложения, без советов.
  * null — не вышло (нет ключа, ошибка).
  */
-export async function describePhoto(
+async function describePhoto__(
   image: string,
   mediaType: ImageType,
   owner: { agentId: string; clientId: string },
   caption?: string,
 ): Promise<string | null> {
-  const key = process.env.ANTHROPIC_API_KEY;
+  const key = apiKey("anthropic");
   if (!key) return null;
   const started = Date.now();
   try {
@@ -81,4 +83,9 @@ export async function describePhoto(
     console.error("describe photo failed", e);
     return null;
   }
+}
+
+/** describePhoto — в области ключей клиента (его ключи ИИ, если заданы). */
+export async function describePhoto(...a: Parameters<typeof describePhoto__>): ReturnType<typeof describePhoto__> {
+  return withKeys({ clientId: a[2].clientId }, () => describePhoto__(...a));
 }

@@ -1,4 +1,6 @@
 import "server-only";
+import { withKeys } from "@/lib/keys";
+import { apiKey } from "@/lib/keys";
 import { generateJson } from "@/lib/llm/anthropic";
 import { logUsage } from "@/lib/usage";
 import { DEFAULT_MODEL, parseModelId } from "@/lib/models";
@@ -64,8 +66,8 @@ const SYSTEM = `Ты — архитектор ИИ-агентов в студи�
 ${SKILLS.map((s) => `- ${s.key}: ${s.name.ru} — ${s.description.ru}`).join("\n")}
 Пиши все текстовые поля на языке брифа. Не выдумывай факты о компании: цены, адреса и условия оставляй как [заполнить] в knowledgeTemplate.`;
 
-export async function generateAgentConfig(brief: string, client: ClientContext & { id: string }) {
-  const key = process.env.ANTHROPIC_API_KEY;
+async function generateAgentConfig__(brief: string, client: ClientContext & { id: string }) {
+  const key = apiKey("anthropic");
   if (!key) throw new Error("Не задан ANTHROPIC_API_KEY в .env");
 
   const prompt = `Клиент студии: ${client.name}
@@ -99,4 +101,9 @@ ${brief}`;
     knowledge: g.knowledgeTemplate,
   };
   return { name: g.name || "Агент", config };
+}
+
+/** generateAgentConfig — в области ключей клиента (его ключи ИИ, если заданы). */
+export async function generateAgentConfig(...a: Parameters<typeof generateAgentConfig__>): ReturnType<typeof generateAgentConfig__> {
+  return withKeys({ clientId: a[1].id }, () => generateAgentConfig__(...a));
 }

@@ -1,4 +1,5 @@
 import "server-only";
+import { withKeys } from "@/lib/keys";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { type ApiConfig,
@@ -153,7 +154,7 @@ export function scheduleReply(conversationId: string) {
 }
 
 /** Сгенерировать и отправить ответ агента. Одновременно — не больше одной генерации на диалог. */
-export async function respond(conversationId: string): Promise<void> {
+async function respond__(conversationId: string): Promise<void> {
   if (busy.has(conversationId)) {
     again.add(conversationId);
     return;
@@ -695,4 +696,9 @@ export async function listMessages(conversationId: string, opts: { afterId?: str
   if (!opts.afterId) return rows;
   const i = rows.findIndex((m) => m.id === opts.afterId);
   return i < 0 ? rows : rows.slice(i + 1);
+}
+
+/** respond — в области ключей клиента (его ключи ИИ, если заданы). */
+export async function respond(...a: Parameters<typeof respond__>): ReturnType<typeof respond__> {
+  return withKeys({ conversationId: a[0] }, () => respond__(...a));
 }

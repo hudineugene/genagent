@@ -30,6 +30,7 @@ import { clientOwners, getNotifySettings } from "@/lib/notify/telegram";
 import { embeddingProgress, embeddingStatus } from "@/lib/kb/embeddings";
 import { previousMonth } from "@/lib/agent/report";
 import { hasTeamAgents } from "@/lib/team/approvals";
+import { hasKey } from "@/lib/keys";
 
 export default async function ClientPage({
   params,
@@ -240,7 +241,7 @@ async function LogisticsTab({ clientId }: { clientId: string }) {
   return (
     <LogisticsManager
       clientId={clientId}
-      mapsKey={Boolean(process.env.GOOGLE_MAPS_API_KEY)}
+      mapsKey={await hasKey(clientId, "googleMaps")}
       settings={{ baseAddress: l?.baseAddress ?? "", stopMinutes: l?.stopMinutes ?? 10, vehicles: l?.vehicles ?? [], deliveryNote: l?.deliveryNote ?? "" }}
     />
   );
@@ -294,7 +295,7 @@ async function MeetingsTab({ clientId }: { clientId: string }) {
   return (
     <MeetingsManager
       clientId={clientId}
-      openai={Boolean(process.env.OPENAI_API_KEY)}
+      openai={await hasKey(clientId, "openai")}
       rows={rows.map((r) => ({
         id: r.id,
         title: r.title,
@@ -322,7 +323,7 @@ async function ContentTab({ clientId }: { clientId: string }) {
   return (
     <ContentStudio
       clientId={clientId}
-      openai={Boolean(process.env.OPENAI_API_KEY)}
+      openai={await hasKey(clientId, "openai")}
       bots={bots.map((b) => ({ id: b.id, name: b.type === "threads" ? `Threads · ${b.name}` : b.name, type: b.type === "threads" ? ("threads" as const) : ("telegram" as const) }))}
       rows={rows.map((r) => ({
         id: r.id,

@@ -1,4 +1,6 @@
 import "server-only";
+import { withKeys } from "@/lib/keys";
+import { apiKey as keyOf } from "@/lib/keys";
 import { randomUUID } from "node:crypto";
 import { and, eq, lte } from "drizzle-orm";
 import { db } from "@/db";
@@ -42,8 +44,8 @@ const PLATFORM_RULES: Record<ContentPlatform, string> = {
 };
 const LENGTH: Record<GenerateInput["length"], string> = { short: "коротко (до 600 знаков)", medium: "средне (600–1500 знаков)", long: "развёрнуто (1500–4000 знаков)" };
 
-export async function generateContent(clientId: string, input: GenerateInput) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+async function generateContent__(clientId: string, input: GenerateInput) {
+  const apiKey = keyOf("anthropic");
   if (!apiKey) throw new Error("no_key");
   const [client] = await db.select().from(clients).where(eq(clients.id, clientId));
   if (!client) throw new Error("not_found");
@@ -163,4 +165,9 @@ export function startContent() {
   if (g.__contentTimer) return;
   g.__contentTimer = setInterval(() => void publishDue().catch((e) => console.error("content tick failed", e)), 60_000);
   g.__contentTimer.unref?.();
+}
+
+/** generateContent — в области ключей клиента (его ключи ИИ, если заданы). */
+export async function generateContent(...a: Parameters<typeof generateContent__>): ReturnType<typeof generateContent__> {
+  return withKeys({ clientId: a[0] }, () => generateContent__(...a));
 }

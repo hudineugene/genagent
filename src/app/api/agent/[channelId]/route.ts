@@ -1,7 +1,8 @@
+import { withKeys } from "@/lib/keys";
 import { and, asc, desc, eq, gt, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { agents, conversations, messages } from "@/db/schema";
+import { agents, channels, conversations, messages } from "@/db/schema";
 import { apiChannel } from "@/lib/channels/api-auth";
 import { addMessage, isTyping, respond, upsertConversation } from "@/lib/conversations";
 import { describePhoto, saveThumb } from "@/lib/media";
@@ -55,7 +56,7 @@ const WAIT_LIMIT_MS = 90_000;
 const g = globalThis as unknown as { __apiClaimed?: Set<string> };
 const claimed = (g.__apiClaimed ??= new Set());
 
-export async function POST(req: Request, { params }: { params: Promise<{ channelId: string }> }) {
+async function handle(req: Request, { params }: { params: Promise<{ channelId: string }> }) {
   const { channelId } = await params;
   const channel = await apiChannel(channelId, req.headers.get("authorization"));
   if (!channel) return Response.json({ error: "unauthorized" }, { status: 401 });
@@ -171,4 +172,11 @@ async function operatorWroteWithin(conversationId: string, ms: number) {
     .orderBy(desc(messages.createdAt))
     .limit(1);
   return Boolean(last && last.role === "operator" && Date.now() - last.createdAt.getTime() < ms);
+}
+
+/** Всё, что делается по запросу канала, — в области ключей клиента этого канала. */
+export async function POST(req: Request, ctx: { params: Promise<{ channelId: string }> }) {
+  const { channelId } = await ctx.params;
+  const [ch] = await db.select({ clientId: channels.clientId }).from(channels).where(eq(channels.id, channelId));
+  return withKeys({ clientId: ch?.clientId }, () => handle(req, { params: Promise.resolve({ channelId }) }));
 }

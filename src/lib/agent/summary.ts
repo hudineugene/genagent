@@ -1,4 +1,6 @@
 import "server-only";
+import { withKeys } from "@/lib/keys";
+import { apiKey } from "@/lib/keys";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { messages } from "@/db/schema";
@@ -14,11 +16,11 @@ const HISTORY = 30;
  * Выжимка разговора для менеджера, которому агент передал клиента: 2–4 строки — что клиент ищет,
  * какие параметры назвал, что уже обсудили и чего он ждёт от менеджера. null — не получилось (не мешает передаче).
  */
-export async function handoffSummary(
+async function handoffSummary__(
   conversationId: string,
   ctx: { agentId: string; clientId: string; kbSourceIds?: string[] | null; language?: string },
 ): Promise<{ summary: string | null; draft: string | null }> {
-  const key = process.env.ANTHROPIC_API_KEY;
+  const key = apiKey("anthropic");
   if (!key) return { summary: null, draft: null };
   try {
     const rows = await db
@@ -68,4 +70,9 @@ export async function handoffSummary(
     console.error("handoff summary failed", conversationId, e);
     return { summary: null, draft: null };
   }
+}
+
+/** handoffSummary — в области ключей клиента (его ключи ИИ, если заданы). */
+export async function handoffSummary(...a: Parameters<typeof handoffSummary__>): ReturnType<typeof handoffSummary__> {
+  return withKeys({ conversationId: a[0] }, () => handoffSummary__(...a));
 }

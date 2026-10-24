@@ -8,6 +8,7 @@ import { channels, clients, contentItems } from "@/db/schema";
 import { defaultImagePrompt, generateContentImage, removeContentImage } from "@/lib/content/images";
 import { CONTENT_KINDS, CONTENT_PLATFORMS } from "@/lib/content/kinds";
 import { requireUser } from "@/lib/auth";
+import { withKeys } from "@/lib/keys";
 import { generateContent, publishItem } from "@/lib/content/studio";
 
 const genSchema = z.object({
@@ -22,7 +23,7 @@ const genSchema = z.object({
   withImage: z.boolean().optional(),
 });
 
-export async function generateContentAction(clientId: string, input: z.input<typeof genSchema>): Promise<{ error?: string; batch?: string; imageError?: string }> {
+async function generateContentAction__(clientId: string, input: z.input<typeof genSchema>): Promise<{ error?: string; batch?: string; imageError?: string }> {
   await requireUser();
   const parsed = genSchema.safeParse(input);
   if (!parsed.success) return { error: "invalid" };
@@ -114,7 +115,7 @@ export async function deleteContentItem(id: string) {
 }
 
 /** Сгенерировать картинку к посту (заменяет прежнюю). Пустая подсказка — по теме поста. */
-export async function generateImageAction(clientId: string, id: string, prompt: string): Promise<{ error?: string }> {
+async function generateImageAction__(clientId: string, id: string, prompt: string): Promise<{ error?: string }> {
   await requireUser();
   const [row] = await db
     .select({ item: contentItems, client: clients.name, industry: clients.industry })
@@ -142,4 +143,12 @@ export async function removeImageAction(id: string) {
   if (row?.image) removeContentImage(row.image);
   await db.update(contentItems).set({ image: "", updatedAt: new Date() }).where(eq(contentItems.id, id));
   refresh();
+}
+
+export async function generateContentAction(...a: Parameters<typeof generateContentAction__>): ReturnType<typeof generateContentAction__> {
+  return withKeys({ clientId: a[0] }, () => generateContentAction__(...a));
+}
+
+export async function generateImageAction(...a: Parameters<typeof generateImageAction__>): ReturnType<typeof generateImageAction__> {
+  return withKeys({ clientId: a[0] }, () => generateImageAction__(...a));
 }

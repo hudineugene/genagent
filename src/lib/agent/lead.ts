@@ -1,4 +1,6 @@
 import "server-only";
+import { withKeys } from "@/lib/keys";
+import { apiKey } from "@/lib/keys";
 import { and, asc, desc, eq, gt, inArray, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { agents, conversations, messages, type LeadCard } from "@/db/schema";
@@ -18,8 +20,8 @@ const PER_RUN = 30;
 export const DEFAULT_LEAD_FIELDS = "Что ищет, Бюджет, Сроки, Контакт";
 
 /** Обновить карточку лида разговора. null — нечего оценивать (клиент почти ничего не написал). */
-export async function updateLead(conversationId: string): Promise<LeadCard | null> {
-  const key = process.env.ANTHROPIC_API_KEY;
+async function updateLead__(conversationId: string): Promise<LeadCard | null> {
+  const key = apiKey("anthropic");
   const [row] = await db
     .select({ conversation: conversations, agentConfig: agents.config })
     .from(conversations)
@@ -145,7 +147,7 @@ export async function flushHotAlerts() {
 /** Обновить карточки разговоров, где клиент написал новое и затем помолчал QUIET_MS. Возвращает число обновлённых. */
 export async function runLeads(): Promise<number> {
   await flushHotAlerts().catch((e) => console.error("hot lead alerts failed", e));
-  if (!process.env.ANTHROPIC_API_KEY) return 0;
+  if (!apiKey("anthropic")) return 0;
   const now = Date.now();
   const rows = await db
     .select({ id: conversations.id, lastMessageAt: conversations.lastMessageAt, context: conversations.context, agentStatus: agents.status })
@@ -178,4 +180,9 @@ export function startLeads() {
   setTimeout(run, 4 * 60_000).unref?.();
   g.__leadsCardTimer = setInterval(run, 5 * 60_000);
   g.__leadsCardTimer.unref?.();
+}
+
+/** updateLead — в области ключей клиента (его ключи ИИ, если заданы). */
+export async function updateLead(...a: Parameters<typeof updateLead__>): ReturnType<typeof updateLead__> {
+  return withKeys({ conversationId: a[0] }, () => updateLead__(...a));
 }

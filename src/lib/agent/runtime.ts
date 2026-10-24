@@ -1,4 +1,5 @@
 import "server-only";
+import { apiKey } from "@/lib/keys";
 import { compileSystemPrompt, type ClientContext } from "./compile";
 import type { AgentConfig } from "./types";
 import { loadKnowledge } from "@/lib/kb/store";
@@ -86,7 +87,7 @@ export async function prepareChat(
     ...forms.map((f) => formTool(f, { ...tools, clientId: client.id })),
     ...templates.map((t) => docTool(t, { ...tools, clientId: client.id })),
     ...tables.map((t) => tableTool(t)),
-    ...(config.logistics && process.env.GOOGLE_MAPS_API_KEY ? [deliveryTool(client.id)] : []),
+    ...(config.logistics && apiKey("googleMaps") ? [deliveryTool(client.id)] : []),
     ...(loyalty ? loyaltyTools(loyalty, { ...tools, clientId: client.id }) : []),
     ...(config.team?.enabled && config.team.approvals ? [approvalTool(config.team, { ...tools, clientId: client.id })] : []),
   ];

@@ -1,7 +1,8 @@
+import { apiKey, withKeys } from "@/lib/keys";
 import { and, asc, eq, gt } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { conversations, messages } from "@/db/schema";
+import { channels, conversations, messages } from "@/db/schema";
 import { apiChannel } from "@/lib/channels/api-auth";
 import { generateJson } from "@/lib/llm/anthropic";
 import { logUsage } from "@/lib/usage";
@@ -28,7 +29,7 @@ const bodySchema = z.object({
     .max(12),
 });
 
-export async function POST(req: Request, { params }: { params: Promise<{ channelId: string }> }) {
+async function handle(req: Request, { params }: { params: Promise<{ channelId: string }> }) {
   const { channelId } = await params;
   const channel = await apiChannel(channelId, req.headers.get("authorization"));
   if (!channel) return Response.json({ error: "unauthorized" }, { status: 401 });
@@ -51,7 +52,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ channel
   const dialog = rows.filter((m) => m.role === "user" || m.role === "assistant" || m.role === "operator").slice(-40);
   if (!dialog.some((m) => m.role === "user")) return Response.json({ values: empty, found: 0 });
 
-  const key = process.env.ANTHROPIC_API_KEY;
+  const key = apiKey("anthropic");
   if (!key) return Response.json({ values: empty, found: 0, reason: "no_key" });
 
   const started = Date.now();
@@ -84,4 +85,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ channel
     console.error("extract failed", e);
     return Response.json({ values: empty, found: 0, reason: "error" });
   }
+}
+
+/** Всё, что делается по запросу канала, — в области ключей клиента этого канала. */
+export async function POST(req: Request, ctx: { params: Promise<{ channelId: string }> }) {
+  const { channelId } = await ctx.params;
+  const [ch] = await db.select({ clientId: channels.clientId }).from(channels).where(eq(channels.id, channelId));
+  return withKeys({ clientId: ch?.clientId }, () => handle(req, { params: Promise.resolve({ channelId }) }));
 }

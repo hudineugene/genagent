@@ -1,4 +1,6 @@
 import "server-only";
+import { withKeys } from "@/lib/keys";
+import { apiKey as keyOf } from "@/lib/keys";
 import path from "node:path";
 import { eq } from "drizzle-orm";
 import OpenAI, { toFile } from "openai";
@@ -39,7 +41,7 @@ export async function transcriptFromFile(buf: Buffer, filename: string): Promise
 
 /** Расшифровка записи. gpt-4o-transcribe точнее; если не вышло — whisper-1. */
 export async function transcribeAudio(buf: Buffer, filename: string): Promise<string> {
-  const key = process.env.OPENAI_API_KEY;
+  const key = keyOf("openai");
   if (!key) throw new Error("no_openai");
   if (buf.length > MAX_AUDIO_BYTES) throw new Error("too_large");
   const client = new OpenAI({ apiKey: key, baseURL: process.env.OPENAI_BASE_URL || undefined });
@@ -69,7 +71,7 @@ type Analysis = { title: string; summary: string; result: string; tasks: Meeting
 export async function analyzeMeeting(id: string) {
   const [m] = await db.select().from(meetings).where(eq(meetings.id, id));
   if (!m) return null;
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = keyOf("anthropic");
   if (!apiKey) throw new Error("no_key");
   const [client] = await db.select({ name: clients.name }).from(clients).where(eq(clients.id, m.clientId));
   const today = new Intl.DateTimeFormat("ru-RU", { timeZone: "Europe/Kyiv", dateStyle: "long" }).format(m.createdAt);
@@ -133,7 +135,7 @@ export async function deliverMeeting(m: Meeting) {
 }
 
 /** Полная обработка новой встречи: расшифровка (если запись) и разбор. Ошибки — в статус. */
-export async function processMeeting(id: string, file?: { buf: Buffer; filename: string; audio: boolean }) {
+async function processMeeting__(id: string, file?: { buf: Buffer; filename: string; audio: boolean }) {
   try {
     if (file) {
       const transcript = file.audio ? await transcribeAudio(file.buf, file.filename) : await transcriptFromFile(file.buf, file.filename);
@@ -147,4 +149,10 @@ export async function processMeeting(id: string, file?: { buf: Buffer; filename:
     await db.update(meetings).set({ status: "error", error: code.slice(0, 500), updatedAt: new Date() }).where(eq(meetings.id, id));
     return null;
   }
+}
+
+/** processMeeting — в области ключей клиента (его ключи ИИ, если заданы). */
+export async function processMeeting(...a: Parameters<typeof processMeeting__>): ReturnType<typeof processMeeting__> {
+  const [m] = await db.select({ clientId: meetings.clientId }).from(meetings).where(eq(meetings.id, a[0]));
+  return withKeys({ clientId: m?.clientId }, () => processMeeting__(...a));
 }

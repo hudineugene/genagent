@@ -1,3 +1,7 @@
+import { eq } from "drizzle-orm";
+import { db } from "@/db";
+import { channels } from "@/db/schema";
+import { apiKey, withKeys } from "@/lib/keys";
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { apiChannel } from "@/lib/channels/api-auth";
@@ -18,13 +22,13 @@ const bodySchema = z.object({
   task: z.string().trim().min(5).max(400),
 });
 
-export async function POST(req: Request, { params }: { params: Promise<{ channelId: string }> }) {
+async function handle(req: Request, { params }: { params: Promise<{ channelId: string }> }) {
   const { channelId } = await params;
   const channel = await apiChannel(channelId, req.headers.get("authorization"));
   if (!channel) return Response.json({ error: "unauthorized" }, { status: 401 });
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "bad_request", details: parsed.error.issues[0]?.message }, { status: 400 });
-  const key = process.env.ANTHROPIC_API_KEY;
+  const key = apiKey("anthropic");
   if (!key) return Response.json({ text: null, reason: "no_key" });
   const { image, mediaType, task } = parsed.data;
 
@@ -62,4 +66,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ channel
     console.error("vision failed", e);
     return Response.json({ text: null, reason: "error" });
   }
+}
+
+/** Всё, что делается по запросу канала, — в области ключей клиента этого канала. */
+export async function POST(req: Request, ctx: { params: Promise<{ channelId: string }> }) {
+  const { channelId } = await ctx.params;
+  const [ch] = await db.select({ clientId: channels.clientId }).from(channels).where(eq(channels.id, channelId));
+  return withKeys({ clientId: ch?.clientId }, () => handle(req, { params: Promise.resolve({ channelId }) }));
 }

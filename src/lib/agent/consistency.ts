@@ -1,4 +1,6 @@
 import "server-only";
+import { withKeys } from "@/lib/keys";
+import { apiKey as keyOf } from "@/lib/keys";
 import { createHash } from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
@@ -81,8 +83,8 @@ async function material(agentId: string) {
  * Сверить сейчас. Возвращает найденные расхождения (null — нечего сверять или нет ключа).
  * notify=false — не слать в Telegram (ручной запуск из админки показывает результат сам).
  */
-export async function checkConsistency(agentId: string, opts: { force?: boolean; notify?: boolean } = {}): Promise<Conflict[] | null> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+async function checkConsistency__(agentId: string, opts: { force?: boolean; notify?: boolean } = {}): Promise<Conflict[] | null> {
+  const apiKey = keyOf("anthropic");
   if (!apiKey) return null;
   const m = await material(agentId);
   if (!m || !m.text) return null;
@@ -129,4 +131,9 @@ export async function checkConsistency(agentId: string, opts: { force?: boolean;
   const fresh = conflicts.filter((x) => !known.has(x.item.toLowerCase()));
   if (fresh.length && opts.notify !== false) void import("@/lib/notify/telegram").then((n) => n.notifyConflicts(agentId, fresh));
   return conflicts;
+}
+
+/** checkConsistency — в области ключей клиента (его ключи ИИ, если заданы). */
+export async function checkConsistency(...a: Parameters<typeof checkConsistency__>): ReturnType<typeof checkConsistency__> {
+  return withKeys({ agentId: a[0] }, () => checkConsistency__(...a));
 }

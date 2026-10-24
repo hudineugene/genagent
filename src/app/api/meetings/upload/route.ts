@@ -1,3 +1,4 @@
+import { apiKey } from "@/lib/keys";
 import path from "node:path";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
@@ -31,7 +32,7 @@ export async function POST(req: Request) {
     const audio = AUDIO_EXTENSIONS.includes(ext);
     if (!audio && !TEXT_EXTENSIONS.includes(ext)) return Response.json({ error: "unsupported" }, { status: 400 });
     if (file.size > (audio ? MAX_AUDIO_BYTES : 10 * 1024 * 1024)) return Response.json({ error: "too_large" }, { status: 400 });
-    if (audio && !process.env.OPENAI_API_KEY) return Response.json({ error: "no_openai" }, { status: 400 });
+    if (audio && !apiKey("openai")) return Response.json({ error: "no_openai" }, { status: 400 });
     input = { buf: Buffer.from(await file.arrayBuffer()), filename: file.name, audio };
   } else if (text.length < 50) return Response.json({ error: "no_input" }, { status: 400 });
 

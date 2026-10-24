@@ -1,4 +1,5 @@
 import "server-only";
+import { apiKey } from "@/lib/keys";
 import OpenAI from "openai";
 import { db } from "@/db";
 import { usageLog } from "@/db/schema";
@@ -18,7 +19,7 @@ const USD_PER_MINUTE = 0.015;
 const LANGS: Record<string, string> = { ru: "русском", uk: "українській", en: "English", es: "español" };
 
 export function speechAvailable() {
-  return Boolean(process.env.OPENAI_API_KEY);
+  return Boolean(apiKey("openai"));
 }
 
 /** Текст для озвучки: без ссылок, служебных меток и разметки; длинный — до последнего законченного предложения. */
@@ -44,7 +45,7 @@ export async function synthesize(
   text: string,
   opts: { voice?: string; language?: string; agentId?: string; clientId?: string; conversationId?: string },
 ): Promise<string | null> {
-  const key = process.env.OPENAI_API_KEY;
+  const key = apiKey("openai");
   const input = speakableText(text);
   if (!key || input.length < 2) return null;
   client ??= new OpenAI({ apiKey: key, baseURL: process.env.OPENAI_BASE_URL || undefined });

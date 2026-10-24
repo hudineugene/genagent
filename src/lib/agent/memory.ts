@@ -1,4 +1,5 @@
 import "server-only";
+import { apiKey, withKeys } from "@/lib/keys";
 import { and, asc, desc, eq, gt, inArray, lt } from "drizzle-orm";
 import { db } from "@/db";
 import { agents, conversations, messages, type ClientMemory } from "@/db/schema";
@@ -42,7 +43,7 @@ function clean(facts: unknown): string[] {
 
 /** Возвращает, сколько разговоров обновили. dryRun — только отобрать (без модели и без записи). */
 export async function runMemory({ dryRun = false }: { dryRun?: boolean } = {}): Promise<number> {
-  const key = process.env.ANTHROPIC_API_KEY ?? "";
+  const key = apiKey("anthropic") ?? "";
   if (!key && !dryRun) return 0;
   const now = Date.now();
   const rows = await db
@@ -84,7 +85,7 @@ export async function runMemory({ dryRun = false }: { dryRun?: boolean } = {}): 
     if (said) {
       const started = Date.now();
       try {
-        const { data, usage, model } = await generateJson<{ facts: string[] }>(key, MODEL, {
+        const { data, usage, model } = await withKeys({ clientId: c.clientId }, () => generateJson<{ facts: string[] }>(key, MODEL, {
           system: [
             "Ты ведёшь короткую память консультанта о постоянном клиенте компании: то, что пригодится в следующем разговоре через неделю или месяц.",
             `Слей прежние факты с новой перепиской в список до ${MAX_FACTS} пунктов, каждый — одна короткая фраза (до 15 слов) на русском.`,
@@ -104,7 +105,7 @@ export async function runMemory({ dryRun = false }: { dryRun?: boolean } = {}): 
           ].join("\n\n"),
           schema: { type: "object", additionalProperties: false, required: ["facts"], properties: { facts: { type: "array", items: { type: "string" } } } },
           effort: "low",
-        });
+        }));
         await logUsage({ source: "insights", model, usage, agentId: c.agentId, clientId: c.clientId, conversationId: c.id, ms: Date.now() - started }).catch(() => {});
         facts = clean(data.facts);
       } catch (e) {

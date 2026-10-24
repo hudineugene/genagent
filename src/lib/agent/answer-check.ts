@@ -1,4 +1,5 @@
 import "server-only";
+import { apiKey } from "@/lib/keys";
 import { generateJson } from "@/lib/llm/anthropic";
 import { streamChat } from "@/lib/llm";
 import type { ChatMessage } from "@/lib/llm/types";
@@ -20,7 +21,7 @@ export type AnswerCheck = { ok: boolean; problems: string[]; rewritten?: boolean
 type UsageCtx = { source: "channel" | "test"; agentId: string; clientId: string; conversationId?: string };
 
 async function verify(system: string, messages: ChatMessage[], draft: string, ctx: UsageCtx) {
-  const key = process.env.ANTHROPIC_API_KEY;
+  const key = apiKey("anthropic");
   if (!key) return null;
   // Последнее сообщение клиента — целиком: фрагменты базы стоят в его начале, а сам вопрос в конце; обрезка
   // начала теряла вопрос, и проверка «исправляла» верный ответ на встречный вопрос. Остальные — конец сообщения.

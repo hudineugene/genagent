@@ -30,6 +30,8 @@ export const clients = sqliteTable("clients", {
   description: text("description").notNull().default(""),
   brandVoice: text("brand_voice").notNull().default(""),
   color: text("color").notNull().default("#6366f1"),
+  /** Свои ключи клиента (его аккаунты ИИ и Google Maps): заданы — работа для клиента идёт за его счёт */
+  apiKeys: text("api_keys", { mode: "json" }).$type<Partial<Record<"anthropic" | "openai" | "openrouter" | "googleMaps", string>>>().notNull().default({}),
   createdAt: createdAt(),
 });
 
@@ -1074,6 +1076,8 @@ export const usageLog = sqliteTable(
     /** USD; null — цена модели неизвестна (OpenAI/OpenRouter вне каталога) */
     cost: real("cost"),
     ms: integer("ms"),
+    /** Вызов шёл по ключу клиента (за его счёт) */
+    ownKey: integer("own_key", { mode: "boolean" }).notNull().default(false),
     createdAt: createdAt(),
   },
   (t) => [index("usage_agent_idx").on(t.agentId, t.createdAt), index("usage_created_idx").on(t.createdAt)],

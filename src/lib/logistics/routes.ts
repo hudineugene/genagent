@@ -1,4 +1,5 @@
 import "server-only";
+import { apiKey } from "@/lib/keys";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
@@ -55,7 +56,7 @@ type RoutesResponse = {
 };
 
 async function callRoutes(body: object, mask: string): Promise<NonNullable<RoutesResponse["routes"]>[number]> {
-  const key = process.env.GOOGLE_MAPS_API_KEY;
+  const key = apiKey("googleMaps");
   if (!key) throw new Error("no_maps_key");
   const res = await fetch(ROUTES_URL(), {
     method: "POST",

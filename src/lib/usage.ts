@@ -1,4 +1,5 @@
 import "server-only";
+import { usingClientKey, type KeyKind } from "@/lib/keys";
 import { and, eq, gte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { usageLog } from "@/db/schema";
@@ -19,6 +20,8 @@ export function computeCost(model: string, usage: Pick<ChatUsage, "inputTokens" 
   const fresh = Math.max(0, usage.inputTokens - cached);
   return (fresh * price.input + cached * price.input * 0.1 + usage.outputTokens * price.output) / 1e6 + (usage.webSearches ?? 0) * WEB_SEARCH_USD;
 }
+
+const providerKind = (model: string): KeyKind => (model.startsWith("openai:") ? "openai" : model.startsWith("openrouter:") ? "openrouter" : "anthropic");
 
 export async function logUsage(entry: {
   source: "channel" | "playground" | "test" | "generate" | "insights";
@@ -41,6 +44,7 @@ export async function logUsage(entry: {
     cacheReadTokens: entry.usage.cacheReadTokens ?? 0,
     cost,
     ms: entry.ms,
+    ownKey: usingClientKey(providerKind(entry.model)),
   });
   return cost;
 }

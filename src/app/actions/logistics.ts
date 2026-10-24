@@ -5,6 +5,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { clientLogistics } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
+import { withKeys } from "@/lib/keys";
 import { MAX_STOPS, getLogistics, parseStops, planLoad, routeFrom, type PlannedRoute, type Stop } from "@/lib/logistics/routes";
 
 const settingsSchema = z.object({
@@ -35,7 +36,7 @@ const planSchema = z.object({
 });
 
 /** Маршруты на день: по одному или с распределением заказов по машинам (вес / объём). */
-export async function planRoutes(clientId: string, input: z.input<typeof planSchema>): Promise<{ error?: string; routes?: PlannedRoute[]; unassigned?: Stop[] }> {
+async function planRoutes__(clientId: string, input: z.input<typeof planSchema>): Promise<{ error?: string; routes?: PlannedRoute[]; unassigned?: Stop[] }> {
   await requireUser();
   const parsed = planSchema.safeParse(input);
   if (!parsed.success) return { error: "invalid" };
@@ -58,4 +59,8 @@ export async function planRoutes(clientId: string, input: z.input<typeof planSch
     if (m !== "no_maps_key") console.error("route planning failed", m);
     return { error: ["no_maps_key", "no_route", "too_many_stops"].includes(m) ? m : `google:${m}` };
   }
+}
+
+export async function planRoutes(...a: Parameters<typeof planRoutes__>): ReturnType<typeof planRoutes__> {
+  return withKeys({ clientId: a[0] }, () => planRoutes__(...a));
 }

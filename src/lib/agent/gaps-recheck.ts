@@ -1,4 +1,6 @@
 import "server-only";
+import { withKeys } from "@/lib/keys";
+import { apiKey } from "@/lib/keys";
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { agents, knowledgeGaps } from "@/db/schema";
@@ -19,8 +21,8 @@ const MAX_CHARS = 60_000;
 type Verdict = { id: string; answered: boolean; answer: string };
 
 /** Сверить открытые вопросы агента. Возвращает, сколько закрыто. */
-export async function recheckGaps(agentId: string): Promise<number> {
-  const key = process.env.ANTHROPIC_API_KEY;
+async function recheckGaps__(agentId: string): Promise<number> {
+  const key = apiKey("anthropic");
   const [agent] = await db.select().from(agents).where(eq(agents.id, agentId));
   if (!key || !agent) return 0;
   const open = await db
@@ -89,7 +91,7 @@ export async function recheckGaps(agentId: string): Promise<number> {
 }
 
 /** Сверить вопросы всех агентов клиента (перед рассылкой владельцу). */
-export async function recheckClientGaps(clientId: string): Promise<number> {
+async function recheckClientGaps__(clientId: string): Promise<number> {
   const list = await db
     .select({ id: agents.id })
     .from(agents)
@@ -97,4 +99,14 @@ export async function recheckClientGaps(clientId: string): Promise<number> {
   let n = 0;
   for (const a of list) n += await recheckGaps(a.id).catch((e) => (console.error("gaps recheck failed", a.id, e), 0));
   return n;
+}
+
+/** recheckGaps — в области ключей клиента (его ключи ИИ, если заданы). */
+export async function recheckGaps(...a: Parameters<typeof recheckGaps__>): ReturnType<typeof recheckGaps__> {
+  return withKeys({ agentId: a[0] }, () => recheckGaps__(...a));
+}
+
+/** recheckClientGaps — в области ключей клиента (его ключи ИИ, если заданы). */
+export async function recheckClientGaps(...a: Parameters<typeof recheckClientGaps__>): ReturnType<typeof recheckClientGaps__> {
+  return withKeys({ clientId: a[0] }, () => recheckClientGaps__(...a));
 }

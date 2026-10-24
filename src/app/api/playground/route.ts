@@ -1,3 +1,4 @@
+import { withKeys } from "@/lib/keys";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import Anthropic from "@anthropic-ai/sdk";
@@ -24,7 +25,7 @@ const bodySchema = z.object({
  * Тест-чат конструктора. Отвечает потоком NDJSON:
  * {"t":"text","v":"..."} — фрагменты ответа, {"t":"tool",...} — вызов инструмента, {"t":"done",...} — итог, {"t":"error",...} — ошибка.
  */
-export async function POST(req: Request) {
+async function handle(req: Request) {
   if (!(await findCurrentUser())) return new Response("Unauthorized", { status: 401 });
 
   const parsed = bodySchema.safeParse(await req.json());
@@ -85,4 +86,11 @@ function describeError(e: unknown): { code: string; message: string } {
   if (e instanceof OpenAI.APIError) return { code: `openai_${e.status ?? "error"}`, message: e.message };
   console.error("playground error", e);
   return { code: "unknown", message: e instanceof Error ? e.message : String(e) };
+}
+
+/** Тест-чат агента — за счёт ключей клиента, если они заданы (как и настоящий разговор). */
+export async function POST(req: Request) {
+  const body = (await req.clone().json().catch(() => null)) as { clientId?: unknown } | null;
+  const clientId = typeof body?.clientId === "string" ? body.clientId : null;
+  return withKeys({ clientId }, () => handle(req));
 }

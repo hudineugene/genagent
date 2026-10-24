@@ -1,4 +1,6 @@
 import "server-only";
+import { withKeys } from "@/lib/keys";
+import { apiKey as keyOf } from "@/lib/keys";
 import { and, asc, desc, eq, gt, inArray, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -197,7 +199,7 @@ export async function enrollSequences(): Promise<number> {
 const firstName = (s: string) => s.trim().split(/\s+/)[0] ?? "";
 
 /** Текст шага: шаблон с {name} или личное сообщение от ИИ по разговору (может решить не писать). */
-async function compose(c: Campaign, step: CampaignStep, conversationId: string): Promise<{ text: string } | { skip: string }> {
+async function compose__(c: Campaign, step: CampaignStep, conversationId: string): Promise<{ text: string } | { skip: string }> {
   const [row] = await db
     .select({ conv: conversations, agent: agents })
     .from(conversations)
@@ -211,7 +213,7 @@ async function compose(c: Campaign, step: CampaignStep, conversationId: string):
     const text = step.text.replace(/\{name\}/g, name).replace(/\s+([,!?.])/g, "$1").trim();
     return { text: text + hint };
   }
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = keyOf("anthropic");
   if (!apiKey) return { skip: "no_key" };
   const dialog = (
     await db
@@ -388,4 +390,9 @@ export function startCampaigns() {
       .finally(() => (g.__campaignsRunning = false));
   }, 60_000);
   g.__campaignsTimer.unref?.();
+}
+
+/** compose — в области ключей клиента (его ключи ИИ, если заданы). */
+async function compose(...a: Parameters<typeof compose__>): ReturnType<typeof compose__> {
+  return withKeys({ clientId: a[0].clientId }, () => compose__(...a));
 }

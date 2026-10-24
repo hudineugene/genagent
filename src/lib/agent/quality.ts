@@ -1,4 +1,6 @@
 import "server-only";
+import { withKeys } from "@/lib/keys";
+import { apiKey } from "@/lib/keys";
 import { and, asc, eq, gt, inArray, lt } from "drizzle-orm";
 import { db } from "@/db";
 import { agents, clients, conversations, messages, type MessageMeta } from "@/db/schema";
@@ -69,8 +71,8 @@ async function exchanges(agentId: string, from: Date, to: Date): Promise<Exchang
 }
 
 /** Проверить вчерашние (или за период) ответы агента. Замечания пишутся в meta.qa ответа. */
-export async function checkAgent(agentId: string, from: Date, to: Date): Promise<QaAgentResult | null> {
-  const key = process.env.ANTHROPIC_API_KEY ?? "";
+async function checkAgent__(agentId: string, from: Date, to: Date): Promise<QaAgentResult | null> {
+  const key = apiKey("anthropic") ?? "";
   const [row] = await db
     .select({ agent: agents, client: clients.name })
     .from(agents)
@@ -226,4 +228,9 @@ export function startQualityCheck() {
   setTimeout(() => void tick(), 6 * 60_000).unref?.();
   g.__qaTimer = setInterval(() => void tick(), 20 * 60_000);
   g.__qaTimer.unref?.();
+}
+
+/** checkAgent — в области ключей клиента (его ключи ИИ, если заданы). */
+export async function checkAgent(...a: Parameters<typeof checkAgent__>): ReturnType<typeof checkAgent__> {
+  return withKeys({ agentId: a[0] }, () => checkAgent__(...a));
 }
