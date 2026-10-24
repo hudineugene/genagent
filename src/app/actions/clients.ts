@@ -53,3 +53,24 @@ export async function saveRetention(clientId: string, days: number | null): Prom
   refresh();
   return {};
 }
+
+/** Свой логотип клиента (PNG, JPEG или WEBP до 1 МБ) — вместо значка с его сайта. */
+export async function uploadClientLogo(clientId: string, formData: FormData): Promise<{ error?: string }> {
+  await requireClient(clientId);
+  const file = formData.get("logo");
+  if (!(file instanceof File) || !file.size) return { error: "empty" };
+  const { MAX_LOGO_BYTES, imageType, saveCustomLogo } = await import("@/lib/client-logo");
+  if (file.size > MAX_LOGO_BYTES) return { error: "too_big" };
+  const data = Buffer.from(await file.arrayBuffer());
+  if (!imageType(data)) return { error: "type" };
+  await saveCustomLogo(clientId, data);
+  refresh();
+  return {};
+}
+
+export async function removeClientLogo(clientId: string) {
+  await requireClient(clientId);
+  const { removeCustomLogo } = await import("@/lib/client-logo");
+  await removeCustomLogo(clientId);
+  refresh();
+}
