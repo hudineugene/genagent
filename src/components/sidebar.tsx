@@ -17,7 +17,6 @@ import {
   Plug,
   SlidersHorizontal,
   Search,
-  Sparkles,
   Sun,
   UserRound,
   Users,
@@ -28,6 +27,7 @@ import { LOCALES, LOCALE_LABELS } from "@/lib/i18n";
 import { logout, setLocale } from "@/app/actions/auth";
 import { CommandPalette, OPEN_PALETTE, type PalettePage } from "./command-palette";
 import { cx } from "./ui";
+import { BrandMark } from "./brand";
 
 type NavItem = PalettePage & { active: boolean; badge?: number };
 
@@ -62,9 +62,7 @@ export function Sidebar({ userName, isAdmin, inboxBadge, studioName }: { userNam
       <CommandPalette pages={[...work, ...settings, ...help, { href: "/profile", label: t.nav.profile, icon: UserRound }]} />
 
       <Link href="/" className="flex shrink-0 items-center gap-2.5 md:mb-4 md:px-2">
-        <span className="grid size-8 place-items-center rounded-lg bg-accent text-accent-text">
-          <Sparkles className="size-4" />
-        </span>
+        <BrandMark size={32} />
         <span className="hidden truncate font-semibold tracking-tight md:block">{studioName || t.app.name}</span>
       </Link>
 

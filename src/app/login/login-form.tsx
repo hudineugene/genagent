@@ -1,11 +1,11 @@
 "use client";
 
 import { useActionState } from "react";
-import { Sparkles } from "lucide-react";
 import { login, loginCode } from "@/app/actions/auth";
 import { useI18n } from "@/lib/i18n/client";
 import { LocaleSwitch } from "@/components/sidebar";
 import { Button, Card, Field, Input, Spinner } from "@/components/ui";
+import { BrandLogo } from "@/components/brand";
 
 export function LoginForm() {
   const { t } = useI18n();
@@ -15,10 +15,8 @@ export function LoginForm() {
 
   return (
     <Card className="w-full max-w-sm p-8 shadow-xl shadow-black/5">
-      <div className="mb-8 flex items-start justify-between">
-        <span className="grid size-11 place-items-center rounded-2xl bg-accent text-accent-text">
-          <Sparkles className="size-6" />
-        </span>
+      <div className="mb-8 flex items-start justify-between gap-4">
+        <BrandLogo width={200} />
         <LocaleSwitch />
       </div>
       <h1 className="text-xl font-semibold">{t.login.title}</h1>
