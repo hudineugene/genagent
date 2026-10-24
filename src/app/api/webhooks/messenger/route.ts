@@ -1,6 +1,7 @@
 import { after } from "next/server";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
+import { firstSeen } from "@/lib/channels/dedupe";
 import { channels, messages, type Channel } from "@/db/schema";
 import { getMetaSettings } from "@/lib/settings";
 import { validSignature, verifyChallenge } from "@/lib/channels/meta/webhook";
@@ -69,6 +70,7 @@ async function one(channel: Channel, m: NonNullable<Entry["messaging"]>[number])
   if (source) await setSource(conversation, source);
   if (!text) return;
   if (mid) {
+    if (!firstSeen(`fb:${mid}`)) return;
     const [seen] = await db.select({ id: messages.id }).from(messages).where(eq(messages.externalId, `fb:${mid}`)).limit(1);
     if (seen) return;
   }

@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
+import { firstSeen, forget } from "@/lib/channels/dedupe";
 import { channels, messages } from "@/db/schema";
 import { validTwilio, type SmsConfig } from "@/lib/channels/sms";
 import { markWebhook } from "@/lib/channels/health";
@@ -25,12 +26,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ channel
   const from = form.From ?? "";
   const text = (form.Body ?? "").trim();
   const sid = form.MessageSid ?? "";
-  if (from && text) {
+  if (from && text && (!sid || firstSeen(`sms:${sid}`))) {
     const [seen] = sid ? await db.select({ id: messages.id }).from(messages).where(eq(messages.externalId, `sms:${sid}`)).limit(1) : [];
     if (!seen) {
-      const { conversation } = await upsertConversation(channel, from, { handle: from });
-      await addMessage(conversation.id, "user", text.slice(0, 1600), { externalId: sid ? `sms:${sid}` : undefined });
-      scheduleReply(conversation.id);
+      try {
+        const { conversation } = await upsertConversation(channel, from, { handle: from });
+        await addMessage(conversation.id, "user", text.slice(0, 1600), { externalId: sid ? `sms:${sid}` : undefined });
+        scheduleReply(conversation.id);
+      } catch (e) {
+        if (sid) forget(`sms:${sid}`);
+        throw e;
+      }
     }
   }
   return new Response(TWIML, { headers: { "content-type": "text/xml" } });

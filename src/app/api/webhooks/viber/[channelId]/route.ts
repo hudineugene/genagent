@@ -1,6 +1,7 @@
 import { after } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
+import { firstSeen } from "@/lib/channels/dedupe";
 import { channels, conversations, messages, type Channel, type ViberConfig } from "@/db/schema";
 import { messageText, validSignature, type ViberEvent } from "@/lib/channels/viber";
 import { markWebhook } from "@/lib/channels/health";
@@ -43,6 +44,7 @@ export async function handleViber(channel: Channel, ev: ViberEvent) {
     const externalId = `vb:${ev.message_token ?? ""}`;
     // Viber повторяет уведомление, если мы не ответили вовремя — второй раз не записываем
     if (ev.message_token) {
+      if (!firstSeen(externalId)) return;
       const [seen] = await db.select({ id: messages.id }).from(messages).where(eq(messages.externalId, externalId)).limit(1);
       if (seen) return;
     }

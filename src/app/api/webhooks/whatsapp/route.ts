@@ -1,6 +1,7 @@
 import { after } from "next/server";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
+import { firstSeen } from "@/lib/channels/dedupe";
 import { channels, messages, type WhatsAppConfig } from "@/db/schema";
 import { getMetaSettings } from "@/lib/settings";
 import { validSignature, verifyChallenge } from "@/lib/channels/meta/webhook";
@@ -85,6 +86,7 @@ export async function handleWhatsApp(body: { entry?: { changes?: Change[] }[] })
             const text = messageText(m).trim();
             if (!text) continue;
             // Meta может прислать одно сообщение дважды — второй раз не записываем
+            if (!firstSeen(`wa:${m.id}`)) continue;
             const [seen] = await db.select({ id: messages.id }).from(messages).where(eq(messages.externalId, `wa:${m.id}`)).limit(1);
             if (seen) continue;
             const name = change.value.contacts?.find((c) => c.wa_id === m.from)?.profile?.name ?? "";

@@ -89,8 +89,15 @@ export async function upsertConversation(
       contactHandle: contact.handle ?? "",
       isTest,
     })
+    .onConflictDoNothing({ target: [conversations.channelId, conversations.externalId] })
     .returning();
-  return { conversation: created, created: true };
+  if (created) return { conversation: created, created: true };
+  // Одновременно пришли два первых сообщения нового собеседника: разговор уже создал соседний запрос — берём его
+  const [raced] = await db
+    .select()
+    .from(conversations)
+    .where(and(eq(conversations.channelId, channel.id), eq(conversations.externalId, externalId)));
+  return { conversation: raced, created: false };
 }
 
 export async function addMessage(
