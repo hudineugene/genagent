@@ -27,6 +27,22 @@ export async function readCustomLogo(clientId: string): Promise<{ type: string; 
   }
 }
 
+/**
+ * Версии своих логотипов (время загрузки) — для адреса картинки: браузер держит уже показанную картинку в памяти
+ * и без нового адреса не увидит замену в списках.
+ */
+export async function logoVersions(): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  try {
+    for (const f of await fs.readdir(LOGO_DIR)) {
+      if (!f.endsWith(".custom")) continue;
+      const st = await fs.stat(path.join(LOGO_DIR, f));
+      out.set(f.slice(0, -".custom".length), Math.floor(st.mtimeMs));
+    }
+  } catch {}
+  return out;
+}
+
 export async function saveCustomLogo(clientId: string, data: Buffer) {
   await fs.mkdir(LOGO_DIR, { recursive: true });
   await fs.writeFile(custom(clientId), data);

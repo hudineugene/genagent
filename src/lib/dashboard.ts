@@ -7,6 +7,7 @@ import { monthRange } from "@/lib/agent/report";
 import type { AgentReview } from "@/lib/agent/review";
 import type { AgentConfig } from "@/lib/agent/types";
 import { studioTz } from "@/lib/general";
+import { logoVersions } from "@/lib/client-logo";
 
 /**
  * Главная «Сегодня»: что требует человека прямо сейчас (кто ждёт ответа, правки из разбора недели, вопросы без
@@ -42,6 +43,8 @@ export type ClientSummary = {
   name: string;
   industry: string;
   color: string;
+  /** Версия своего логотипа (0 — нет) — в адрес картинки, чтобы замена сразу была видна */
+  logoV: number;
   agents: { id: string; name: string; icon: string; status: "draft" | "active" | "paused" }[];
   conversations: number;
   waiting: number;
@@ -200,11 +203,13 @@ export async function dashboardData(ids: string[] | null = null) {
   }
 
   const convByClient = new Map(convRows.map((r) => [r.clientId, r.n]));
+  const logos = await logoVersions();
   const clientList: ClientSummary[] = clientRows.map((c) => ({
     id: c.id,
     name: c.name,
     industry: c.industry ?? "",
     color: c.color,
+    logoV: logos.get(c.id) ?? 0,
     agents: agentRows
       .filter((a) => a.clientId === c.id)
       .map((a) => ({ id: a.id, name: a.name, icon: (a.config as AgentConfig).icon || "🤖", status: a.status })),

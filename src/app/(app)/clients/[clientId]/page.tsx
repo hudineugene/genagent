@@ -45,6 +45,7 @@ import { hasKey } from "@/lib/keys";
 import { guardPage } from "@/lib/access";
 import { getGeneral, studioTz } from "@/lib/general";
 import { ClientMapTab } from "./client-map";
+import { logoVersions } from "@/lib/client-logo";
 export default async function ClientPage({
   params,
   searchParams,
@@ -149,7 +150,7 @@ export default async function ClientPage({
     <div className="mx-auto max-w-7xl">
       <BackLink href="/clients" label={t.nav.clients} />
       <PageHeader
-        icon={<ClientAvatar id={client.id} name={client.name} color={client.color} size={40} />}
+        icon={<ClientAvatar id={client.id} v={(await logoVersions()).get(client.id)} name={client.name} color={client.color} size={40} />}
         title={client.name}
         subtitle={[client.industry, client.website].filter(Boolean).join(" · ") || undefined}
         actions={

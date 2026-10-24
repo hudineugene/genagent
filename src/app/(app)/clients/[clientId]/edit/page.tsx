@@ -7,7 +7,7 @@ import { ClientKeys } from "./client-keys";
 import { ClientPrivacy } from "./client-privacy";
 import { OwnerLogins } from "./owner-logins";
 import { ClientLogo } from "./client-logo";
-import { readCustomLogo } from "@/lib/client-logo";
+import { logoVersions, readCustomLogo } from "@/lib/client-logo";
 import { subprocessors } from "@/lib/dpa";
 import { deleteClient, updateClient } from "@/app/actions/clients";
 import { getT } from "@/lib/i18n/server";
@@ -41,7 +41,7 @@ export default async function EditClientPage({ params }: { params: Promise<{ cli
         actions={<ConfirmButton action={deleteClient.bind(null, client.id)} label={t.common.delete} />}
       />
       <ClientForm action={updateClient.bind(null, client.id)} client={{ ...safe, apiKeys: {} }} />
-      <ClientLogo clientId={client.id} hasCustom={Boolean(await readCustomLogo(client.id))} />
+      <ClientLogo clientId={client.id} hasCustom={Boolean(await readCustomLogo(client.id))} version={(await logoVersions()).get(client.id) ?? 0} />
       <ClientKeys
         clientId={client.id}
         ownSpend={Number(own ?? 0)}

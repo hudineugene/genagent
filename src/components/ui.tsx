@@ -144,11 +144,11 @@ export function Spinner({ className }: { className?: string }) {
 }
 
 /** Аватар клиента: с id — логотип с его сайта (или буква на цвете клиента, если значка нет), без id — буква. */
-export function ClientAvatar({ name, color, size = 40, id }: { name: string; color: string; size?: number; id?: string }) {
+export function ClientAvatar({ name, color, size = 40, id, v }: { name: string; color: string; size?: number; id?: string; v?: number }) {
   if (id)
     return (
       // eslint-disable-next-line @next/next/no-img-element -- значок сайта клиента, отдаёт наш маршрут
-      <img src={`/api/client-logo/${id}`} alt="" width={size} height={size} className="shrink-0 rounded-xl bg-white object-contain ring-1 ring-border" style={{ width: size, height: size }} />
+      <img src={`/api/client-logo/${id}${v ? `?v=${v}` : ""}`} alt="" width={size} height={size} className="shrink-0 rounded-xl bg-white object-contain ring-1 ring-border" style={{ width: size, height: size }} />
     );
   return (
     <span

@@ -7,11 +7,11 @@ import { useI18n } from "@/lib/i18n/client";
 import { Button, Card } from "@/components/ui";
 
 /** Логотип клиента: загрузить свой (PNG, JPEG, WEBP до 1 МБ) или оставить значок с сайта клиента. */
-export function ClientLogo({ clientId, hasCustom }: { clientId: string; hasCustom: boolean }) {
+export function ClientLogo({ clientId, hasCustom, version }: { clientId: string; hasCustom: boolean; version: number }) {
   const { locale } = useI18n();
   const uk = locale === "uk";
   const input = useRef<HTMLInputElement>(null);
-  const [v, setV] = useState(0);
+  const [v, setV] = useState(version);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const errText = (e: string) =>
