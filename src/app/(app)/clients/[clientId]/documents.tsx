@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { Download, ExternalLink, FileInput, FileText, Pencil, Plus, Trash2, X } from "lucide-react";
-import { deleteDocType, saveDocType } from "@/app/actions/documents";
+import { useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { Archive, Download, ExternalLink, FileInput, FileText, Folder, Pencil, Plus, Trash2, Upload, X } from "lucide-react";
+import { deleteArchivedDoc, deleteDocType, saveDocType } from "@/app/actions/documents";
 import { deleteDocTemplate, saveDocTemplate } from "@/app/actions/doc-templates";
 import { useI18n } from "@/lib/i18n/client";
-import { Badge, Button, Card, EmptyState, Field, Input, Textarea, buttonClass } from "@/components/ui";
+import { Badge, Button, Card, EmptyState, Field, Input, Spinner, Textarea, buttonClass } from "@/components/ui";
 import type { DocField } from "@/db/schema";
 
 export type DocTypeRow = {
@@ -15,6 +16,8 @@ export type DocTypeRow = {
   fields: DocField[];
   notify: boolean;
   enabled: boolean;
+  folder: string;
+  nameTemplate: string;
   total: number;
   recent: { at: number; contact: string; filename: string; fields: Record<string, string>; summary: string }[];
 };
@@ -29,7 +32,8 @@ export type DocTemplateRow = {
   usedBy: string[];
   recent: { id: string; at: number; title: string; contact: string }[];
 };
-type TypeDraft = Pick<DocTypeRow, "name" | "purpose" | "fields" | "notify" | "enabled">;
+type TypeDraft = Pick<DocTypeRow, "name" | "purpose" | "fields" | "notify" | "enabled" | "folder" | "nameTemplate">;
+export type ArchivedDoc = { id: string; title: string; folder: string; summary: string; at: number; file: boolean; size: number; contact: string };
 type TemplateDraft = Pick<DocTemplateRow, "name" | "purpose" | "body" | "fields" | "enabled">;
 
 const newField = (n: number): DocField => ({ key: `field${n}`, label: "" });
@@ -37,7 +41,7 @@ const BUILTIN = new Set(["date", "number", "client"]);
 /** Поля шаблона — из {{key}} в тексте (кроме встроенных); подписи сохраняем, что уже ввели. */
 const templateKeys = (body: string) => [...new Set([...body.matchAll(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g)].map((m) => m[1]))].filter((k) => !BUILTIN.has(k));
 
-export function DocumentsManager({ clientId, types, templates }: { clientId: string; types: DocTypeRow[]; templates: DocTemplateRow[] }) {
+export function DocumentsManager({ clientId, types, templates, archive = [] }: { clientId: string; types: DocTypeRow[]; templates: DocTemplateRow[]; archive?: ArchivedDoc[] }) {
   const { t, locale } = useI18n();
   const d = t.documents;
   const [editing, setEditing] = useState<string | null>(null);
@@ -46,6 +50,7 @@ export function DocumentsManager({ clientId, types, templates }: { clientId: str
 
   return (
     <div className="space-y-8">
+      <ArchiveSection clientId={clientId} docs={archive} />
       <section className="space-y-4">
         <div>
           <h2 className="flex items-center gap-2 text-base font-semibold">
@@ -60,7 +65,7 @@ export function DocumentsManager({ clientId, types, templates }: { clientId: str
             {d.newType}
           </Button>
         )}
-        {editing === "type" && <TypeEditor clientId={clientId} initial={{ name: "", purpose: "", fields: [newField(1)], notify: true, enabled: true }} onDone={() => setEditing(null)} />}
+        {editing === "type" && <TypeEditor clientId={clientId} initial={{ name: "", purpose: "", fields: [newField(1)], notify: true, enabled: true, folder: "", nameTemplate: "" }} onDone={() => setEditing(null)} />}
         {types.length === 0 && editing !== "type" && <EmptyState icon={<FileInput />} text={d.typesEmpty} />}
         {types.map((r) =>
           editing === r.id ? (
@@ -75,6 +80,11 @@ export function DocumentsManager({ clientId, types, templates }: { clientId: str
                   </div>
                   {r.purpose && <p className="mt-1 text-sm text-muted">{r.purpose}</p>}
                   <p className="mt-1 text-xs text-muted">{r.fields.map((x) => x.label).join(" · ")}</p>
+                  <p className="mt-1 flex items-center gap-1 text-xs text-muted">
+                    <Folder className="size-3.5" />
+                    {r.folder || r.name}
+                    {r.nameTemplate && <span className="font-mono"> · {r.nameTemplate}</span>}
+                  </p>
                   <button type="button" className="mt-1 text-xs font-medium text-accent hover:underline" onClick={() => setOpen(open === r.id ? null : r.id)}>
                     {d.received.replace("{n}", String(r.total))}
                   </button>
@@ -208,7 +218,7 @@ function DeleteButton({ confirmText, onDelete }: { confirmText: string; onDelete
 function TypeEditor({ clientId, id, initial, onDone }: { clientId: string; id?: string; initial: TypeDraft; onDone: () => void }) {
   const { t } = useI18n();
   const d = t.documents;
-  const [v, setV] = useState<TypeDraft>({ name: initial.name, purpose: initial.purpose, fields: initial.fields, notify: initial.notify, enabled: initial.enabled });
+  const [v, setV] = useState<TypeDraft>({ name: initial.name, purpose: initial.purpose, fields: initial.fields, notify: initial.notify, enabled: initial.enabled, folder: initial.folder, nameTemplate: initial.nameTemplate });
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const set = <K extends keyof TypeDraft>(k: K, val: TypeDraft[K]) => setV({ ...v, [k]: val });
@@ -244,6 +254,14 @@ function TypeEditor({ clientId, id, initial, onDone }: { clientId: string; id?: 
           <Plus className="size-4" />
           {d.addField}
         </Button>
+      </div>
+      <div className="flex flex-wrap gap-3">
+        <Field label={d.folder} hint={d.folderHint}>
+          <Input className="w-64" value={v.folder} maxLength={120} placeholder={v.name || d.folderPlaceholder} onChange={(e) => set("folder", e.target.value)} />
+        </Field>
+        <Field label={d.nameTemplate} hint={d.nameTemplateHint.replace("{keys}", v.fields.map((x) => `{{${x.key}}}`).join(" "))}>
+          <Input className="w-96 font-mono text-[13px]" value={v.nameTemplate} maxLength={200} placeholder="{{date}} {{type}} {{field1}}" onChange={(e) => set("nameTemplate", e.target.value)} />
+        </Field>
       </div>
       <div className="flex flex-wrap gap-6">
         <label className="flex items-center gap-2 text-sm">
@@ -321,5 +339,96 @@ function TemplateEditor({ clientId, id, initial, onDone }: { clientId: string; i
         </Button>
       </div>
     </Card>
+  );
+}
+
+/** Архив: загрузка пачки файлов, раскладка по папкам с едиными именами, скачивание. */
+function ArchiveSection({ clientId, docs }: { clientId: string; docs: ArchivedDoc[] }) {
+  const { t, locale } = useI18n();
+  const d = t.documents;
+  const router = useRouter();
+  const input = useRef<HTMLInputElement>(null);
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState<string | null>(null);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [pending, start] = useTransition();
+  const fmt = new Intl.DateTimeFormat(locale === "uk" ? "uk-UA" : "ru-RU", { dateStyle: "short" });
+  const shown = docs.filter((x) => !q.trim() || `${x.title} ${x.folder} ${x.summary}`.toLowerCase().includes(q.trim().toLowerCase()));
+  const folders = [...new Set(shown.map((x) => x.folder || d.otherFolder))].sort((a, b) => a.localeCompare(b));
+  const upload = () =>
+    start(async () => {
+      const files = [...(input.current?.files ?? [])];
+      if (!files.length) return;
+      const body = new FormData();
+      body.set("clientId", clientId);
+      files.forEach((f) => body.append("files", f));
+      setMsg(null);
+      const res = await fetch("/api/documents/archive", { method: "POST", body });
+      const json = (await res.json().catch(() => ({}))) as { error?: string; file?: string; saved?: number };
+      if (!res.ok || json.error) setMsg({ ok: false, text: `${(d.archiveErrors as Record<string, string>)[json.error ?? ""] ?? d.archiveErrors.failed}${json.file ? `: ${json.file}` : ""}` });
+      else setMsg({ ok: true, text: d.archived.replace("{n}", String(json.saved ?? 0)) });
+      if (input.current) input.current.value = "";
+      router.refresh();
+    });
+  return (
+    <section className="space-y-4">
+      <div>
+        <h2 className="flex items-center gap-2 text-base font-semibold">
+          <Archive className="size-4 text-accent" />
+          {d.archiveTitle}
+        </h2>
+        <p className="mt-1 max-w-3xl text-sm text-muted">{d.archiveSubtitle}</p>
+      </div>
+      <Card className="flex flex-wrap items-center gap-3 p-4">
+        <input ref={input} type="file" multiple accept=".pdf,.docx,.txt,.md,.csv,.html,.htm,.json,.xlsx,.jpg,.jpeg,.png" className="min-w-64 flex-1 text-sm" />
+        <Button disabled={pending} onClick={upload}>
+          {pending ? <Spinner /> : <Upload className="size-4" />}
+          {d.archiveUpload}
+        </Button>
+        {msg && <p className={msg.ok ? "w-full text-sm text-success" : "w-full text-sm text-danger"}>{msg.text}</p>}
+      </Card>
+      {docs.length > 0 && <Input className="w-72" value={q} placeholder={d.archiveSearch} onChange={(e) => setQ(e.target.value)} />}
+      {docs.length === 0 ? (
+        <EmptyState icon={<Archive />} text={d.archiveEmpty} />
+      ) : (
+        <div className="space-y-2">
+          {folders.map((f) => {
+            const list = shown.filter((x) => (x.folder || d.otherFolder) === f);
+            return (
+              <Card key={f} className="p-0">
+                <button type="button" className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm font-semibold" onClick={() => setOpen(open === f ? null : f)}>
+                  <Folder className="size-4 text-accent" />
+                  <span className="flex-1">{f}</span>
+                  <Badge tone="neutral">{list.length}</Badge>
+                </button>
+                {(open === f || q.trim()) && (
+                  <div className="divide-y divide-border border-t border-border text-sm">
+                    {list.map((x) => (
+                      <div key={x.id} className="flex flex-wrap items-center gap-2 px-4 py-2">
+                        <FileText className="size-4 shrink-0 text-muted" />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate font-medium">{x.title}</div>
+                          <div className="truncate text-xs text-muted">
+                            {fmt.format(x.at)}
+                            {x.contact && ` · ${x.contact}`}
+                            {x.summary && ` · ${x.summary}`}
+                          </div>
+                        </div>
+                        {x.file && (
+                          <a href={`/api/documents/file/${x.id}`} className={buttonClass("ghost", "sm")} title={d.download}>
+                            <Download className="size-4" />
+                          </a>
+                        )}
+                        <DeleteButton confirmText={d.confirmDeleteDoc} onDelete={() => deleteArchivedDoc(x.id)} />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Card>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }

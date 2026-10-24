@@ -6,7 +6,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { meetings } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
-import { deliverMeeting, processMeeting } from "@/lib/meetings/engine";
+import { deliverMeeting, emailParticipants, processMeeting } from "@/lib/meetings/engine";
 
 const schema = z.object({ kind: z.enum(["protocol", "interview", "sales", "custom"]), instructions: z.string().trim().max(3000) });
 
@@ -30,6 +30,22 @@ export async function sendMeeting(id: string, to: { team: boolean; owners: boole
   if (!m || m.status !== "done") return { error: "not_ready" };
   await deliverMeeting({ ...m, delivery: to });
   return {};
+}
+
+/** Итоги — участникам на почту (с почтового канала клиента). */
+export async function emailMeeting(id: string, emails: string, channelId: string): Promise<{ error?: string }> {
+  await requireUser();
+  const [m] = await db.select().from(meetings).where(eq(meetings.id, id));
+  if (!m || m.status !== "done") return { error: "not_ready" };
+  const list = emails
+    .split(/[\s,;]+/)
+    .map((e) => e.trim())
+    .filter(Boolean)
+    .slice(0, 50);
+  if (!list.length) return { error: "no_emails" };
+  const status = await emailParticipants({ ...m, delivery: { ...m.delivery, emails: list, channelId } });
+  refresh();
+  return status === "sent" ? {} : { error: status.replace(/^error: /, "") };
 }
 
 export async function deleteMeeting(id: string) {

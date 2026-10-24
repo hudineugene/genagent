@@ -22,7 +22,13 @@ export async function POST(req: Request) {
   const kind = KINDS.find((k) => k === form.get("kind")) ?? "protocol";
   const title = String(form.get("title") ?? "").trim().slice(0, 120);
   const instructions = String(form.get("instructions") ?? "").trim().slice(0, 3000);
-  const delivery = { team: form.get("team") === "1", owners: form.get("owners") === "1" };
+  const emails = String(form.get("emails") ?? "")
+    .split(/[\s,;]+/)
+    .map((e) => e.trim().toLowerCase())
+    .filter((e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e))
+    .slice(0, 50);
+  const channelId = String(form.get("channelId") ?? "") || undefined;
+  const delivery = { team: form.get("team") === "1", owners: form.get("owners") === "1", ...(emails.length && channelId ? { emails, channelId } : {}) };
   const file = form.get("file");
   const text = String(form.get("text") ?? "").trim();
 

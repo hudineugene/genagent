@@ -67,10 +67,12 @@ import { ANSWERS_TITLE } from "@/lib/agent/kb-answers";
   // 4) Чужое недоступно: вопрос другого клиента, ответ клиенту, черновик
   answers.length = 0;
   await press(`ga:${g2.id}`);
-  const [conv] = await db.select().from(conversations).limit(1);
+  // Разговор другого клиента: в разговорах своего клиента владелец может отвечать и решать передачи
+  const [conv] = await db.select().from(conversations).where(eq(conversations.clientId, a2.clientId)).limit(1);
   await press(`rp:${conv.id}`);
   await press(`ap:${conv.id}`);
-  const denied = answers.length === 3 && answers.every((a) => a === "Нет доступа");
+  // ap: — теперь кнопка согласования заявки: чужой id — «Заявка не найдена», тоже без доступа
+  const denied = answers.length === 3 && answers.every((a) => a === "Нет доступа" || a === "Заявка не найдена");
 
   // 5) Рассылки студии владельцу не уходят; просто текст — подсказка, а не ответ клиенту
   out.length = 0;

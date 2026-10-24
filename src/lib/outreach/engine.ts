@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
   channels,
@@ -164,27 +164,6 @@ const FOOTER: Record<string, string> = {
   uk: "Якщо не бажаєте отримувати такі листи — дайте відповідь «стоп».",
 };
 
-/** Найти разговор с контактом в каналах клиента: по @нику, телефону или почте. */
-async function findChat(clientId: string, c: Contact) {
-  const list = await db
-    .select({ conv: conversations, channel: channels })
-    .from(conversations)
-    .innerJoin(channels, eq(channels.id, conversations.channelId))
-    .where(and(eq(conversations.clientId, clientId), eq(conversations.isTest, false), eq(channels.enabled, true)))
-    .orderBy(desc(conversations.lastMessageAt))
-    .limit(5000);
-  const tg = c.telegram.replace(/^@/, "").toLowerCase();
-  const phone = c.phone.replace(/\D/g, "");
-  return (
-    list.find(
-      (r) =>
-        (tg && r.conv.contactHandle.replace(/^@/, "").toLowerCase() === tg) ||
-        (phone.length >= 9 && r.conv.externalId.replace(/\D/g, "").endsWith(phone.slice(-9))) ||
-        (c.email && r.conv.externalId.toLowerCase() === c.email),
-    ) ?? null
-  );
-}
-
 /** Отправить одобренные письма (до PER_TICK за раз). Ночью — ждём утра. */
 export async function sendOutreachTick(now = new Date()) {
   const { quietUntil } = await import("@/lib/campaigns/engine");
@@ -225,6 +204,7 @@ export async function sendOutreachTick(now = new Date()) {
         await db.update(conversations).set({ context: { ...conversation.context, subject: m.subject } }).where(eq(conversations.id, conversation.id));
         await addMessage(conversation.id, "assistant", `${m.subject}\n\n${m.body}`, { externalId: info.messageId ?? undefined, meta: { campaign: { id: o.id, name: o.name, step: 0 } } });
       } else {
+        const { findChat } = await import("@/lib/reach");
         const found = await findChat(o.clientId, c);
         if (!found) {
           await db.update(outreachMessages).set({ status: "skipped", error: "no_chat" }).where(eq(outreachMessages.id, m.id));

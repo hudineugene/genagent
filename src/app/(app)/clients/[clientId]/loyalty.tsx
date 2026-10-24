@@ -14,6 +14,7 @@ export type ProgramRow = {
   rules: string;
   rewards: LoyaltyReward[];
   welcome: number;
+  peerAllowance: number;
   notifyCustomer: boolean;
   enabled: boolean;
   apiKey: string;
@@ -21,11 +22,26 @@ export type ProgramRow = {
 };
 export type AccountRow = { id: string; contact: string; name: string; balance: number; updatedAt: number };
 export type TxRow = { contact: string; name: string; delta: number; balance: number; reason: string; source: string; at: number };
+export type PeerStats = { top: { who: string; points: number }[]; recent: { to: string; delta: number; reason: string; at: number }[] };
 type Draft = Omit<ProgramRow, "id" | "apiKey" | "usedBy">;
 
-const EMPTY: Draft = { name: "Бонусы", unit: "баллов", rules: "", rewards: [{ name: "", cost: 100 }], welcome: 0, notifyCustomer: true, enabled: true };
+const EMPTY: Draft = { name: "Бонусы", unit: "баллов", rules: "", rewards: [{ name: "", cost: 100 }], welcome: 0, peerAllowance: 0, notifyCustomer: true, enabled: true };
 
-export function LoyaltyManager({ clientId, program, accounts, tx, apiBase }: { clientId: string; program: ProgramRow | null; accounts: AccountRow[]; tx: TxRow[]; apiBase: string }) {
+export function LoyaltyManager({
+  clientId,
+  program,
+  accounts,
+  tx,
+  apiBase,
+  peer,
+}: {
+  clientId: string;
+  program: ProgramRow | null;
+  accounts: AccountRow[];
+  tx: TxRow[];
+  apiBase: string;
+  peer?: PeerStats;
+}) {
   const { t, locale } = useI18n();
   const l = t.loyalty;
   const [editing, setEditing] = useState(!program);
@@ -53,6 +69,7 @@ export function LoyaltyManager({ clientId, program, accounts, tx, apiBase }: { c
                 <p className="mt-1 text-xs text-muted">
                   {l.rewardsList}: {program.rewards.map((r) => `${r.name} — ${r.cost}`).join(" · ") || "—"}
                   {program.welcome > 0 && ` · ${l.welcomeShort.replace("{n}", String(program.welcome))}`}
+                  {program.peerAllowance > 0 && ` · ${l.peerShort.replace("{n}", String(program.peerAllowance))}`}
                   {program.usedBy.length > 0 && ` · ${t.tools.usedBy}: ${program.usedBy.join(", ")}`}
                 </p>
               </div>
@@ -67,6 +84,37 @@ export function LoyaltyManager({ clientId, program, accounts, tx, apiBase }: { c
       {program && (
         <>
           <AdjustForm programId={program.id} unit={program.unit} />
+          {program.peerAllowance > 0 && peer && (
+            <section className="space-y-2">
+              <h2 className="text-base font-semibold">{l.peerTitle}</h2>
+              {peer.recent.length === 0 ? (
+                <p className="text-sm text-muted">{l.peerEmpty}</p>
+              ) : (
+                <div className="grid gap-3 lg:grid-cols-2">
+                  <Card className="p-4">
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{l.peerTop}</div>
+                    <ol className="space-y-1 text-sm">
+                      {peer.top.map((x, i) => (
+                        <li key={i} className="flex justify-between gap-2">
+                          <span>
+                            {i + 1}. {x.who}
+                          </span>
+                          <b>+{x.points}</b>
+                        </li>
+                      ))}
+                    </ol>
+                  </Card>
+                  <Card className="divide-y divide-border text-sm">
+                    {peer.recent.map((x, i) => (
+                      <div key={i} className="px-4 py-2">
+                        <b className="text-success">+{x.delta}</b> {x.to} · <span className="text-muted">{x.reason}</span>
+                      </div>
+                    ))}
+                  </Card>
+                </div>
+              )}
+            </section>
+          )}
           <section className="space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-base font-semibold">
@@ -145,7 +193,7 @@ function ApiBox({ program, apiBase }: { program: ProgramRow; apiBase: string }) 
 function ProgramEditor({ clientId, id, initial, onDone, canCancel }: { clientId: string; id: string | null; initial: Draft; onDone: () => void; canCancel: boolean }) {
   const { t } = useI18n();
   const l = t.loyalty;
-  const [d, setD] = useState<Draft>({ name: initial.name, unit: initial.unit, rules: initial.rules, rewards: initial.rewards.length ? initial.rewards : EMPTY.rewards, welcome: initial.welcome, notifyCustomer: initial.notifyCustomer, enabled: initial.enabled });
+  const [d, setD] = useState<Draft>({ name: initial.name, unit: initial.unit, rules: initial.rules, rewards: initial.rewards.length ? initial.rewards : EMPTY.rewards, welcome: initial.welcome, peerAllowance: initial.peerAllowance ?? 0, notifyCustomer: initial.notifyCustomer, enabled: initial.enabled });
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD({ ...d, [k]: v });
@@ -168,6 +216,9 @@ function ProgramEditor({ clientId, id, initial, onDone, canCancel }: { clientId:
         </Field>
         <Field label={l.unit} hint={l.unitHint}>
           <Input className="w-40" value={d.unit} maxLength={30} onChange={(e) => set("unit", e.target.value)} />
+        </Field>
+        <Field label={l.peerAllowance} hint={l.peerHint}>
+          <Input type="number" min={0} className="w-32" value={d.peerAllowance} onChange={(e) => set("peerAllowance", Math.max(0, Math.round(Number(e.target.value) || 0)))} />
         </Field>
         <Field label={l.welcome}>
           <Input type="number" min={0} className="w-32" value={d.welcome} onChange={(e) => set("welcome", Math.max(0, Math.round(Number(e.target.value) || 0)))} />

@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { FileAudio, Mic, RefreshCw, Send, Trash2, Upload } from "lucide-react";
-import { deleteMeeting, reanalyzeMeeting, sendMeeting } from "@/app/actions/meetings";
+import { FileAudio, Mail, Mic, RefreshCw, Send, Trash2, Upload } from "lucide-react";
+import { deleteMeeting, emailMeeting, reanalyzeMeeting, sendMeeting } from "@/app/actions/meetings";
 import { useI18n } from "@/lib/i18n/client";
 import { Badge, Button, Card, EmptyState, Field, Input, Select, Spinner, Textarea } from "@/components/ui";
 import type { MeetingTask } from "@/db/schema";
@@ -23,10 +23,13 @@ export type MeetingRow = {
   status: "processing" | "done" | "error";
   error: string | null;
   at: number;
+  emails: string[];
+  mailStatus: string;
 };
+export type MailChannel = { id: string; name: string };
 const KINDS: Kind[] = ["protocol", "interview", "sales", "custom"];
 
-export function MeetingsManager({ clientId, rows, openai }: { clientId: string; rows: MeetingRow[]; openai: boolean }) {
+export function MeetingsManager({ clientId, rows, openai, mailChannels = [] }: { clientId: string; rows: MeetingRow[]; openai: boolean; mailChannels?: MailChannel[] }) {
   const { t, locale } = useI18n();
   const m = t.meetings;
   const router = useRouter();
@@ -41,21 +44,21 @@ export function MeetingsManager({ clientId, rows, openai }: { clientId: string; 
   return (
     <div className="space-y-6">
       <p className="max-w-3xl text-sm text-muted">{m.subtitle}</p>
-      <NewMeeting clientId={clientId} openai={openai} />
+      <NewMeeting clientId={clientId} openai={openai} mailChannels={mailChannels} />
       {rows.length === 0 && <EmptyState icon={<Mic />} text={m.empty} />}
       {rows.map((r) => (
-        <MeetingCard key={r.id} row={r} when={fmt.format(r.at)} />
+        <MeetingCard key={r.id} row={r} when={fmt.format(r.at)} mailChannels={mailChannels} />
       ))}
     </div>
   );
 }
 
-function NewMeeting({ clientId, openai }: { clientId: string; openai: boolean }) {
+function NewMeeting({ clientId, openai, mailChannels }: { clientId: string; openai: boolean; mailChannels: MailChannel[] }) {
   const { t } = useI18n();
   const m = t.meetings;
   const router = useRouter();
   const file = useRef<HTMLInputElement>(null);
-  const [v, setV] = useState({ kind: "protocol" as Kind, title: "", instructions: "", text: "", team: false, owners: false });
+  const [v, setV] = useState({ kind: "protocol" as Kind, title: "", instructions: "", text: "", team: false, owners: false, emails: "", channelId: mailChannels[0]?.id ?? "" });
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const submit = () =>
@@ -68,6 +71,10 @@ function NewMeeting({ clientId, openai }: { clientId: string; openai: boolean })
       body.set("instructions", v.instructions);
       if (v.team) body.set("team", "1");
       if (v.owners) body.set("owners", "1");
+      if (v.emails.trim() && v.channelId) {
+        body.set("emails", v.emails);
+        body.set("channelId", v.channelId);
+      }
       const f = file.current?.files?.[0];
       if (f) body.set("file", f);
       else body.set("text", v.text);
@@ -119,6 +126,7 @@ function NewMeeting({ clientId, openai }: { clientId: string; openai: boolean })
           {m.toOwners}
         </label>
       </div>
+      <ParticipantsMail channels={mailChannels} emails={v.emails} channelId={v.channelId} onChange={(emails, channelId) => setV({ ...v, emails, channelId })} />
       {error && <p className="text-sm text-danger">{error}</p>}
       <Button disabled={pending} onClick={submit}>
         {pending ? <Spinner /> : <Upload className="size-4" />}
@@ -128,10 +136,34 @@ function NewMeeting({ clientId, openai }: { clientId: string; openai: boolean })
   );
 }
 
-function MeetingCard({ row, when }: { row: MeetingRow; when: string }) {
+/** Итоги участникам на почту: адреса и почтовый канал клиента, с которого отправить. */
+function ParticipantsMail({ channels, emails, channelId, onChange }: { channels: MailChannel[]; emails: string; channelId: string; onChange: (emails: string, channelId: string) => void }) {
   const { t } = useI18n();
   const m = t.meetings;
-  const [open, setOpen] = useState<"result" | "transcript" | "redo" | null>(null);
+  if (!channels.length) return <p className="text-xs text-muted">{m.mailNoChannel}</p>;
+  return (
+    <div className="flex flex-wrap items-end gap-3">
+      <Field label={m.mailTo} hint={m.mailHint}>
+        <Input className="w-96" value={emails} maxLength={3000} placeholder="anna@company.com, oleg@company.com" onChange={(e) => onChange(e.target.value, channelId)} />
+      </Field>
+      <Field label={m.mailFrom}>
+        <Select className="w-64" value={channelId} onChange={(e) => onChange(emails, e.target.value)}>
+          {channels.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </Select>
+      </Field>
+    </div>
+  );
+}
+
+function MeetingCard({ row, when, mailChannels }: { row: MeetingRow; when: string; mailChannels: MailChannel[] }) {
+  const { t } = useI18n();
+  const m = t.meetings;
+  const [open, setOpen] = useState<"result" | "transcript" | "redo" | "mail" | null>(null);
+  const [mail, setMail] = useState({ emails: row.emails.join(", "), channelId: mailChannels[0]?.id ?? "" });
   const [redo, setRedo] = useState({ kind: row.kind, instructions: row.instructions });
   const [msg, setMsg] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -157,6 +189,11 @@ function MeetingCard({ row, when }: { row: MeetingRow; when: string }) {
             {when}
             {row.filename && ` · ${row.filename}`}
           </p>
+          {row.mailStatus && (
+            <p className={row.mailStatus === "sent" ? "mt-1 text-xs text-success" : "mt-1 text-xs text-danger"}>
+              {row.mailStatus === "sent" ? m.mailSent.replace("{list}", row.emails.join(", ")) : `${m.mailFailed}: ${row.mailStatus.replace(/^error: /, "")}`}
+            </p>
+          )}
           {row.status === "error" && row.error && <p className="mt-1 text-sm text-danger">{(m.errors as Record<string, string>)[row.error] ?? row.error}</p>}
           {row.summary && <p className="mt-2 text-sm">{row.summary}</p>}
           {row.tasks.length > 0 && (
@@ -186,6 +223,12 @@ function MeetingCard({ row, when }: { row: MeetingRow; when: string }) {
                 {m.redo}
               </button>
             )}
+            {row.status === "done" && (
+              <button type="button" className="inline-flex items-center gap-1 text-accent hover:underline" onClick={() => setOpen(open === "mail" ? null : "mail")}>
+                <Mail className="size-3.5" />
+                {m.mailOpen}
+              </button>
+            )}
           </div>
         </div>
         <div className="flex gap-1">
@@ -213,6 +256,27 @@ function MeetingCard({ row, when }: { row: MeetingRow; when: string }) {
       {msg && <p className="mt-2 text-sm text-muted">{msg}</p>}
       {open === "result" && <div className="mt-3 whitespace-pre-wrap rounded-lg bg-surface-2/60 p-3 text-sm">{row.result}</div>}
       {open === "transcript" && <div className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap rounded-lg bg-surface-2/60 p-3 text-xs">{row.transcript}</div>}
+      {open === "mail" && (
+        <div className="mt-3 space-y-2 border-t border-border pt-3">
+          <ParticipantsMail channels={mailChannels} emails={mail.emails} channelId={mail.channelId} onChange={(emails, channelId) => setMail({ emails, channelId })} />
+          {mailChannels.length > 0 && (
+            <Button
+              size="sm"
+              disabled={pending || !mail.emails.trim()}
+              onClick={() =>
+                start(async () => {
+                  const r = await emailMeeting(row.id, mail.emails, mail.channelId);
+                  setMsg(r.error ? `${m.mailFailed}: ${r.error}` : m.sent);
+                  if (!r.error) setOpen(null);
+                })
+              }
+            >
+              <Send className="size-4" />
+              {m.mailSend}
+            </Button>
+          )}
+        </div>
+      )}
       {open === "redo" && (
         <div className="mt-3 space-y-2 border-t border-border pt-3">
           <Select className="w-56" value={redo.kind} onChange={(e) => setRedo({ ...redo, kind: e.target.value as Kind })}>

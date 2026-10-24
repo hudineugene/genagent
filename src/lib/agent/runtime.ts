@@ -14,6 +14,7 @@ import { approvalTool, teamNote } from "@/lib/team/approvals";
 import { getProgram, loyaltyNote, loyaltyTools } from "@/lib/loyalty/engine";
 import { deliveryTool } from "@/lib/logistics/routes";
 import { pricingTool } from "@/lib/pricing";
+import { hasActiveOnboardings, onboardingNote, onboardingTools } from "@/lib/onboarding";
 import { webSearchFor } from "@/lib/services";
 import { examplesNote, getExamples } from "./examples";
 
@@ -77,7 +78,9 @@ export async function prepareChat(
   const templates = await loadDocTemplates(client.id, config.docTemplateIds ?? []).catch(() => []);
   const tables = await loadTables(client.id, config.tableIds ?? []).catch(() => []);
   const loyalty = config.loyaltyProgramId ? await getProgram(config.loyaltyProgramId).then((p) => (p?.enabled && p.clientId === client.id ? p : null)).catch(() => null) : null;
-  const fullSystem = [system, examples, formsNote(forms), docsNote(templates), tablesNote(tables), teamNote(config.team), loyaltyNote(loyalty), channelNote].filter(Boolean).join("\n\n");
+  // Агент команды и новые сотрудники на адаптации: чек-лист и отметки «сделано»
+  const onboarding = config.team?.enabled ? await hasActiveOnboardings(client.id).catch(() => false) : false;
+  const fullSystem = [system, examples, formsNote(forms), docsNote(templates), tablesNote(tables), teamNote(config.team), loyaltyNote(loyalty), onboarding ? onboardingNote : "", channelNote].filter(Boolean).join("\n\n");
   const own = await loadAgentTools(client.id, config.toolIds ?? [], tools).catch((e) => {
     console.error("load agent tools failed", e);
     return [];
@@ -91,6 +94,7 @@ export async function prepareChat(
     ...(config.logistics && apiKey("googleMaps") ? [deliveryTool(client.id)] : []),
     ...(config.pricing ? [pricingTool(client.id)] : []),
     ...(loyalty ? loyaltyTools(loyalty, { ...tools, clientId: client.id }) : []),
+    ...(onboarding ? onboardingTools({ ...tools, clientId: client.id }) : []),
     ...(config.team?.enabled && config.team.approvals ? [approvalTool(config.team, { ...tools, clientId: client.id })] : []),
   ];
   const agentTools = all.length ? all : undefined;

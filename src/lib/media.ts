@@ -38,7 +38,7 @@ const DESCRIBE_MODEL = "claude-haiku-5-5";
 async function describePhoto__(
   image: string,
   mediaType: ImageType,
-  owner: { agentId: string; clientId: string },
+  owner: { agentId: string | null; clientId: string },
   caption?: string,
 ): Promise<string | null> {
   const key = apiKey("anthropic");

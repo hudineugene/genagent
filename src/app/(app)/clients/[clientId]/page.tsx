@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, asc, count, desc, eq, inArray } from "drizzle-orm";
-import { BarChart3, Blocks, BookOpen, Bot, Calculator, LayoutDashboard, ClipboardList, ClipboardCheck, FileBarChart2, FileText, Gift, Mail, Mic, PenLine, Route, Truck, Table2, Megaphone, Plus, Settings, Wrench } from "lucide-react";
+import { BarChart3, BellRing, GraduationCap, Repeat, Users, Blocks, BookOpen, Bot, Calculator, LayoutDashboard, ClipboardList, ClipboardCheck, FileBarChart2, FileText, Gift, Mail, Mic, PenLine, Route, Truck, Table2, Megaphone, Plus, Settings, Wrench } from "lucide-react";
 import { db } from "@/db";
-import { agents, approvals, campaigns, clientPricing, routingRules, contactLists, contacts, outreach, outreachMessages, channels, clientLogistics, contentItems, loyaltyAccounts, loyaltyPrograms, loyaltyTx, meetings, clientDocTypes, clientDocuments, clientForms, dataTables, clientIntegrations, clientTools, clients, conversations, docTemplates, formResponses, generatedDocs, kbSources, knowledgeGaps, routines } from "@/db/schema";
+import { agents, approvals, campaigns, candidates, clientRepeat, onboardingPlans, onboardings, reminders, vacancies, clientPricing, routingRules, contactLists, contacts, outreach, outreachMessages, channels, clientLogistics, contentItems, loyaltyAccounts, loyaltyPrograms, loyaltyTx, meetings, clientDocTypes, clientDocuments, clientForms, dataTables, clientIntegrations, clientTools, clients, conversations, docTemplates, formResponses, generatedDocs, kbSources, knowledgeGaps, routines } from "@/db/schema";
 import { getT } from "@/lib/i18n/server";
 import { findModel } from "@/lib/models";
 import type { Dict, Locale } from "@/lib/i18n";
@@ -25,6 +25,8 @@ import { LogisticsManager } from "./logistics";
 import { OutreachManager } from "./outreach";
 import { RoutingManager } from "./routing";
 import { PricingManager } from "./pricing";
+import { RemindersManager, RepeatManager } from "./reminders";
+import { HiringManager, OnboardingManager } from "./onboarding";
 import { publicUrl } from "@/lib/settings";
 import { campaignStats } from "@/lib/campaigns/engine";
 import { getGoogleSettings } from "@/lib/google/calendar";
@@ -47,9 +49,9 @@ export default async function ClientPage({
   const [client] = await db.select().from(clients).where(eq(clients.id, clientId));
   if (!client) notFound();
 
-  const SECTIONS = ["kb", "data", "modules", "outreach", "routing", "pricing", "tools", "forms", "documents", "loyalty", "logistics", "approvals", "campaigns", "content", "meetings", "routines"] as const;
+  const SECTIONS = ["kb", "data", "modules", "outreach", "routing", "pricing", "reminders", "repeat", "onboarding", "hiring", "tools", "forms", "documents", "loyalty", "logistics", "approvals", "campaigns", "content", "meetings", "routines"] as const;
   const active = (SECTIONS as readonly string[]).includes(tab ?? "") ? (tab as (typeof SECTIONS)[number]) : "agents";
-  const [[{ agentsCount }], [{ kbCount }], [{ toolsCount }], [{ campaignsCount }], [{ formsCount }], [{ routinesCount }], [{ docTypesCount }], [{ templatesCount }], [{ tablesCount }], [{ pendingApprovals }], [{ approvalsCount }], teamAgents, [{ contentCount }], [{ meetingsCount }], [{ programsCount }], [{ outsCount }], [logistics], agentConfigs, [{ routingCount }], [pricingRow]] = await Promise.all([
+  const [[{ agentsCount }], [{ kbCount }], [{ toolsCount }], [{ campaignsCount }], [{ formsCount }], [{ routinesCount }], [{ docTypesCount }], [{ templatesCount }], [{ tablesCount }], [{ pendingApprovals }], [{ approvalsCount }], teamAgents, [{ contentCount }], [{ meetingsCount }], [{ programsCount }], [{ outsCount }], [logistics], agentConfigs, [{ routingCount }], [pricingRow], [{ remindersCount }], [{ onboardingCount }], [{ vacanciesCount }]] = await Promise.all([
     db.select({ agentsCount: count() }).from(agents).where(eq(agents.clientId, clientId)),
     db.select({ kbCount: count() }).from(kbSources).where(eq(kbSources.clientId, clientId)),
     db.select({ toolsCount: count() }).from(clientTools).where(eq(clientTools.clientId, clientId)),
@@ -70,6 +72,9 @@ export default async function ClientPage({
     db.select({ config: agents.config }).from(agents).where(eq(agents.clientId, clientId)),
     db.select({ routingCount: count() }).from(routingRules).where(eq(routingRules.clientId, clientId)),
     db.select({ tableId: clientPricing.tableId }).from(clientPricing).where(eq(clientPricing.clientId, clientId)),
+    db.select({ remindersCount: count() }).from(reminders).where(eq(reminders.clientId, clientId)),
+    db.select({ onboardingCount: count() }).from(onboardings).where(and(eq(onboardings.clientId, clientId), eq(onboardings.status, "active"))),
+    db.select({ vacanciesCount: count() }).from(vacancies).where(eq(vacancies.clientId, clientId)),
   ]);
 
   const base = `/clients/${client.id}`;
@@ -106,9 +111,18 @@ export default async function ClientPage({
       items: [
         { key: "campaigns", label: t.campaigns.tab, icon: Megaphone, n: campaignsCount },
         { key: "outreach", label: t.outreach.tab, icon: Mail },
+        { key: "reminders", label: t.reminders.tab, icon: BellRing, n: remindersCount },
+        { key: "repeat", label: t.repeat.tab, icon: Repeat },
         { key: "content", label: t.content.tab, icon: PenLine, n: contentCount },
         { key: "meetings", label: t.meetings.tab, icon: Mic, n: meetingsCount },
         { key: "routines", label: t.routines.tab, icon: FileBarChart2, n: routinesCount },
+      ],
+    },
+    {
+      title: t.ws.people,
+      items: [
+        { key: "onboarding", label: t.onboarding.tab, icon: GraduationCap, n: onboardingCount },
+        { key: "hiring", label: t.hiring.tab, icon: Users, n: vacanciesCount },
       ],
     },
   ];
@@ -176,6 +190,14 @@ export default async function ClientPage({
         <CampaignsTab clientId={client.id} />
       ) : active === "forms" ? (
         <FormsTab clientId={client.id} />
+      ) : active === "reminders" ? (
+        <RemindersTab clientId={client.id} />
+      ) : active === "repeat" ? (
+        <RepeatTab clientId={client.id} />
+      ) : active === "onboarding" ? (
+        <OnboardingTab clientId={client.id} />
+      ) : active === "hiring" ? (
+        <HiringTab clientId={client.id} />
       ) : active === "pricing" ? (
         <PricingTab clientId={client.id} />
       ) : active === "routing" ? (
@@ -247,6 +269,122 @@ function ModuleTile({ base, m, t, compact }: { base: string; m: ModuleCard; t: D
         </div>
       </Card>
     </Link>
+  );
+}
+
+/** Таблицы клиента (для выбора столбцов) и почтовые каналы (письма тем, у кого нет чата). */
+async function tablesAndMail(clientId: string) {
+  const [tables, mail] = await Promise.all([
+    db.select({ id: dataTables.id, name: dataTables.name, columns: dataTables.columns }).from(dataTables).where(eq(dataTables.clientId, clientId)),
+    db.select({ id: channels.id, name: channels.name }).from(channels).where(and(eq(channels.clientId, clientId), eq(channels.type, "email"))),
+  ]);
+  return { tables: tables.map((x) => ({ id: x.id, name: x.name, columns: x.columns.map((c) => c.name) })), mail };
+}
+
+async function RemindersTab({ clientId }: { clientId: string }) {
+  const [{ tables, mail }, rows] = await Promise.all([tablesAndMail(clientId), db.select().from(reminders).where(eq(reminders.clientId, clientId)).orderBy(desc(reminders.createdAt))]);
+  return (
+    <RemindersManager
+      clientId={clientId}
+      tables={tables}
+      channels={mail}
+      rows={rows.map((r) => ({
+        id: r.id,
+        name: r.name,
+        tableId: r.tableId ?? "",
+        kind: r.kind,
+        dateColumn: r.dateColumn,
+        offsetDays: r.offsetDays,
+        keyColumn: r.keyColumn,
+        statusColumn: r.statusColumn,
+        statusValues: r.statusValues,
+        contactColumn: r.contactColumn,
+        channelId: r.channelId,
+        message: r.message,
+        hour: r.hour,
+        notifyTeam: r.notifyTeam,
+        enabled: r.enabled,
+        lastRunAt: r.lastRunAt?.getTime() ?? null,
+        lastResult: r.lastResult,
+      }))}
+    />
+  );
+}
+
+async function RepeatTab({ clientId }: { clientId: string }) {
+  const [{ tables, mail }, [cfg]] = await Promise.all([tablesAndMail(clientId), db.select().from(clientRepeat).where(eq(clientRepeat.clientId, clientId))]);
+  const { loadRepeat, predictRepeat } = await import("@/lib/repeat");
+  const { kyivNow } = await import("@/lib/reach");
+  const found = cfg ? await loadRepeat(clientId) : null;
+  let list: ReturnType<typeof predictRepeat> = [];
+  try {
+    list = found ? predictRepeat(found.cfg, found.table, kyivNow().date) : [];
+  } catch {
+    list = [];
+  }
+  return (
+    <RepeatManager
+      clientId={clientId}
+      tables={tables}
+      channels={mail}
+      list={list}
+      config={
+        cfg
+          ? {
+              tableId: cfg.tableId ?? "",
+              customerColumn: cfg.customerColumn,
+              dateColumn: cfg.dateColumn,
+              contactColumn: cfg.contactColumn,
+              productColumn: cfg.productColumn,
+              amountColumn: cfg.amountColumn,
+              leadDays: cfg.leadDays,
+              minOrders: cfg.minOrders,
+              auto: cfg.auto,
+              brief: cfg.brief,
+              channelId: cfg.channelId,
+              hour: cfg.hour,
+              lastRunAt: cfg.lastRunAt?.getTime() ?? null,
+              lastResult: cfg.lastResult,
+            }
+          : null
+      }
+    />
+  );
+}
+
+async function OnboardingTab({ clientId }: { clientId: string }) {
+  const [plans, rows, { mail }, teamAgents] = await Promise.all([
+    db.select().from(onboardingPlans).where(eq(onboardingPlans.clientId, clientId)).orderBy(asc(onboardingPlans.createdAt)),
+    db.select().from(onboardings).where(eq(onboardings.clientId, clientId)).orderBy(asc(onboardings.status), desc(onboardings.createdAt)).limit(200),
+    tablesAndMail(clientId),
+    hasTeamAgents(clientId),
+  ]);
+  return (
+    <OnboardingManager
+      clientId={clientId}
+      channels={mail}
+      teamAgent={teamAgents}
+      plans={plans.map((p) => ({ id: p.id, name: p.name, steps: p.steps, welcome: p.welcome }))}
+      rows={rows.map((r) => ({ id: r.id, name: r.name, role: r.role, contact: r.contact, email: r.email, startDate: r.startDate, items: r.items, welcomeStatus: r.welcomeStatus, welcomeText: r.welcomeText, status: r.status }))}
+    />
+  );
+}
+
+async function HiringTab({ clientId }: { clientId: string }) {
+  const list = await db.select().from(vacancies).where(eq(vacancies.clientId, clientId)).orderBy(desc(vacancies.createdAt));
+  const cands = list.length ? await db.select().from(candidates).where(inArray(candidates.vacancyId, list.map((v) => v.id))) : [];
+  return (
+    <HiringManager
+      clientId={clientId}
+      rows={list.map((v) => ({
+        id: v.id,
+        title: v.title,
+        requirements: v.requirements,
+        candidates: cands
+          .filter((c) => c.vacancyId === v.id)
+          .map((c) => ({ id: c.id, name: c.name, contact: c.contact, filename: c.filename, score: c.score, verdict: c.verdict, summary: c.summary, strengths: c.strengths, gaps: c.gaps, status: c.status, error: c.error })),
+      }))}
+    />
   );
 }
 
@@ -371,6 +509,7 @@ async function LoyaltyTab({ clientId }: { clientId: string }) {
               rules: p.rules,
               rewards: p.rewards,
               welcome: p.welcome,
+              peerAllowance: p.peerAllowance,
               notifyCustomer: p.notifyCustomer,
               enabled: p.enabled,
               apiKey: p.apiKey,
@@ -380,6 +519,7 @@ async function LoyaltyTab({ clientId }: { clientId: string }) {
       }
       accounts={accounts.map((a) => ({ id: a.id, contact: a.contact, name: a.name, balance: a.balance, updatedAt: a.updatedAt.getTime() }))}
       tx={tx.map(({ t, contact, name }) => ({ contact, name, delta: t.delta, balance: t.balance, reason: t.reason, source: t.source, at: t.createdAt.getTime() }))}
+      peer={p && p.peerAllowance > 0 ? await import("@/lib/loyalty/engine").then((m) => m.peerStats(p.id)) : undefined}
     />
   );
 }
@@ -390,6 +530,7 @@ async function MeetingsTab({ clientId }: { clientId: string }) {
     <MeetingsManager
       clientId={clientId}
       openai={await hasKey(clientId, "openai")}
+      mailChannels={(await tablesAndMail(clientId)).mail}
       rows={rows.map((r) => ({
         id: r.id,
         title: r.title,
@@ -404,6 +545,8 @@ async function MeetingsTab({ clientId }: { clientId: string }) {
         status: r.status,
         error: r.error,
         at: r.createdAt.getTime(),
+        emails: r.delivery.emails ?? [],
+        mailStatus: r.delivery.mailStatus ?? "",
       }))}
     />
   );
@@ -525,6 +668,8 @@ async function DocumentsTab({ clientId }: { clientId: string }) {
         fields: r.fields,
         notify: r.notify,
         enabled: r.enabled,
+        folder: r.folder,
+        nameTemplate: r.nameTemplate,
         total,
         recent: recent.map((x) => ({ at: x.d.createdAt.getTime(), contact: x.contact ?? "", filename: x.d.filename, fields: x.d.fields, summary: x.d.summary })),
       };
@@ -552,7 +697,23 @@ async function DocumentsTab({ clientId }: { clientId: string }) {
       };
     }),
   );
-  return <DocumentsManager clientId={clientId} types={typeRows} templates={templateRows} />;
+  const archive = await db
+    .select({ d: clientDocuments, contact: conversations.contactName })
+    .from(clientDocuments)
+    .leftJoin(conversations, eq(conversations.id, clientDocuments.conversationId))
+    .where(eq(clientDocuments.clientId, clientId))
+    .orderBy(desc(clientDocuments.createdAt))
+    .limit(1000);
+  return (
+    <DocumentsManager
+      clientId={clientId}
+      types={typeRows}
+      templates={templateRows}
+      archive={archive
+        .filter((x) => x.d.title || x.d.file)
+        .map((x) => ({ id: x.d.id, title: x.d.title || x.d.filename, folder: x.d.folder, summary: x.d.summary, at: x.d.createdAt.getTime(), file: Boolean(x.d.file), size: x.d.size, contact: x.contact ?? "" }))}
+    />
+  );
 }
 
 async function RoutinesTab({ clientId }: { clientId: string }) {

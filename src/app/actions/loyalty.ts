@@ -14,6 +14,7 @@ const schema = z.object({
   rules: z.string().trim().max(3000),
   rewards: z.array(z.object({ name: z.string().trim().min(1).max(200), cost: z.number().int().min(1).max(10_000_000) })).max(30),
   welcome: z.number().int().min(0).max(1_000_000),
+  peerAllowance: z.number().int().min(0).max(1_000_000).default(0),
   notifyCustomer: z.boolean(),
   enabled: z.boolean(),
 });

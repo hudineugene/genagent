@@ -63,6 +63,8 @@ export async function register() {
   startContent();
   const { startOutreach } = await import("./lib/outreach/engine");
   startOutreach();
+  const { startReminders } = await import("./lib/reminders");
+  startReminders();
   const { startMonthlyReports } = await import("./lib/agent/report");
   startMonthlyReports();
   const { startWatch } = await import("./lib/agent/watch");

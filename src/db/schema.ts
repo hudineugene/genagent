@@ -350,6 +350,10 @@ export const clientDocTypes = sqliteTable(
     fields: text("fields", { mode: "json" }).$type<DocField[]>().notNull().default([]),
     notify: integer("notify", { mode: "boolean" }).notNull().default(true),
     enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    /** Папка архива («Договоры», «Счета/2026»); пусто — название типа */
+    folder: text("folder").notNull().default(""),
+    /** Как назвать файл: «{{date}} Счёт {{supplier}} {{number}}» — поля типа, {{date}} — дата документа или загрузки */
+    nameTemplate: text("name_template").notNull().default(""),
     createdAt: createdAt(),
     updatedAt: integer("updated_at", { mode: "timestamp_ms" })
       .notNull()
@@ -373,6 +377,12 @@ export const clientDocuments = sqliteTable(
     fields: text("fields", { mode: "json" }).$type<Record<string, string>>().notNull().default({}),
     /** Коротко: что за документ и главное в нём */
     summary: text("summary").notNull().default(""),
+    /** Единое имя по шаблону типа и папка архива */
+    title: text("title").notNull().default(""),
+    folder: text("folder").notNull().default(""),
+    /** Сохранённый файл (загрузка в архив): имя в папке docs рядом с базой */
+    file: text("file").notNull().default(""),
+    size: integer("size").notNull().default(0),
     createdAt: createdAt(),
   },
   (t) => [index("client_documents_client_idx").on(t.clientId, t.createdAt)],
@@ -510,6 +520,7 @@ export const contentItems = sqliteTable(
 export type ContentItem = typeof contentItems.$inferSelect;
 
 export type MeetingTask = { who: string; what: string; due: string };
+export type MeetingDelivery = { team: boolean; owners: boolean; emails?: string[]; channelId?: string; mailStatus?: string };
 /**
  * Встречи и звонки: запись (аудио/видео) или готовая расшифровка → протокол, разбор собеседования или
  * звонка продаж; задачи уходят в Telegram и во внешние системы (событие meeting).
@@ -535,7 +546,8 @@ export const meetings = sqliteTable(
     score: integer("score"),
     status: text("status", { enum: ["processing", "done", "error"] }).notNull().default("processing"),
     error: text("error"),
-    delivery: text("delivery", { mode: "json" }).$type<{ team: boolean; owners: boolean }>().notNull().default({ team: false, owners: false }),
+    /** Кому отправить итоги: студия, владельцы, участники на почту (с почтового канала клиента) */
+    delivery: text("delivery", { mode: "json" }).$type<MeetingDelivery>().notNull().default({ team: false, owners: false }),
     createdAt: createdAt(),
     updatedAt: integer("updated_at", { mode: "timestamp_ms" })
       .notNull()
@@ -689,6 +701,222 @@ export const clientPricing = sqliteTable("client_pricing", {
 });
 export type ClientPricing = typeof clientPricing.$inferSelect;
 
+export type ReminderKind = "date" | "status";
+/**
+ * Напоминания по таблице из «Данных»: по дате (оплата, доставка, продление — за N дней) или при смене статуса
+ * (заказ «отправлен», «доставлен»). Человек находится по контакту в строке (чат по @нику / телефону / почте или
+ * письмо с почтового канала); текст — шаблон со {{Столбцами}}. Одно напоминание на строку и дату / статус.
+ */
+export const reminders = sqliteTable(
+  "reminders",
+  {
+    id: id(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    tableId: text("table_id").references(() => dataTables.id, { onDelete: "set null" }),
+    kind: text("kind", { enum: ["date", "status"] }).notNull().default("date"),
+    dateColumn: text("date_column").notNull().default(""),
+    /** За сколько дней до даты (0 — в день, отрицательное — через N дней после) */
+    offsetDays: integer("offset_days").notNull().default(1),
+    /** Столбец-ключ строки (номер заказа / счёта); пусто — контакт */
+    keyColumn: text("key_column").notNull().default(""),
+    statusColumn: text("status_column").notNull().default(""),
+    /** Для даты — только строки с таким статусом («не оплачен»); для статуса — о каких значениях сообщать (пусто — о любом) */
+    statusValues: text("status_values", { mode: "json" }).$type<string[]>().notNull().default([]),
+    contactColumn: text("contact_column").notNull().default(""),
+    /** Почтовый канал для контактов-почт без чата */
+    channelId: text("channel_id").references(() => channels.id, { onDelete: "set null" }),
+    message: text("message").notNull().default(""),
+    hour: integer("hour").notNull().default(10),
+    notifyTeam: integer("notify_team", { mode: "boolean" }).notNull().default(false),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(false),
+    lastRunAt: integer("last_run_at", { mode: "timestamp_ms" }),
+    lastResult: text("last_result"),
+    createdAt: createdAt(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [index("reminders_client_idx").on(t.clientId)],
+);
+export type Reminder = typeof reminders.$inferSelect;
+
+export const reminderLog = sqliteTable(
+  "reminder_log",
+  {
+    id: id(),
+    reminderId: text("reminder_id")
+      .notNull()
+      .references(() => reminders.id, { onDelete: "cascade" }),
+    rowKey: text("row_key").notNull(),
+    /** Дата (для напоминаний по дате) или значение статуса */
+    value: text("value").notNull(),
+    /** sent — отправлено; seen — исходный статус (без сообщения); no_chat, failed */
+    status: text("status").notNull(),
+    contact: text("contact").notNull().default(""),
+    error: text("error"),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("reminder_log_unique").on(t.reminderId, t.rowKey, t.value)],
+);
+
+export type OnboardingStep = { title: string; day: number; kind: "task" | "meet" | "read"; owner: string };
+export type OnboardingItem = { id: string; title: string; due: string; kind: OnboardingStep["kind"]; owner: string; done: boolean; doneAt?: string };
+/**
+ * Адаптация новых сотрудников: шаблон плана (шаги по дням от выхода: задачи, знакомства, что прочитать) →
+ * персональный чек-лист новичка (ИИ дополняет под должность), приветственное письмо, ежедневные напоминания
+ * новичку и команде, отметки «сделано» в чате с агентом команды или в студии.
+ */
+export const onboardingPlans = sqliteTable(
+  "onboarding_plans",
+  {
+    id: id(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    steps: text("steps", { mode: "json" }).$type<OnboardingStep[]>().notNull().default([]),
+    /** О чём приветственное письмо: тон, что взять в первый день, к кому обращаться */
+    welcome: text("welcome").notNull().default(""),
+    createdAt: createdAt(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [index("onboarding_plans_client_idx").on(t.clientId)],
+);
+export type OnboardingPlan = typeof onboardingPlans.$inferSelect;
+
+export const onboardings = sqliteTable(
+  "onboardings",
+  {
+    id: id(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    planId: text("plan_id").references(() => onboardingPlans.id, { onDelete: "set null" }),
+    name: text("name").notNull(),
+    role: text("role").notNull().default(""),
+    /** @ник Telegram или телефон — чат с агентом команды */
+    contact: text("contact").notNull().default(""),
+    email: text("email").notNull().default(""),
+    channelId: text("channel_id").references(() => channels.id, { onDelete: "set null" }),
+    /** Первый рабочий день, ГГГГ-ММ-ДД */
+    startDate: text("start_date").notNull(),
+    items: text("items", { mode: "json" }).$type<OnboardingItem[]>().notNull().default([]),
+    welcomeText: text("welcome_text").notNull().default(""),
+    /** pending — ещё не отправлено; sent; no_contact — нет ни чата, ни почты */
+    welcomeStatus: text("welcome_status").notNull().default("pending"),
+    /** День последней рассылки напоминаний (ГГГГ-ММ-ДД) */
+    lastTick: text("last_tick").notNull().default(""),
+    status: text("status", { enum: ["active", "done"] }).notNull().default("active"),
+    createdAt: createdAt(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [index("onboardings_client_idx").on(t.clientId, t.status)],
+);
+export type Onboarding = typeof onboardings.$inferSelect;
+
+/** Подбор: вакансия (требования) и кандидаты — резюме оцениваются по требованиям, список сортируется по баллу. */
+export const vacancies = sqliteTable(
+  "vacancies",
+  {
+    id: id(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    requirements: text("requirements").notNull().default(""),
+    createdAt: createdAt(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [index("vacancies_client_idx").on(t.clientId)],
+);
+export type Vacancy = typeof vacancies.$inferSelect;
+
+export const candidates = sqliteTable(
+  "candidates",
+  {
+    id: id(),
+    vacancyId: text("vacancy_id")
+      .notNull()
+      .references(() => vacancies.id, { onDelete: "cascade" }),
+    clientId: text("client_id").notNull(),
+    name: text("name").notNull().default(""),
+    contact: text("contact").notNull().default(""),
+    filename: text("filename").notNull().default(""),
+    /** Текст резюме */
+    text: text("text").notNull().default(""),
+    /** 0–100: соответствие требованиям */
+    score: integer("score"),
+    verdict: text("verdict", { enum: ["strong", "maybe", "no"] }),
+    summary: text("summary").notNull().default(""),
+    strengths: text("strengths", { mode: "json" }).$type<string[]>().notNull().default([]),
+    gaps: text("gaps", { mode: "json" }).$type<string[]>().notNull().default([]),
+    status: text("status", { enum: ["processing", "done", "error"] }).notNull().default("processing"),
+    error: text("error"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("candidates_vacancy_idx").on(t.vacancyId)],
+);
+export type Candidate = typeof candidates.$inferSelect;
+
+/**
+ * Повторные покупки: по таблице заказов (клиент, дата, контакт, товар, сумма) — у кого обычно какой интервал
+ * между покупками, когда ждать следующую и насколько вероятно; вовремя — личное напоминание или предложение.
+ */
+export const clientRepeat = sqliteTable("client_repeat", {
+  clientId: text("client_id")
+    .primaryKey()
+    .references(() => clients.id, { onDelete: "cascade" }),
+  tableId: text("table_id").references(() => dataTables.id, { onDelete: "set null" }),
+  customerColumn: text("customer_column").notNull().default(""),
+  dateColumn: text("date_column").notNull().default(""),
+  contactColumn: text("contact_column").notNull().default(""),
+  productColumn: text("product_column").notNull().default(""),
+  amountColumn: text("amount_column").notNull().default(""),
+  /** За сколько дней до ожидаемой покупки напоминать */
+  leadDays: integer("lead_days").notNull().default(3),
+  /** С какого числа заказов клиент считается «повторным» */
+  minOrders: integer("min_orders").notNull().default(2),
+  /** Отправлять напоминания самим (раз в день) */
+  auto: integer("auto", { mode: "boolean" }).notNull().default(false),
+  /** Что предложить: «скидка 5% на повторный заказ», «напомнить пополнить запас» */
+  brief: text("brief").notNull().default(""),
+  channelId: text("channel_id").references(() => channels.id, { onDelete: "set null" }),
+  hour: integer("hour").notNull().default(11),
+  lastRunAt: integer("last_run_at", { mode: "timestamp_ms" }),
+  lastResult: text("last_result"),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+export type ClientRepeat = typeof clientRepeat.$inferSelect;
+
+export const repeatNudges = sqliteTable(
+  "repeat_nudges",
+  {
+    id: id(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    customer: text("customer").notNull(),
+    /** Дата последнего заказа на момент напоминания: одно напоминание на «цикл» */
+    lastOrder: text("last_order").notNull(),
+    message: text("message").notNull().default(""),
+    status: text("status").notNull(),
+    error: text("error"),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("repeat_nudges_unique").on(t.clientId, t.customer, t.lastOrder)],
+);
+
 export type Vehicle = { name: string; capacityKg: number; capacityM3: number };
 /** Логистика клиента: склад / точка отправления, время на одну точку, машины; правила доставки — для агента. */
 export const clientLogistics = sqliteTable("client_logistics", {
@@ -725,6 +953,8 @@ export const loyaltyPrograms = sqliteTable(
     rules: text("rules").notNull().default(""),
     rewards: text("rewards", { mode: "json" }).$type<LoyaltyReward[]>().notNull().default([]),
     welcome: integer("welcome").notNull().default(0),
+    /** Благодарности коллегам: сколько баллов в месяц каждый может подарить другим (0 — выключено) */
+    peerAllowance: integer("peer_allowance").notNull().default(0),
     /** Сообщать клиенту в чат о начислениях из студии и API */
     notifyCustomer: integer("notify_customer", { mode: "boolean" }).notNull().default(true),
     /** Ключ для начислений из CRM / сайта (POST /api/loyalty/<id>) */
@@ -772,7 +1002,9 @@ export const loyaltyTx = sqliteTable(
     /** Баланс после операции */
     balance: integer("balance").notNull(),
     reason: text("reason").notNull().default(""),
-    source: text("source", { enum: ["studio", "api", "agent", "welcome"] }).notNull().default("studio"),
+    source: text("source", { enum: ["studio", "api", "agent", "welcome", "peer"] }).notNull().default("studio"),
+    /** Кто подарил (благодарность коллеге) — счёт дарителя */
+    giverId: text("giver_id"),
     createdAt: createdAt(),
   },
   (t) => [index("loyalty_tx_account_idx").on(t.accountId, t.createdAt)],

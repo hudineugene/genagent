@@ -4,7 +4,7 @@ import { refresh } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { clientDocTypes } from "@/db/schema";
+import { clientDocTypes, clientDocuments } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
 
 export type DocTypeResult = { error?: string; id?: string };
@@ -18,6 +18,8 @@ const schema = z.object({
     .max(30),
   notify: z.boolean(),
   enabled: z.boolean(),
+  folder: z.string().trim().max(120).default(""),
+  nameTemplate: z.string().trim().max(200).default(""),
 });
 
 export async function saveDocType(clientId: string, id: string | null, input: z.input<typeof schema>): Promise<DocTypeResult> {
@@ -40,5 +42,16 @@ export async function saveDocType(clientId: string, id: string | null, input: z.
 export async function deleteDocType(id: string) {
   await requireUser();
   await db.delete(clientDocTypes).where(eq(clientDocTypes.id, id));
+  refresh();
+}
+
+/** Удалить документ из архива (и сам файл). */
+export async function deleteArchivedDoc(id: string) {
+  await requireUser();
+  const [d] = await db.delete(clientDocuments).where(eq(clientDocuments.id, id)).returning();
+  if (d?.file) {
+    const { removeArchived } = await import("@/lib/documents/archive");
+    removeArchived(d.file);
+  }
   refresh();
 }

@@ -2,10 +2,10 @@ import "server-only";
 import { withKeys } from "@/lib/keys";
 import { apiKey as keyOf } from "@/lib/keys";
 import path from "node:path";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import OpenAI, { toFile } from "openai";
 import { db } from "@/db";
-import { clients, meetings, type Meeting, type MeetingTask } from "@/db/schema";
+import { channels, clients, meetings, type EmailConfig, type Meeting, type MeetingTask } from "@/db/schema";
 import { generateJson } from "@/lib/llm/anthropic";
 import { logUsage } from "@/lib/usage";
 
@@ -112,7 +112,7 @@ export async function analyzeMeeting(id: string) {
   void import("@/lib/integrations/events").then((e) =>
     e.emitEvent("meeting", { clientId: row.clientId, meeting: { title: row.title, kind: row.kind, summary: row.summary, tasks: row.tasks, score: row.score } }),
   );
-  if (row.delivery.team || row.delivery.owners) await deliverMeeting(row).catch((e) => console.error("meeting deliver failed", e));
+  if (row.delivery.team || row.delivery.owners || row.delivery.emails?.length) await deliverMeeting(row).catch((e) => console.error("meeting deliver failed", e));
   return row;
 }
 
@@ -132,6 +132,42 @@ export async function deliverMeeting(m: Meeting) {
   const n = await import("@/lib/notify/telegram");
   if (m.delivery.team) await n.sendToTeam(html);
   if (m.delivery.owners) await n.sendToOwners(m.clientId, html);
+  if (m.delivery.emails?.length) await emailParticipants(m);
+}
+
+/** Текст письма участникам: кратко, задачи (кто — что — срок), полный разбор. */
+export function meetingEmail(m: Pick<Meeting, "title" | "summary" | "result" | "tasks">) {
+  return [
+    m.summary,
+    m.tasks.length ? `\nЗадачи:\n${m.tasks.map((t) => `• ${t.who ? `${t.who}: ` : ""}${t.what}${t.due ? ` — до ${t.due}` : ""}`).join("\n")}` : "",
+    `\n${m.result.replace(/^#+\s*/gm, "").replace(/\*\*/g, "")}`,
+  ]
+    .filter(Boolean)
+    .join("\n")
+    .slice(0, 60_000);
+}
+
+/** Итоги — участникам на почту с почтового канала клиента. Результат — в delivery.mailStatus. */
+export async function emailParticipants(m: Meeting) {
+  const emails = [...new Set((m.delivery.emails ?? []).map((e) => e.trim().toLowerCase()).filter((e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)))].slice(0, 50);
+  let mailStatus = "sent";
+  try {
+    const [ch] = m.delivery.channelId ? await db.select().from(channels).where(and(eq(channels.id, m.delivery.channelId), eq(channels.clientId, m.clientId))) : [];
+    if (!ch || ch.type !== "email") throw new Error("no_channel");
+    if (!emails.length) throw new Error("no_emails");
+    const cfg = ch.config as EmailConfig;
+    const { smtpTransport } = await import("@/lib/channels/email-send");
+    await smtpTransport(cfg).sendMail({
+      from: { name: cfg.fromName || cfg.address, address: cfg.address },
+      to: emails,
+      subject: `Итоги встречи: ${m.title || "встреча"}`.slice(0, 150),
+      text: meetingEmail(m),
+    });
+  } catch (e) {
+    mailStatus = `error: ${(e instanceof Error ? e.message : String(e)).slice(0, 200)}`;
+  }
+  await db.update(meetings).set({ delivery: { ...m.delivery, emails, mailStatus } }).where(eq(meetings.id, m.id));
+  return mailStatus;
 }
 
 /** Полная обработка новой встречи: расшифровка (если запись) и разбор. Ошибки — в статус. */

@@ -48,11 +48,47 @@ export async function attachDocument(
 
 type Extracted = { type: string; fields: { key: string; value: string }[]; summary: string };
 
-/** Определить тип и достать поля. null — у клиента нет типов документов или документ ни под один не подходит. */
-async function analyzeDocument__(d: { clientId: string; agentId: string; conversationId: string | null; messageId: string | null; filename: string; text: string }) {
+const OTHER_FOLDER = "Разное";
+
+/** Единое имя документа по шаблону типа: {{date}}, {{type}}, {{поле}}; символы, недопустимые в имени файла, убираются. */
+export function documentTitle(t: Pick<ClientDocType, "name" | "nameTemplate" | "fields"> | null, fields: Record<string, string>, filename: string, today: string) {
+  const ext = path.extname(filename).toLowerCase();
+  const base = ext ? filename.slice(0, -ext.length) : filename;
+  const dateKey = t?.fields.find((f) => /^(date|дата)/i.test(f.key) || /дата/i.test(f.label))?.key;
+  const date = (dateKey && fields[dateKey]) || today;
+  const byLabel = new Map(t?.fields.map((f) => [f.label.toLowerCase(), fields[f.key] ?? ""]) ?? []);
+  const tpl = t?.nameTemplate?.trim() || (t ? `{{date}} {{type}} ${t.fields.filter((f) => f.key !== dateKey).slice(0, 2).map((f) => `{{${f.key}}}`).join(" ")}` : "");
+  const name = tpl
+    ? tpl.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_, k: string) => (k === "date" ? date : k === "type" ? (t?.name ?? "") : (fields[k] ?? byLabel.get(k.toLowerCase()) ?? "")))
+    : `${today} ${base}`;
+  const clean = name.replace(/[\\/:*?"<>|\n\r\t]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 150);
+  return `${clean || "document"}${ext}`;
+}
+
+/** Определить тип и достать поля. null — у клиента нет типов документов или документ ни под один не подходит
+ *  (при загрузке в архив — документ всё равно сохраняется в папку «Разное»). */
+async function analyzeDocument__(d: {
+  clientId: string;
+  agentId: string | null;
+  conversationId: string | null;
+  messageId: string | null;
+  filename: string;
+  text: string;
+  archive?: { file: string; size: number };
+}) {
   const apiKey = keyOf("anthropic");
   const types = await db.select().from(clientDocTypes).where(and(eq(clientDocTypes.clientId, d.clientId), eq(clientDocTypes.enabled, true)));
-  if (!apiKey || !types.length || !d.text.trim()) return null;
+  const today = new Date().toISOString().slice(0, 10);
+  const keepOther = async () =>
+    d.archive
+      ? (
+          await db
+            .insert(clientDocuments)
+            .values({ clientId: d.clientId, conversationId: d.conversationId, messageId: d.messageId, filename: d.filename.slice(0, 200), title: documentTitle(null, {}, d.filename, today), folder: OTHER_FOLDER, file: d.archive.file, size: d.archive.size })
+            .returning()
+        )[0]
+      : null;
+  if (!apiKey || !types.length || !d.text.trim()) return keepOther();
   const started = Date.now();
   const { data, usage, model } = await generateJson<Extracted>(apiKey, MODEL, {
     system: [
@@ -75,20 +111,32 @@ async function analyzeDocument__(d: { clientId: string; agentId: string; convers
     },
     effort: "low",
   });
-  await logUsage({ source: "insights", model, usage, agentId: d.agentId, clientId: d.clientId, conversationId: d.conversationId, ms: Date.now() - started }).catch(() => {});
+  await logUsage({ source: "insights", model, usage, agentId: d.agentId ?? undefined, clientId: d.clientId, conversationId: d.conversationId, ms: Date.now() - started }).catch(() => {});
   const docType: ClientDocType | undefined = types[Number(data.type.replace(/^t/, ""))];
-  if (!docType || data.type === "none") return null;
+  if (!docType || data.type === "none") return keepOther();
   const known = new Map(docType.fields.map((f) => [f.key, f.label]));
   const fields = Object.fromEntries(data.fields.filter((f) => known.has(f.key) && f.value.trim()).map((f) => [f.key, f.value.trim().slice(0, 500)]));
   const [row] = await db
     .insert(clientDocuments)
-    .values({ clientId: d.clientId, docTypeId: docType.id, conversationId: d.conversationId, messageId: d.messageId, filename: d.filename.slice(0, 200), fields, summary: data.summary.trim().slice(0, 500) })
+    .values({
+      clientId: d.clientId,
+      docTypeId: docType.id,
+      conversationId: d.conversationId,
+      messageId: d.messageId,
+      filename: d.filename.slice(0, 200),
+      fields,
+      summary: data.summary.trim().slice(0, 500),
+      title: documentTitle(docType, fields, d.filename, today),
+      folder: docType.folder.trim() || docType.name,
+      file: d.archive?.file ?? "",
+      size: d.archive?.size ?? 0,
+    })
     .returning();
   // Для людей и внешних систем — подписи полей вместо ключей
   const labeled = Object.fromEntries(Object.entries(fields).map(([k, v]) => [known.get(k) ?? k, v]));
   const payload = { type: docType.name, filename: row.filename, fields: labeled, summary: row.summary };
-  void import("@/lib/integrations/events").then((m) => m.emitEvent("document", { clientId: d.clientId, agentId: d.agentId, conversationId: d.conversationId, document: payload }));
-  if (docType.notify) void import("@/lib/notify/telegram").then((n) => n.notifyDocument(d.conversationId, d.clientId, payload));
+  void import("@/lib/integrations/events").then((m) => m.emitEvent("document", { clientId: d.clientId, agentId: d.agentId ?? undefined, conversationId: d.conversationId, document: payload }));
+  if (docType.notify && !d.archive) void import("@/lib/notify/telegram").then((n) => n.notifyDocument(d.conversationId, d.clientId, payload));
   return row;
 }
 
