@@ -50,6 +50,7 @@ const FIELDS: Field[] = [
   "logistics",
   "pricing",
   "learning",
+  "aiDisclosure",
 ];
 
 export function VersionsPanel({
@@ -110,6 +111,7 @@ export function VersionsPanel({
       qualityCheck: b.qualityCheck,
       factGuard: b.factGuard,
       answerCheck: b.answerCheck,
+      aiDisclosure: b.aiDisclosure,
       calendar: b.sections.calendar,
       toolIds: b.sections.tools,
       webSearch: b.webSearch,
@@ -155,6 +157,8 @@ export function VersionsPanel({
         return String((c.formIds ?? []).length || "—");
       case "docTemplateIds":
         return String((c.docTemplateIds ?? []).length || "—");
+      case "aiDisclosure":
+        return c.aiDisclosure?.enabled ? t.versions.on : t.versions.off;
       case "learning":
         return c.learning ? t.versions.on : t.versions.off;
       case "pricing":

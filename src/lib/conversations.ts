@@ -16,7 +16,6 @@ import { type ApiConfig,
   type ThreadsConfig,
   type EmailConfig,
   type ClientMemory,
-  type WhatsAppConfig,
 } from "@/db/schema";
 import * as ig from "@/lib/channels/meta/instagram";
 import * as th from "@/lib/channels/meta/threads";
@@ -31,8 +30,9 @@ import { ordersNote } from "@/lib/agent/orders";
 import { memoryNote } from "@/lib/agent/memory";
 import { handoffEtaNote, measuredReplyMinutes } from "@/lib/agent/eta";
 import { sendChatAction, sendText, replyInGroup } from "@/lib/channels/telegram-api";
+import { untrusted } from "@/lib/agent/guard";
+import { compileSystemPrompt } from "@/lib/agent/compile";
 import { sendEmailReply } from "@/lib/channels/email-send";
-import * as wa from "@/lib/channels/meta/whatsapp";
 
 const HISTORY_LIMIT = 40;
 /** Пауза перед ответом: клиент часто пишет несколькими сообщениями подряд. */
@@ -331,7 +331,24 @@ async function respond__(conversationId: string): Promise<void> {
       await addMessage(conversationId, "system", "comment_skipped", { meta });
       return;
     }
-    const reply = toPlainText(clean);
+    let reply = toPlainText(clean);
+    // Дословный пересказ служебных инструкций агента (попытка выманить промпт) — не отправляем
+    if (reply) {
+      const { LEAK_REPLY, leaksInstructions } = await import("@/lib/agent/guard");
+      const core = compileSystemPrompt({ ...config, rules: "", extraInstructions: "", handoff: "", knowledge: "", greeting: "", description: "" }, { ...client, description: "", brandVoice: "" });
+      if (leaksInstructions(reply, core)) {
+        const { disclosureLanguage } = await import("@/lib/agent/disclosure");
+        reply = LEAK_REPLY[disclosureLanguage(conversation.context?.language, config.replyLanguage)];
+        meta = { ...meta, leakBlocked: true };
+      }
+    }
+    // Раскрытие ИИ: первая строка первого ответа агента в разговоре (личные сообщения и письма)
+    if (reply && config.aiDisclosure?.enabled && conversation.kind === "dm" && !conversation.context?.aiDisclosedAt && !history.some((m) => m.role === "assistant")) {
+      const { disclosureLanguage, disclosureText } = await import("@/lib/agent/disclosure");
+      reply = `${disclosureText(client.name, disclosureLanguage(conversation.context?.language, config.replyLanguage), config.aiDisclosure.text)}\n\n${reply}`;
+      const [cur] = await db.select({ context: conversations.context }).from(conversations).where(eq(conversations.id, conversationId));
+      await db.update(conversations).set({ context: { ...cur?.context, aiDisclosedAt: Date.now() } }).where(eq(conversations.id, conversationId));
+    }
     // Проверка на выдуманные факты: цены, суммы, телефоны, ссылки, которых нет ни в указаниях с базой знаний,
     // ни в переписке, ни в результатах инструментов. Помечаем; в строгом режиме агента — не отправляем.
     const unverified = reply
@@ -360,8 +377,17 @@ async function respond__(conversationId: string): Promise<void> {
       void notify().then((n) => n.notifyDraft(draft.id));
       await db.update(conversations).set({ needsAttention: true }).where(eq(conversations.id, conversationId));
     } else if (reply) {
-      const externalId = await deliver(channel, conversation, reply);
-      await addMessage(conversationId, "assistant", reply, { meta: { ...meta, handoff }, externalId: externalId ?? undefined });
+      // Клиент прислал голосовое — отвечаем голосовым (если агент это разрешает и озвучка доступна)
+      const { deliverVoice, wantsVoice } = await import("@/lib/voice");
+      const lastUser = [...history].reverse().find((m) => m.role === "user");
+      const spoken = wantsVoice(channel, conversation, lastUser?.meta?.kind, config.voiceReplies)
+        ? await deliverVoice(channel, conversation, reply, { voice: config.voice, agentId: agent.id, clientId: client.id }).catch((e) => {
+            console.error("voice reply failed", e);
+            return null;
+          })
+        : null;
+      const externalId = spoken ? spoken.externalId : await deliver(channel, conversation, reply);
+      await addMessage(conversationId, "assistant", reply, { meta: { ...meta, handoff, ...(spoken ? { spoken: true } : {}) }, externalId: externalId ?? undefined });
     }
     if (handoff && pendingHandoff) {
       // Уже передан и менеджер ещё не ответил: не дёргаем менеджера снова — дописываем к той передаче
@@ -442,10 +468,10 @@ export function historyForAi(history: { role: string; text: string; meta?: Messa
 /** Сообщение клиента для ИИ: к фото — описание того, что на нём (агент сам фото не видит). */
 function withVision(m: { role: string; text: string; meta?: MessageMeta | null }) {
   // Документ: агент читает его текст
-  if (m.meta?.document) return `${m.text ? `${m.text}\n\n` : ""}[Клиент прислал документ «${m.meta.document.name}». Его текст:]\n${m.meta.document.text}`;
+  if (m.meta?.document) return `${m.text ? `${m.text}\n\n` : ""}${untrusted(`Клиент прислал документ «${m.meta.document.name}», его текст`, m.meta.document.text)}`;
   // Вложение без подписи из журнала (фото, видео…) — ИИ не принимает пустые сообщения
   if (!m.meta?.vision) return m.text.trim() ? m.text : `[${m.role === "user" ? "Клиент прислал" : "Отправлено клиенту"}: ${m.meta?.kind ?? "вложение"}]`;
-  return `${m.text ? `${m.text}\n\n` : ""}[Клиент прислал фото. На фото: ${m.meta.vision}]`;
+  return `${m.text ? `${m.text}\n\n` : ""}${untrusted("Клиент прислал фото, описание", m.meta.vision)}`;
 }
 
 const ACTIVITY_WINDOW_MS = 2 * 60 * 60 * 1000;
@@ -668,8 +694,8 @@ export async function deliver(
     case "email":
       return sendEmailReply(channel.config as EmailConfig, conversation, text);
     case "whatsapp": {
-      const cfg = channel.config as WhatsAppConfig;
-      return wa.sendText(cfg.token, cfg.phoneNumberId, conversation.externalId, toPlainText(text));
+      const { sendWhatsApp } = await import("@/lib/channels/meta/wa-send");
+      return sendWhatsApp(channel as Channel, conversation as Conversation, toPlainText(text));
     }
     default:
       return null;

@@ -306,3 +306,39 @@ export async function regenerateApiKey(channelId: string): Promise<ChannelResult
   refresh();
   return { ok: true };
 }
+
+/** WhatsApp: ID бизнес-аккаунта, шаблон для сообщений вне окна, цены сообщений для учёта расходов. */
+export async function saveWhatsAppSettings(
+  channelId: string,
+  input: { wabaId: string; proactiveTemplate: { name: string; language: string } | null; price: { service: number; template: number } },
+): Promise<ChannelResult> {
+  await requireUser();
+  const [ch] = await db.select().from(channels).where(eq(channels.id, channelId));
+  if (!ch || ch.type !== "whatsapp") return { error: "not_found" };
+  const waba = input.wabaId.trim();
+  if (waba && !/^\d{6,25}$/.test(waba)) return { error: "invalid" };
+  const price = { service: Math.min(1, Math.max(0, Number(input.price.service) || 0)), template: Math.min(1, Math.max(0, Number(input.price.template) || 0)) };
+  const cfg = ch.config as WhatsAppConfig;
+  const tpl = input.proactiveTemplate && cfg.templates?.some((t) => t.name === input.proactiveTemplate!.name && t.language === input.proactiveTemplate!.language) ? input.proactiveTemplate : undefined;
+  await db.update(channels).set({ config: { ...cfg, wabaId: waba || undefined, proactiveTemplate: tpl, price } }).where(eq(channels.id, channelId));
+  refresh();
+  return { ok: true };
+}
+
+/** Загрузить утверждённые шаблоны из Meta. */
+export async function syncWhatsAppTemplates(channelId: string): Promise<ChannelResult & { count?: number }> {
+  await requireUser();
+  const [ch] = await db.select().from(channels).where(eq(channels.id, channelId));
+  if (!ch || ch.type !== "whatsapp") return { error: "not_found" };
+  const cfg = ch.config as WhatsAppConfig;
+  if (!cfg.wabaId) return { error: "no_waba" };
+  try {
+    const { listTemplates } = await import("@/lib/channels/meta/whatsapp");
+    const templates = await listTemplates(cfg.token, cfg.wabaId);
+    await db.update(channels).set({ config: { ...cfg, templates } }).where(eq(channels.id, channelId));
+    refresh();
+    return { ok: true, count: templates.length };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message.slice(0, 200) : "whatsapp_error" };
+  }
+}

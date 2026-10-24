@@ -239,6 +239,20 @@ export function Builder({
             onChange={(v) => set("factGuard", v)}
           />
         </Field>
+        <Field label={t.builder.aiDisclosure} hint={t.builder.aiDisclosureHint}>
+          <Segmented
+            value={config.aiDisclosure?.enabled ? "on" : "off"}
+            options={(["on", "off"] as const).map((v) => ({ value: v, label: t.builder.answerCheckModes[v] }))}
+            onChange={(v) => set("aiDisclosure", { enabled: v === "on", text: config.aiDisclosure?.text ?? "" })}
+          />
+        </Field>
+        {config.aiDisclosure?.enabled ? (
+          <Field label={t.builder.aiDisclosureText} hint={t.builder.aiDisclosureTextHint}>
+            <Textarea rows={2} value={config.aiDisclosure.text} maxLength={500} placeholder={t.builder.aiDisclosurePlaceholder} onChange={(e) => set("aiDisclosure", { enabled: true, text: e.target.value })} />
+          </Field>
+        ) : (
+          <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-sm">{t.builder.aiDisclosureOff}</p>
+        )}
         <Field label={t.builder.answerCheck} hint={t.builder.answerCheckHint}>
           <Segmented
             value={config.answerCheck ? "on" : "off"}

@@ -44,3 +44,12 @@ export async function deleteClient(id: string) {
   refresh();
   redirect("/clients");
 }
+
+/** Срок хранения разговоров клиента (GDPR): null — бессрочно, иначе 7–3650 дней. */
+export async function saveRetention(clientId: string, days: number | null): Promise<{ error?: string }> {
+  await requireUser();
+  if (days != null && (!Number.isInteger(days) || days < 7 || days > 3650)) return { error: "invalid" };
+  await db.update(clients).set({ retentionDays: days }).where(eq(clients.id, clientId));
+  refresh();
+  return {};
+}

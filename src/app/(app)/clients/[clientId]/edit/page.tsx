@@ -4,6 +4,8 @@ import { db } from "@/db";
 import { clients, usageLog } from "@/db/schema";
 import { KEY_KINDS, maskKey } from "@/lib/keys";
 import { ClientKeys } from "./client-keys";
+import { ClientPrivacy } from "./client-privacy";
+import { subprocessors } from "@/lib/dpa";
 import { deleteClient, updateClient } from "@/app/actions/clients";
 import { getT } from "@/lib/i18n/server";
 import { ClientForm } from "@/components/client-form";
@@ -39,6 +41,7 @@ export default async function EditClientPage({ params }: { params: Promise<{ cli
         ownSpend={Number(own ?? 0)}
         keys={KEY_KINDS.map((kind) => ({ kind, masked: apiKeys[kind] ? maskKey(apiKeys[kind]) : null, studio: Boolean(process.env[ENV[kind]]) }))}
       />
+      <ClientPrivacy clientId={client.id} retentionDays={client.retentionDays} subs={(await subprocessors(client.id)).map((s) => ({ name: s.name, purpose: s.purpose, location: s.location }))} />
     </div>
   );
 }

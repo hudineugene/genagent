@@ -110,6 +110,8 @@ export const agentConfigSchema = z.object({
   qualityCheck: z.boolean().default(true),
   /** Проверка ответа перед отправкой (вторая модель; при проблеме — один раз переписать) */
   answerCheck: z.boolean().optional(),
+  /** Раскрытие ИИ (EU AI Act, ст. 50): первая строка первого ответа в разговоре; text — свой текст, {company} — название */
+  aiDisclosure: z.object({ enabled: z.boolean(), text: z.string().max(500).default("") }).optional(),
   /** Контроль качества ответов сотрудников (оценка после отправки) */
   operatorReview: z.boolean().optional(),
   calendar: calendarConfigSchema.prefault({}),

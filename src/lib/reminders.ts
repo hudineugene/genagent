@@ -176,6 +176,7 @@ export function startReminders() {
     await import("@/lib/onboarding").then((m) => m.onboardingTick()).catch((e) => console.error("onboarding tick failed", e));
     await import("@/lib/logistics/trips").then((m) => m.tripsTick()).catch((e) => console.error("trips tick failed", e));
     await import("@/lib/learning").then((m) => m.learningTick()).catch((e) => console.error("learning tick failed", e));
+    await import("@/lib/privacy").then((m) => m.retentionTick()).catch((e) => console.error("retention tick failed", e));
   };
   g.__remindersTimer = setInterval(() => void tick(), 10 * 60_000);
   g.__remindersTimer.unref?.();

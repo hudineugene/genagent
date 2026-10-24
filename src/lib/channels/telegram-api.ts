@@ -32,6 +32,19 @@ async function call<T>(token: string, method: string, body?: unknown, signal?: A
 }
 
 /** Фото файлом (multipart) с подписью в HTML: публикация поста с картинкой в канал. */
+/** Голосовое (OGG/Opus) с подписью-текстом. Возвращает id сообщения. */
+export async function sendVoice(token: string, chatId: string, ogg: Buffer, caption?: string): Promise<number | null> {
+  const form = new FormData();
+  form.set("chat_id", chatId);
+  form.set("voice", new Blob([new Uint8Array(ogg)], { type: "audio/ogg" }), "voice.ogg");
+  if (caption) form.set("caption", caption.slice(0, 1024));
+  const res = await fetch(`${API()}/bot${token}/sendVoice`, { method: "POST", body: form });
+  const data = (await res.json().catch(() => null)) as { ok: true; result: { message_id: number } } | { ok: false; error_code: number; description: string } | null;
+  if (!data) throw new TelegramError(res.status, `HTTP ${res.status}`);
+  if (!data.ok) throw new TelegramError(data.error_code, data.description);
+  return data.result.message_id;
+}
+
 export async function sendPhoto(token: string, chatId: string, photo: { buf: Buffer; type: string; name: string }, captionHtml?: string) {
   const form = new FormData();
   form.set("chat_id", chatId);
@@ -67,7 +80,7 @@ export type TgMessage = {
   text?: string;
   caption?: string;
   photo?: { file_id: string; file_size?: number; width?: number }[];
-  voice?: unknown;
+  voice?: { file_id: string; duration?: number; file_size?: number };
   video?: unknown;
   document?: { file_id?: string; file_name?: string; file_size?: number; mime_type?: string };
   sticker?: { emoji?: string };

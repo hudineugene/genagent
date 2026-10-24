@@ -108,3 +108,12 @@ export async function checkOperatorDraft(conversationId: string, text: string): 
     return { error: "unavailable" };
   }
 }
+
+/** Удалить все данные человека у клиента (GDPR, ст. 17): все его разговоры, анкеты, документы, баллы, обучение. */
+export async function erasePersonAction(conversationId: string): Promise<InboxResult & { conversations?: number }> {
+  await requireUser();
+  const { erasePerson } = await import("@/lib/privacy");
+  const r = await erasePerson(conversationId);
+  refresh();
+  return r ? { conversations: r.conversations } : { error: "not_found" };
+}

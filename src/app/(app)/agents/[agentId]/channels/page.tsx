@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, count, eq, gte, like, sum } from "drizzle-orm";
 import { db } from "@/db";
-import { agents, channels, clients } from "@/db/schema";
+import { agents, channels, clients, usageLog } from "@/db/schema";
 import { isPolling } from "@/lib/channels/telegram-poller";
 import { requireUser } from "@/lib/auth";
 import { getMetaSettings, publicUrl } from "@/lib/settings";
@@ -21,6 +21,15 @@ export default async function AgentChannelsPage({ params }: { params: Promise<{ 
 
   const list = await db.select().from(channels).where(eq(channels.agentId, agentId)).orderBy(asc(channels.createdAt));
   const [inbound, hooks] = await Promise.all([lastInbound(list.map((c) => c.id)), webhookTimes()]);
+  // Сообщения WhatsApp клиента за этот месяц и их стоимость (учёт расходов)
+  const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  const [wa] = list.some((c) => c.type === "whatsapp")
+    ? await db
+        .select({ n: count(), usd: sum(usageLog.cost) })
+        .from(usageLog)
+        .where(and(eq(usageLog.clientId, row.clientId), like(usageLog.model, "whatsapp:%"), gte(usageLog.createdAt, monthStart)))
+    : [];
+  const waMonth = new Map([[row.clientId, { messages: Number(wa?.n ?? 0), cost: Number(wa?.usd ?? 0) }]]);
   // Токен бота в браузер не отдаём.
   const items: ChannelItem[] = list.map((c) => ({
     id: c.id,
@@ -34,7 +43,18 @@ export default async function AgentChannelsPage({ params }: { params: Promise<{ 
     inboundStale: inboundStale(inbound.get(c.id)),
     username: "username" in c.config ? c.config.username : null,
     widget: "color" in c.config ? c.config : null,
-    whatsapp: c.type === "whatsapp" && "phoneNumberId" in c.config ? { phone: c.config.displayPhone, name: c.config.verifiedName ?? "" } : null,
+    whatsapp:
+      c.type === "whatsapp" && "phoneNumberId" in c.config
+        ? {
+            phone: c.config.displayPhone,
+            name: c.config.verifiedName ?? "",
+            wabaId: c.config.wabaId ?? "",
+            templates: c.config.templates ?? [],
+            proactiveTemplate: c.config.proactiveTemplate ?? null,
+            price: c.config.price ?? { service: 0, template: 0 },
+            month: waMonth.get(c.clientId) ?? { messages: 0, cost: 0 },
+          }
+        : null,
     social:
       c.type === "instagram" || c.type === "threads"
         ? {

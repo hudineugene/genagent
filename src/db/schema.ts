@@ -32,6 +32,8 @@ export const clients = sqliteTable("clients", {
   color: text("color").notNull().default("#6366f1"),
   /** Свои ключи клиента (его аккаунты ИИ и Google Maps): заданы — работа для клиента идёт за его счёт */
   apiKeys: text("api_keys", { mode: "json" }).$type<Partial<Record<"anthropic" | "openai" | "openrouter" | "googleMaps", string>>>().notNull().default({}),
+  /** Срок хранения разговоров, дней (GDPR); null — бессрочно */
+  retentionDays: integer("retention_days"),
   createdAt: createdAt(),
 });
 
@@ -1403,7 +1405,16 @@ export type WhatsAppConfig = {
   /** Подтверждённое имя компании в WhatsApp */
   verifiedName?: string;
   token: string;
+  /** ID бизнес-аккаунта WhatsApp (WABA) — чтобы загрузить утверждённые шаблоны */
+  wabaId?: string;
+  /** Утверждённые шаблоны (загружаются из Meta): body — текст с {{1}}, {{2}}… */
+  templates?: WaTemplate[];
+  /** Шаблон для сообщений вне 24-часового окна (напоминания, рассылки): наш текст подставляется в {{1}} */
+  proactiveTemplate?: { name: string; language: string };
+  /** Цена сообщения для учёта расходов клиента, USD: обычный ответ и шаблон */
+  price?: { service: number; template: number };
 };
+export type WaTemplate = { name: string; language: string; category: string; body: string; params: number };
 export type ChannelConfig = TelegramConfig | WidgetConfig | InstagramConfig | ThreadsConfig | EmailConfig | ApiConfig | WhatsAppConfig;
 export const CHANNEL_TYPES = ["telegram", "widget", "instagram", "threads", "email", "api", "whatsapp"] as const;
 export type ChannelType = (typeof CHANNEL_TYPES)[number];
@@ -1547,6 +1558,8 @@ export type ConversationContext = {
   managerDraft?: { text: string; at: number };
   /** Свой бот (API): язык, на котором отвечать клиенту, и что клиент сейчас смотрит в боте */
   language?: string;
+  /** Когда агент сообщил, что он ИИ (первый ответ) */
+  aiDisclosedAt?: number;
   botContext?: string;
   /** Виджет: одноразовый код ссылки «Продолжить в Telegram» и когда выдан */
   linkToken?: string;
@@ -1589,6 +1602,8 @@ export type MessageMeta = {
   orderNote?: boolean;
   /** Ответ агента ушёл и голосовым */
   spoken?: boolean;
+  /** Агент дословно пересказывал служебные инструкции — ответ заменён отказом */
+  leakBlocked?: boolean;
   /** Утренняя проверка качества: замечание к ответу (или ok — проверен, в порядке) */
   qa?: { ok?: boolean; severity?: "low" | "high"; kind?: string; note?: string; better?: string; at: number };
   /** Проверяемые факты ответа (цены, телефоны, ссылки), которых нет в базе знаний и переписке */

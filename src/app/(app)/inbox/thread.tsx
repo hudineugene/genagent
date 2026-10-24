@@ -31,10 +31,13 @@ import {
   X,
   type LucideIcon,
   ClipboardList,
+  Download,
+  UserX,
 } from "lucide-react";
 import { scenarioFromConversationAction } from "@/app/actions/tests";
 import {
   deleteConversation,
+  erasePersonAction,
   approveDraft,
   checkOperatorDraft,
   callBriefAction,
@@ -230,6 +233,24 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
               <RotateCcw className="size-4" />
             </IconAction>
           )}
+          <a href={`/api/privacy/${data.id}`} title={t.inbox.exportPerson} aria-label={t.inbox.exportPerson} className="grid size-8 place-items-center rounded-lg text-muted transition hover:bg-surface-2 hover:text-text">
+            <Download className="size-4" />
+          </a>
+          <IconAction
+            title={t.inbox.erasePerson}
+            danger
+            disabled={pending}
+            onClick={() => {
+              if (!confirm(t.inbox.erasePersonConfirm)) return;
+              run(async () => {
+                const r = await erasePersonAction(data.id);
+                if (!r.error) router.replace(backHref);
+                return r;
+              });
+            }}
+          >
+            <UserX className="size-4" />
+          </IconAction>
           <IconAction
             title={t.inbox.delete}
             danger

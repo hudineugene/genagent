@@ -77,7 +77,8 @@ async function loop(channelId: string, signal: AbortSignal) {
   if (pollers.get(channelId)?.signal === signal) pollers.delete(channelId);
 }
 
-async function handleUpdate(channelId: string, u: TgUpdate) {
+/** Обработка одного обновления (вынесено отдельно — так его можно проверить без опроса). */
+export async function handleUpdate(channelId: string, u: TgUpdate) {
   const m = u.message;
   if (!m) return;
   if (m.chat.type === "group" || m.chat.type === "supergroup") return handleGroupMessage(channelId, m);
@@ -115,6 +116,14 @@ async function handleUpdate(channelId: string, u: TgUpdate) {
 /** Документ (PDF, Word, текст) — текст в сообщение; фото — описание с надписями и превью. */
 async function readAttachment(channel: Channel, agent: { id: string; clientId: string }, conversationId: string, messageId: string, m: TgMessage) {
   const token = (channel.config as TelegramConfig).token;
+  if (m.voice?.file_id) {
+    // Голосовое: расшифровка на сервере студии — агент отвечает на сказанное
+    const { MAX_VOICE_BYTES, transcribeIncoming } = await import("@/lib/voice");
+    const buf = await downloadFile(token, m.voice.file_id, MAX_VOICE_BYTES);
+    const [conv] = await db.select({ context: conversations.context }).from(conversations).where(eq(conversations.id, conversationId));
+    if (buf) await transcribeIncoming(messageId, buf, conv?.context?.language);
+    return;
+  }
   if (m.document?.file_id) {
     const name = m.document.file_name ?? "файл";
     const { MAX_DOC_BYTES, attachDocument, readDocument } = await import("@/lib/documents/intake");

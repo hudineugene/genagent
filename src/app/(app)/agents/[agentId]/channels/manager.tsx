@@ -16,10 +16,10 @@ import {
   updateApiChannel,
   updateSocialChannel,
   updateTelegramChannel,
-  updateWidget, addWhatsAppChannel } from "@/app/actions/channels";
+  updateWidget, addWhatsAppChannel, saveWhatsAppSettings, syncWhatsAppTemplates } from "@/app/actions/channels";
 import { WIDGET_LANGS, type ChannelType, type WidgetConfig } from "@/db/schema";
 import { useI18n } from "@/lib/i18n/client";
-import { Badge, Button, Card, Field, Input, Spinner, Textarea, cx } from "@/components/ui";
+import { Badge, Button, Card, Field, Input, Select, Spinner, Textarea, cx } from "@/components/ui";
 import { InfoHint } from "@/components/hint";
 
 export type ChannelItem = {
@@ -36,7 +36,15 @@ export type ChannelItem = {
   inboundStale: boolean;
   username: string | null;
   widget: WidgetConfig | null;
-  whatsapp: { phone: string; name: string } | null;
+  whatsapp: {
+    phone: string;
+    name: string;
+    wabaId: string;
+    templates: { name: string; language: string; category: string; body: string; params: number }[];
+    proactiveTemplate: { name: string; language: string } | null;
+    price: { service: number; template: number };
+    month: { messages: number; cost: number };
+  } | null;
   social: { dm?: boolean; comments?: boolean; approval: boolean; tokenExpiresAt: number } | null;
   email: { address: string; approval: boolean; fromName: string } | null;
   api: { key: string; label: string; approval: boolean; botNote: string; followUps: boolean; orderNotes: boolean; ratingInvite: boolean } | null;
@@ -809,7 +817,79 @@ function WhatsAppCard({ c }: { c: ChannelItem }) {
       <ChannelHeader c={c} icon={<MessageCircle className="size-5" />} title={`WhatsApp · ${c.whatsapp?.phone ?? c.name}`} />
       {c.whatsapp?.name && <p className="text-sm text-muted">{c.whatsapp.name}</p>}
       <p className="text-xs text-muted">{t.channels.whatsappNote}</p>
+      {c.whatsapp && <WhatsAppEconomy id={c.id} wa={c.whatsapp} />}
     </Card>
+  );
+}
+
+/** Шаблоны для сообщений вне 24-часового окна и цены сообщений для учёта расходов клиента. */
+function WhatsAppEconomy({ id, wa }: { id: string; wa: NonNullable<ChannelItem["whatsapp"]> }) {
+  const { t } = useI18n();
+  const w = t.channels.wa;
+  const [waba, setWaba] = useState(wa.wabaId);
+  const [tpl, setTpl] = useState(wa.proactiveTemplate ? `${wa.proactiveTemplate.name}|${wa.proactiveTemplate.language}` : "");
+  const [price, setPrice] = useState({ service: String(wa.price.service), template: String(wa.price.template) });
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [pending, start] = useTransition();
+  const chosen = wa.templates.find((x) => `${x.name}|${x.language}` === tpl);
+  const save = () =>
+    start(async () => {
+      const [name, language] = tpl.split("|");
+      const r = await saveWhatsAppSettings(id, { wabaId: waba, proactiveTemplate: tpl ? { name, language } : null, price: { service: Number(price.service) || 0, template: Number(price.template) || 0 } });
+      setMsg(r.error ? { ok: false, text: w.errors[r.error as keyof typeof w.errors] ?? r.error } : { ok: true, text: w.saved });
+    });
+  return (
+    <div className="space-y-3 border-t border-border pt-3">
+      <div className="text-sm font-semibold">{w.title}</div>
+      <p className="text-xs text-muted">{w.hint}</p>
+      <div className="flex flex-wrap items-end gap-2">
+        <Field label={w.waba} hint={w.wabaHint}>
+          <Input className="w-56 font-mono text-[13px]" value={waba} maxLength={25} onChange={(e) => setWaba(e.target.value.replace(/\D/g, ""))} />
+        </Field>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={pending || !waba}
+          onClick={() =>
+            start(async () => {
+              await saveWhatsAppSettings(id, { wabaId: waba, proactiveTemplate: wa.proactiveTemplate, price: wa.price });
+              const r = await syncWhatsAppTemplates(id);
+              setMsg(r.error ? { ok: false, text: w.errors[r.error as keyof typeof w.errors] ?? r.error } : { ok: true, text: w.synced.replace("{n}", String(r.count ?? 0)) });
+            })
+          }
+        >
+          {w.sync}
+        </Button>
+      </div>
+      <Field label={w.template} hint={w.templateHint}>
+        <Select className="w-full max-w-md" value={tpl} onChange={(e) => setTpl(e.target.value)}>
+          <option value="">{w.noTemplate}</option>
+          {wa.templates.map((x) => (
+            <option key={`${x.name}|${x.language}`} value={`${x.name}|${x.language}`}>
+              {x.name} · {x.language} · {x.category}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      {chosen && <p className="rounded-lg bg-surface-2/60 p-2 text-xs whitespace-pre-wrap">{chosen.body}</p>}
+      {!tpl && <p className="text-xs text-amber-600 dark:text-amber-400">{w.noTemplateWarn}</p>}
+      <div className="flex flex-wrap gap-2">
+        <Field label={w.priceService}>
+          <Input type="number" step="0.001" min={0} className="w-28" value={price.service} onChange={(e) => setPrice({ ...price, service: e.target.value })} />
+        </Field>
+        <Field label={w.priceTemplate}>
+          <Input type="number" step="0.001" min={0} className="w-28" value={price.template} onChange={(e) => setPrice({ ...price, template: e.target.value })} />
+        </Field>
+      </div>
+      <p className="text-xs text-muted">{w.priceHint}</p>
+      <p className="text-xs">{w.month.replace("{n}", String(wa.month.messages)).replace("{usd}", wa.month.cost.toFixed(2))}</p>
+      <div className="flex items-center gap-3">
+        <Button size="sm" disabled={pending} onClick={save}>
+          {w.save}
+        </Button>
+        {msg && <span className={msg.ok ? "text-sm text-success" : "text-sm text-danger"}>{msg.text}</span>}
+      </div>
+    </div>
   );
 }
 

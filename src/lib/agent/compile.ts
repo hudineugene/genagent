@@ -1,4 +1,5 @@
 import { SKILL_MAP } from "./skills";
+import { SECURITY_NOTE } from "./guard";
 import type { AgentConfig } from "./types";
 
 export type ClientContext = {
@@ -131,6 +132,8 @@ export function compileSystemPrompt(
       "• Не произноси «база знаний», «в базе», «справка», «фрагменты»: вместо «в базе знаний этого нет» — «у меня нет таких данных», вместо «в базе нет таких объектов» — «в нашем каталоге таких нет».",
     ].join("\n"),
   );
+
+  parts.push(SECURITY_NOTE);
 
   if (config.webSearch) {
     parts.push(

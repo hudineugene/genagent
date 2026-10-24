@@ -29,6 +29,70 @@ export async function sendText(token: string, phoneNumberId: string, to: string,
   return r.messages?.[0]?.id ?? null;
 }
 
+/** Утверждённые шаблоны бизнес-аккаунта: имя, язык, категория, текст и число переменных. */
+export async function listTemplates(token: string, wabaId: string) {
+  const r = await metaFetch<{ data?: { name: string; language: string; status: string; category: string; components?: { type: string; text?: string }[] }[] }>(
+    `${GRAPH}/${wabaId}/message_templates?fields=name,language,status,category,components&limit=200`,
+    { token },
+  );
+  return (r.data ?? [])
+    .filter((t) => t.status === "APPROVED")
+    .map((t) => {
+      const body = t.components?.find((c) => c.type === "BODY")?.text ?? "";
+      const params = new Set([...body.matchAll(/\{\{(\d+)\}\}/g)].map((m) => m[1])).size;
+      return { name: t.name, language: t.language, category: t.category, body: body.slice(0, 1024), params };
+    });
+}
+
+/** Шаблон клиенту (вне 24-часового окна): переменные тела {{1}}, {{2}}… по порядку. */
+export async function sendTemplate(token: string, phoneNumberId: string, to: string, name: string, language: string, params: string[]): Promise<string | null> {
+  const r = await metaFetch<{ messages?: { id: string }[] }>(`${GRAPH}/${phoneNumberId}/messages`, {
+    method: "POST",
+    token,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to,
+      type: "template",
+      template: { name, language: { code: language }, ...(params.length ? { components: [{ type: "body", parameters: params.map((text) => ({ type: "text", text: text.slice(0, 1000) })) }] } : {}) },
+    }),
+  });
+  return r.messages?.[0]?.id ?? null;
+}
+
+/** Скачать медиа клиента (голосовое, фото): сначала адрес по id, затем сам файл с тем же токеном. */
+export async function downloadMedia(token: string, mediaId: string, maxBytes: number): Promise<{ buf: Buffer; mime: string } | null> {
+  try {
+    const info = await metaFetch<{ url?: string; mime_type?: string; file_size?: number }>(`${GRAPH}/${mediaId}`, { token });
+    if (!info.url || (info.file_size ?? 0) > maxBytes) return null;
+    const res = await fetch(info.url, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(20000) });
+    if (!res.ok) return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    return buf.length && buf.length <= maxBytes ? { buf, mime: info.mime_type ?? "" } : null;
+  } catch (e) {
+    console.error("whatsapp media download failed", e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
+/** Голосовое клиенту: загрузить OGG/Opus и отправить как аудио. Возвращает id сообщения. */
+export async function sendAudio(token: string, phoneNumberId: string, to: string, ogg: Buffer): Promise<string | null> {
+  const form = new FormData();
+  form.set("messaging_product", "whatsapp");
+  form.set("type", "audio/ogg");
+  form.set("file", new Blob([new Uint8Array(ogg)], { type: "audio/ogg" }), "voice.ogg");
+  const up = await metaFetch<{ id?: string }>(`${GRAPH}/${phoneNumberId}/media`, { method: "POST", token, body: form });
+  if (!up.id) return null;
+  const r = await metaFetch<{ messages?: { id: string }[] }>(`${GRAPH}/${phoneNumberId}/messages`, {
+    method: "POST",
+    token,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messaging_product: "whatsapp", recipient_type: "individual", to, type: "audio", audio: { id: up.id } }),
+  });
+  return r.messages?.[0]?.id ?? null;
+}
+
 /** Отметить сообщение клиента прочитанным (две синие галочки) — клиент видит, что его услышали. */
 export async function markRead(token: string, phoneNumberId: string, messageId: string) {
   await metaFetch(`${GRAPH}/${phoneNumberId}/messages`, {
@@ -46,7 +110,8 @@ export type WaMessage = {
   text?: { body: string };
   button?: { text: string };
   interactive?: { button_reply?: { title: string }; list_reply?: { title: string } };
-  image?: { caption?: string };
+  image?: { id?: string; caption?: string; mime_type?: string };
+  audio?: { id?: string; mime_type?: string; voice?: boolean };
   document?: { caption?: string; filename?: string };
   location?: { latitude: number; longitude: number; name?: string; address?: string };
 };

@@ -42,6 +42,28 @@ export async function POST(req: Request) {
   return Response.json({ ok: true });
 }
 
+/** Голосовое — расшифровка на сервере; фото — описание с надписями и превью (как в Telegram). */
+async function readMedia(cfg: WhatsAppConfig, m: WaMessage, messageId: string, conversation: { id: string; agentId: string; clientId: string; context: { language?: string } | null }) {
+  const { downloadMedia } = await import("@/lib/channels/meta/whatsapp");
+  if (m.audio?.id) {
+    const { MAX_VOICE_BYTES, transcribeIncoming } = await import("@/lib/voice");
+    const f = await downloadMedia(cfg.token, m.audio.id, MAX_VOICE_BYTES);
+    if (f) await transcribeIncoming(messageId, f.buf, conversation.context?.language);
+    return;
+  }
+  if (m.image?.id) {
+    const f = await downloadMedia(cfg.token, m.image.id, 4 * 1024 * 1024);
+    if (!f) return;
+    const type = f.mime.startsWith("image/png") ? "image/png" : f.mime.startsWith("image/webp") ? "image/webp" : "image/jpeg";
+    const { describePhoto, saveThumb } = await import("@/lib/media");
+    const data = f.buf.toString("base64");
+    const vision = await describePhoto(data, type, { agentId: conversation.agentId, clientId: conversation.clientId }, m.image.caption);
+    const thumb = data.length <= 560_000 ? saveThumb(messageId, data, type) : null;
+    const [cur] = await db.select({ meta: messages.meta }).from(messages).where(eq(messages.id, messageId));
+    await db.update(messages).set({ meta: { ...cur?.meta, kind: "photo", ...(vision ? { vision } : {}), ...(thumb ? { thumb } : {}) } }).where(eq(messages.id, messageId));
+  }
+}
+
 /** Обработка уведомления Meta (вынесено отдельно — так его можно проверить без запроса). */
 export async function handleWhatsApp(body: { entry?: { changes?: Change[] }[] }) {
   {
@@ -66,8 +88,9 @@ export async function handleWhatsApp(body: { entry?: { changes?: Change[] }[] })
             if (seen) continue;
             const name = change.value.contacts?.find((c) => c.wa_id === m.from)?.profile?.name ?? "";
             const { conversation } = await upsertConversation(channel, m.from, { name, handle: `+${m.from}` });
-            await addMessage(conversation.id, "user", text.slice(0, 4000), { externalId: `wa:${m.id}` });
+            const msg = await addMessage(conversation.id, "user", text.slice(0, 4000), { externalId: `wa:${m.id}` });
             void markRead(cfg.token, cfg.phoneNumberId, m.id);
+            await readMedia(cfg, m, msg.id, conversation).catch((e) => console.error("whatsapp media failed", e));
             scheduleReply(conversation.id);
           } catch (e) {
             console.error("whatsapp inbound failed", e);
