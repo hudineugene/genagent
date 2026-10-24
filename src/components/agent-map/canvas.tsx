@@ -135,7 +135,7 @@ export function MapCanvas({
   const visibleMods = (g: GroupKey) => MODULES.filter((m) => m.group === g && (!compact || m.on(config) || highlight?.has(m.key) || diff?.[m.key]));
 
   return (
-    <div ref={rootRef} className={cx("relative min-w-0", present && "text-[15px]")}>
+    <div ref={rootRef} className={cx("@container relative min-w-0", present && "text-[15px]")}>
       <style>{`
         @keyframes map-ping { 0% { box-shadow: 0 0 0 0 rgb(99 102 241 / .45) } 100% { box-shadow: 0 0 0 12px rgb(99 102 241 / 0) } }
         @keyframes map-flash { 0% { background: rgb(16 185 129 / .25) } 100% { background: transparent } }
@@ -143,7 +143,7 @@ export function MapCanvas({
         @keyframes map-glow { 0%, 100% { box-shadow: 0 0 0 0 rgb(245 158 11 / 0) } 50% { box-shadow: 0 0 28px 4px rgb(245 158 11 / .35) } }
         @media (prefers-reduced-motion: reduce) { .map-motion { display: none } }
       `}</style>
-      <svg className="pointer-events-none absolute inset-0 hidden h-full w-full lg:block" aria-hidden>
+      <svg className="pointer-events-none absolute inset-0 hidden h-full w-full @min-[1080px]:block" aria-hidden>
         {paths.map((p) => (
           <g key={p.id}>
             <path
@@ -174,7 +174,7 @@ export function MapCanvas({
           </g>
         ))}
       </svg>
-      <div className={cx("relative grid gap-3 lg:items-center lg:gap-14", present ? "lg:grid-cols-[240px_260px_minmax(0,1fr)]" : "lg:grid-cols-[230px_220px_minmax(0,1fr)]")}>
+      <div className={cx("relative grid gap-3 @min-[1080px]:items-center @min-[1080px]:gap-14", present ? "@min-[1080px]:grid-cols-[240px_260px_minmax(0,1fr)]" : "@min-[1080px]:grid-cols-[230px_220px_minmax(0,1fr)]")}>
         <div className="space-y-2" id="map-channels">
           <ColumnTitle icon={Radio} text={uk ? "Канали" : "Каналы"} />
           {channels.map((c) => channelBox(c))}
@@ -253,14 +253,14 @@ export function MapCanvas({
               >
                 <button type="button" onClick={() => onCollapse?.(g.key)} disabled={!onCollapse} className="mb-2 flex w-full items-center gap-2 text-left text-sm font-semibold">
                   <g.icon className={cx("size-4", groupOn(g.key) ? "text-accent" : "text-muted")} />
-                  <span className="flex-1">{tr(g.title)}</span>
-                  <span className="text-xs font-normal text-muted">
+                  <span className="min-w-0 flex-1 truncate">{tr(g.title)}</span>
+                  <span className="shrink-0 text-xs font-normal text-muted">
                     {onCount}/{total}
                   </span>
                   {onCollapse && <ChevronDown className={cx("size-3.5 text-muted transition", isCollapsed && "-rotate-90")} />}
                 </button>
                 {!isCollapsed && (
-                  <div className="grid gap-1.5">
+                  <div className="grid grid-cols-[minmax(0,1fr)] gap-1.5">
                     {mods.map((m) => {
                       const s = state(m);
                       const detail = ctx && !present ? m.detail?.(config, ctx) : null;
@@ -284,7 +284,7 @@ export function MapCanvas({
                           title={idle ? (uk ? "Увімкнено, але за 7 днів жодного разу не спрацював" : "Включён, но за 7 дней ни разу не сработал") : undefined}
                           style={flash ? { animation: `${flash === "error" ? "map-flash-err" : "map-flash"} 1.6s ease-out` } : undefined}
                           className={cx(
-                            "flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-sm transition",
+                            "flex min-w-0 items-center gap-2 rounded-lg border px-2.5 py-1.5 text-sm transition",
                             onSelect && "cursor-pointer hover:border-accent/50",
                             lit ? "border-amber-500 bg-amber-500/10" : selectedKey === m.key ? "border-accent bg-accent-soft/40" : isDep ? "border-violet-500/60 bg-violet-500/5" : d === "added" ? "border-success/60 bg-success/5" : d === "removed" ? "border-danger/50 bg-danger/5" : "border-border",
                             focusKey === m.key && "ring-2 ring-accent/60",
@@ -295,7 +295,9 @@ export function MapCanvas({
                         >
                           <Dot state={s} />
                           <m.icon className="size-3.5 shrink-0" />
-                          <span className="min-w-0 flex-1 truncate">{tr(m.title)}</span>
+                          <span className="min-w-0 flex-1 truncate" title={tr(m.title)}>
+                            {tr(m.title)}
+                          </span>
                           {d && <span className={cx("text-xs font-semibold", d === "added" ? "text-success" : "text-danger")}>{d === "added" ? "+" : "−"}</span>}
                           {covered && TESTABLE.has(m.key) && s !== "off" && !present && (
                             <span title={covered.has(m.key) ? (uk ? "перевіряється тестами" : "проверяется тестами") : uk ? "не перевіряється тестами" : "не проверяется тестами"}>
@@ -308,7 +310,7 @@ export function MapCanvas({
                             </span>
                           )}
                           {idle && !present && <span className="rounded-full bg-amber-500/15 px-1.5 text-[11px] leading-4 text-amber-700 dark:text-amber-300">0</span>}
-                          {detail && <span className="text-xs text-muted">{detail}</span>}
+                          {detail && <span className="shrink-0 text-xs text-muted">{detail}</span>}
                           {m.toggle && onToggle && !present && <SwitchButton checked={m.on(config)} onChange={(v) => onToggle(m, v)} label={tr(m.title)} />}
                         </div>
                       );
@@ -336,10 +338,10 @@ function Metric({ v, l }: { v: string; l: string }) {
   );
 }
 
-/** Телефон: стрелка вниз между каналами, ядром и модулями — поток читается сверху вниз. */
+/** Узкая карта (телефон или открытая панель): стрелка вниз между каналами, ядром и модулями — поток читается сверху вниз. */
 function Down() {
   return (
-    <div className="flex justify-center lg:hidden" aria-hidden>
+    <div className="flex justify-center @min-[1080px]:hidden" aria-hidden>
       <span className="flex flex-col items-center text-accent/60">
         <span className="h-5 w-px bg-accent/40" />
         <ChevronDown className="-mt-1 size-4" />
@@ -361,6 +363,9 @@ function ColumnTitle({ icon: Icon, text }: { icon: LucideIcon; text: string }) {
   );
 }
 
+/** Ширина карты, с которой каналы, ядро и модули идут колонками (как @min-[1080px] в разметке). */
+const WIDE = 1080;
+
 type Path = { id: string; d: string; active: boolean; width: number; bad: boolean; lit: boolean; dep: boolean; particles: number; pulse: number };
 
 /** Линии схемы: каналы → ядро (толщина и частицы — по разговорам), ядро → группы, связи выбранного модуля (только на широком экране). */
@@ -371,7 +376,8 @@ function useLines(root: RefObject<HTMLDivElement | null>, deps: unknown[]) {
     const el = root.current;
     if (!el) return;
     const measure = () => {
-      if (!window.matchMedia("(min-width: 1024px)").matches) return setPaths([]);
+      // Линии — только в широкой раскладке (по ширине самой карты: рядом может быть открыта панель)
+      if (el.getBoundingClientRect().width < WIDE) return setPaths([]);
       const box = el.getBoundingClientRect();
       const rect = (node: Element) => {
         const r = node.getBoundingClientRect();
