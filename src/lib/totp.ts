@@ -52,13 +52,19 @@ export function totpCode(secret: string, at = Date.now(), step = 30) {
   return String(n % 1_000_000).padStart(6, "0");
 }
 
-export function verifyTotp(secret: string, code: string, at = Date.now()) {
+/** Шаг (номер 30-секундного окна), в котором код верен, или null. Допуск — соседние окна. */
+export function totpStep(secret: string, code: string, at = Date.now()): number | null {
   const c = code.replace(/\s/g, "");
-  if (!/^\d{6}$/.test(c)) return false;
-  return [-1, 0, 1].some((d) => {
-    const want = totpCode(secret, at + d * 30_000);
-    return timingSafeEqual(Buffer.from(want), Buffer.from(c));
-  });
+  if (!/^\d{6}$/.test(c)) return null;
+  for (const d of [-1, 0, 1]) {
+    const t = at + d * 30_000;
+    if (timingSafeEqual(Buffer.from(totpCode(secret, t)), Buffer.from(c))) return Math.floor(t / 30_000);
+  }
+  return null;
+}
+
+export function verifyTotp(secret: string, code: string, at = Date.now()) {
+  return totpStep(secret, code, at) !== null;
 }
 
 export function otpauthUri(secret: string, email: string, issuer = "GenAgent") {

@@ -1,11 +1,14 @@
 "use server";
 
+import { headers } from "next/headers";
 import { refresh } from "next/cache";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
 import { MIN_PASSWORD_LENGTH, hashPassword, verifyPassword } from "@/lib/passwords";
+import { lockedFor, recordFailure } from "@/lib/login-limit";
+import { setSession } from "@/lib/session";
 
 export type FormResult = { ok?: boolean; error?: string };
 
@@ -30,8 +33,22 @@ export async function changePassword(_prev: FormResult | undefined, formData: Fo
   const [u] = await db.select({ hash: users.passwordHash }).from(users).where(eq(users.id, me.id));
   if (!u || !(await verifyPassword(current, u.hash))) return { error: "wrong_current" };
 
-  await db.update(users).set({ passwordHash: await hashPassword(next) }).where(eq(users.id, me.id));
+  // Другие сессии (украденная или забытая на чужом компьютере) завершаются, эта — остаётся
+  const [n] = await db.update(users).set({ passwordHash: await hashPassword(next), sessionVersion: sql`${users.sessionVersion} + 1` }).where(eq(users.id, me.id)).returning({ v: users.sessionVersion });
+  await setSession({ userId: me.id, v: n.v });
   return { ok: true };
+}
+
+/** Подбор кода в профиле ограничен так же, как при входе: по почте и адресу. */
+async function codeIp() {
+  return (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() || null;
+}
+async function codeLocked(email: string) {
+  return lockedFor(email, await codeIp()) > 0;
+}
+async function codeFailed(email: string): Promise<{ error: string }> {
+  recordFailure(email, await codeIp());
+  return { error: "code" };
 }
 
 export type TwoFactorStart = { qr?: string; secret?: string; error?: string };
@@ -54,8 +71,9 @@ export async function confirmTwoFactor(code: string): Promise<{ codes?: string[]
   const me = await requireUser();
   const [u] = await db.select({ secret: users.totpSecret, enabled: users.totpEnabled }).from(users).where(eq(users.id, me.id));
   if (!u?.secret || u.enabled) return { error: "invalid" };
+  if (await codeLocked(me.email)) return { error: "locked" };
   const { newRecoveryCodes, openSecret, verifyTotp } = await import("@/lib/totp");
-  if (!verifyTotp(openSecret(u.secret), code)) return { error: "code" };
+  if (!verifyTotp(openSecret(u.secret), code)) return codeFailed(me.email);
   const { codes, hashes } = newRecoveryCodes();
   await db.update(users).set({ totpEnabled: true, recoveryCodes: hashes }).where(eq(users.id, me.id));
   refresh();
@@ -67,8 +85,9 @@ export async function disableTwoFactor(code: string): Promise<{ error?: string }
   const me = await requireUser();
   const [u] = await db.select({ secret: users.totpSecret, enabled: users.totpEnabled }).from(users).where(eq(users.id, me.id));
   if (!u?.secret || !u.enabled) return {};
+  if (await codeLocked(me.email)) return { error: "locked" };
   const { openSecret, verifyTotp } = await import("@/lib/totp");
-  if (!verifyTotp(openSecret(u.secret), code)) return { error: "code" };
+  if (!verifyTotp(openSecret(u.secret), code)) return codeFailed(me.email);
   await db.update(users).set({ totpEnabled: false, totpSecret: null, recoveryCodes: [] }).where(eq(users.id, me.id));
   refresh();
   return {};

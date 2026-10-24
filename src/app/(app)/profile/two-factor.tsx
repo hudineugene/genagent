@@ -54,7 +54,7 @@ export function TwoFactor({ enabled }: { enabled: boolean }) {
                   if (r.codes) {
                     setCodes(r.codes);
                     setError(null);
-                  } else setError(p.badCode);
+                  } else setError(r.error === "locked" ? p.codeLocked : p.badCode);
                 })
               }
             >
@@ -73,7 +73,7 @@ export function TwoFactor({ enabled }: { enabled: boolean }) {
             onClick={() =>
               start(async () => {
                 const r = await disableTwoFactor(code);
-                if (r.error) setError(p.badCode);
+                if (r.error) setError(r.error === "locked" ? p.codeLocked : p.badCode);
                 else {
                   setCode("");
                   setError(null);

@@ -17,8 +17,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ channel
   if (!/^[0-9a-f-]{36}$/.test(channelId)) return Response.json({ error: "not_found" }, { status: 404 });
   const [ch] = await db.select().from(channels).where(and(eq(channels.id, channelId), eq(channels.type, "widget"), eq(channels.enabled, true)));
   if (!ch || !(ch.config as WidgetConfig).voice) return Response.json({ error: "voice_off" }, { status: 404 });
+  // Слишком большое тело — отказ до чтения (запись до минуты — около 2,7 МБ в base64)
+  if (Number(req.headers.get("content-length") ?? 0) > 3_000_000) return Response.json({ error: "too_large" }, { status: 413 });
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "local";
   const now = Date.now();
+  if (hits.size > 5000) for (const [k, v] of hits) if (!v.some((t: number) => now - t < 60_000)) hits.delete(k);
   const list = (hits.get(ip) ?? []).filter((t: number) => now - t < 60_000);
   if (list.length >= 10) return Response.json({ error: "rate_limited" }, { status: 429 });
   hits.set(ip, [...list, now]);

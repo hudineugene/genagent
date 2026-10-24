@@ -3,12 +3,12 @@ import { z } from "zod";
 import { db } from "@/db";
 import { agents, clients, conversations, messages } from "@/db/schema";
 import { voiceChannel } from "@/lib/channels/api-auth";
-import { addMessage, toPlainText, upsertConversation } from "@/lib/conversations";
+import { addMessage, flag, toPlainText, upsertConversation } from "@/lib/conversations";
 import { agentConfigSchema } from "@/lib/agent/types";
 import { extractHandoff, prepareChat } from "@/lib/agent/runtime";
 import { streamChat, type ChatMessage } from "@/lib/llm";
 import { findModel } from "@/lib/models";
-import { logUsage } from "@/lib/usage";
+import { agentMonthSpend, logUsage } from "@/lib/usage";
 import { withKeys } from "@/lib/keys";
 
 /**
@@ -34,6 +34,9 @@ const bodySchema = z.object({
   user_id: z.string().optional(),
 });
 
+const HISTORY_CHARS = 40_000;
+const OVER_LIMIT = "Сейчас не могу ответить. Передам ваш вопрос менеджеру — вам перезвонят.";
+
 const text = (c: unknown) => (typeof c === "string" ? c : Array.isArray(c) ? c.map((p) => (p as { text?: string }).text ?? "").join("") : "");
 
 export async function POST(req: Request, { params }: { params: Promise<{ channelId: string }> }) {
@@ -48,29 +51,48 @@ export async function POST(req: Request, { params }: { params: Promise<{ channel
   const { agent, client } = row;
   const config = agentConfigSchema.parse(agent.config);
 
-  // История звонка от платформы: только реплики собеседников
-  const history: ChatMessage[] = body.messages
+  // История звонка от платформы: только реплики собеседников; каждая до 4000 знаков, в модель — последние 40 000 знаков
+  const all: ChatMessage[] = body.messages
     .filter((m) => m.role === "user" || m.role === "assistant")
-    .map((m) => ({ role: m.role as "user" | "assistant", content: text(m.content) }))
+    .map((m) => ({ role: m.role as "user" | "assistant", content: text(m.content).slice(0, 4000) }))
     .filter((m) => m.content.trim());
+  let budget = HISTORY_CHARS;
+  let from = all.length;
+  while (from > 0 && budget - all[from - 1].content.length >= 0) budget -= all[--from].content.length;
+  const history = all.slice(from);
   if (!history.some((m) => m.role === "user")) history.push({ role: "user", content: "(клиент молчит)" });
 
-  // Звонок — разговор: id звонка (Vapi call.id, ElevenLabs — conversation_id в metadata или user_id)
+  // Звонок — разговор: id звонка (Vapi call.id, ElevenLabs — conversation_id в metadata или user_id);
+  // без id — номер и день, чтобы реплики одного звонка не расходились по разным разговорам
   const callId = body.call?.id ?? String(body.metadata?.call_id ?? body.metadata?.conversation_id ?? body.user_id ?? body.user ?? "");
   const phone = body.call?.customer?.number ?? "";
-  const { conversation } = await upsertConversation(channel, callId ? `call:${callId}` : `call:${Date.now()}`, { name: body.call?.customer?.name ?? phone, handle: phone });
+  const key = callId ? `call:${callId}` : `call:${phone || "unknown"}:${new Date().toISOString().slice(0, 10)}`;
+  const { conversation } = await upsertConversation(channel, key, { name: body.call?.customer?.name ?? phone, handle: phone });
   // Платформа присылает всю историю звонка: записываем только новые реплики клиента (повтор запроса — без дублей)
-  const said = history.filter((m) => m.role === "user" && m.content !== "(клиент молчит)");
+  const said = all.filter((m) => m.role === "user");
   const [{ n: stored }] = await db.select({ n: sql<number>`count(*)` }).from(messages).where(and(eq(messages.conversationId, conversation.id), eq(messages.role, "user")));
-  for (const m of said.slice(Number(stored))) await addMessage(conversation.id, "user", m.content.slice(0, 4000), { meta: { kind: "voice" } });
+  for (const m of said.slice(Number(stored))) await addMessage(conversation.id, "user", m.content, { meta: { kind: "voice" } });
 
   const started = Date.now();
   const id = `chatcmpl-${crypto.randomUUID()}`;
   const created = Math.floor(started / 1000);
   const chunk = (delta: object, finish: string | null = null) => `data: ${JSON.stringify({ id, object: "chat.completion.chunk", created, model: config.model, choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`;
 
+  // Месячные лимиты, как в чате: агента и клиента (биллинг студии). В звонке не молчим — обещаем перезвонить.
+  const over =
+    config.monthlyBudgetUsd != null && (await agentMonthSpend(agent.id)) >= config.monthlyBudgetUsd
+      ? "budget_exceeded"
+      : (await import("@/lib/billing").then((b) => b.clientOverLimit(client.id)).catch(() => false))
+        ? "client_limit"
+        : null;
+
   const run = async (emit?: (s: string) => void) =>
     withKeys({ clientId: client.id }, async () => {
+      if (over) {
+        await flag(conversation.id, over);
+        emit?.(chunk({ content: OVER_LIMIT }));
+        return OVER_LIMIT;
+      }
       const prepared = await prepareChat(config, client, history, { mode: "live", agentId: agent.id, conversationId: conversation.id }, VOICE_NOTE);
       let full = "";
       let sent = 0;

@@ -12,13 +12,15 @@ export type CurrentUser = { id: string; name: string; email: string; role: "admi
 /** Текущий пользователь или null. Дедуплицируется в рамках одного запроса. */
 export const findCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   await connection();
-  const { userId } = await getSession();
+  const { userId, v } = await getSession();
   if (!userId) return null;
   const [u] = await db
-    .select({ id: users.id, name: users.name, email: users.email, role: users.role, clientIds: users.clientIds, totpEnabled: users.totpEnabled })
+    .select({ id: users.id, name: users.name, email: users.email, role: users.role, clientIds: users.clientIds, totpEnabled: users.totpEnabled, sessionVersion: users.sessionVersion })
     .from(users)
     .where(eq(users.id, userId));
-  return u ?? null;
+  // Пароль сменили или вход сбросили после этого входа — сессия больше не действует
+  if (!u || (v ?? 0) !== u.sessionVersion) return null;
+  return { id: u.id, name: u.name, email: u.email, role: u.role, clientIds: u.clientIds, totpEnabled: u.totpEnabled };
 });
 
 /** Для страниц и server actions студии: без сессии — на /login; владелец бизнеса — в свой кабинет. */

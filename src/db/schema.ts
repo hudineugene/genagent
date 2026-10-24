@@ -25,6 +25,10 @@ export const users = sqliteTable("users", {
   recoveryCodes: text("recovery_codes", { mode: "json" }).$type<string[]>().notNull().default([]),
   /** Доступ сотрудника только к этим клиентам; null — ко всем (администратор видит всех всегда) */
   clientIds: text("client_ids", { mode: "json" }).$type<string[] | null>(),
+  /** Растёт при смене или сбросе пароля и сбросе второго фактора: сессии со старым номером больше не действуют */
+  sessionVersion: integer("session_version").notNull().default(0),
+  /** Последний принятый шаг кода из приложения: тот же код второй раз не принимается */
+  totpLastStep: integer("totp_last_step").notNull().default(0),
   createdAt: createdAt(),
 });
 

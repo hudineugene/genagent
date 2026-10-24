@@ -3,7 +3,8 @@ import { cookies } from "next/headers";
 import { sealData, unsealData } from "iron-session";
 
 /** pending — пароль верный, ждём код второго фактора (до 10 минут) */
-export type SessionData = { userId?: string; pending?: { userId: string; at: number } };
+/** v — номер сессий пользователя (users.sessionVersion) на момент входа */
+export type SessionData = { userId?: string; v?: number; pending?: { userId: string; at: number } };
 
 const COOKIE_NAME = "genagent_session";
 const MAX_AGE = 60 * 60 * 24 * 14; // 14 дней

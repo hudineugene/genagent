@@ -718,7 +718,7 @@ function emailNote(company: string, contactName: string) {
 }
 
 /** Ошибка или ситуация, где нужен человек: служебное сообщение + отметка «требует внимания». */
-async function flag(conversationId: string, code: string) {
+export async function flag(conversationId: string, code: string) {
   await addMessage(conversationId, "system", code, { meta: { error: code } });
   const [c] = await db
     .update(conversations)

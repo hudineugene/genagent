@@ -1,7 +1,7 @@
 "use server";
 
 import { refresh } from "next/cache";
-import { and, count, eq, ne } from "drizzle-orm";
+import { and, count, eq, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { clients, users } from "@/db/schema";
@@ -37,7 +37,7 @@ export async function resetMemberPassword(userId: string): Promise<TeamResult> {
   const [u] = await db.select({ email: users.email }).from(users).where(eq(users.id, userId));
   if (!u) return { error: "not_found" };
   const password = generatePassword();
-  await db.update(users).set({ passwordHash: await hashPassword(password) }).where(eq(users.id, userId));
+  await db.update(users).set({ passwordHash: await hashPassword(password), sessionVersion: sql`${users.sessionVersion} + 1` }).where(eq(users.id, userId));
   return { password, email: u.email };
 }
 
@@ -72,7 +72,7 @@ export async function setMemberClients(userId: string, clientIds: string[] | nul
 export async function resetMemberTwoFactor(userId: string): Promise<TeamResult> {
   const me = await requireAdmin();
   if (userId === me.id) return { error: "self" };
-  await db.update(users).set({ totpEnabled: false, totpSecret: null, recoveryCodes: [] }).where(eq(users.id, userId));
+  await db.update(users).set({ totpEnabled: false, totpSecret: null, recoveryCodes: [], sessionVersion: sql`${users.sessionVersion} + 1` }).where(eq(users.id, userId));
   refresh();
   return {};
 }

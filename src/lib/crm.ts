@@ -1,6 +1,6 @@
 import "server-only";
 import { z } from "zod";
-import { assertPublicHost, ToolCallError } from "@/lib/agent/custom-tools";
+import { assertPublicHost, readLimited, ToolCallError } from "@/lib/agent/custom-tools";
 import type { AgentTool } from "@/lib/llm";
 
 /**
@@ -70,7 +70,11 @@ async function req<T>(c: CrmConfig, method: string, path: string, body?: unknown
   });
   if (res.status === 401 || res.status === 403) throw new ToolCallError("crm_unauthorized");
   if (!res.ok) throw new ToolCallError(`crm_http_${res.status}`);
-  return (await res.json().catch(() => ({}))) as T;
+  try {
+    return JSON.parse(await readLimited(res, 2_000_000)) as T;
+  } catch {
+    return {} as T;
+  }
 }
 
 const digits = (s = "") => s.replace(/\D/g, "");

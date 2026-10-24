@@ -1,5 +1,5 @@
 import "server-only";
-import { createHash, createHmac, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { and, desc, eq, gte } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
@@ -166,9 +166,16 @@ const PAID_TEXT: Record<"ru" | "uk" | "en", string> = {
   en: "✅ We've received your payment of {amount} — thank you! Write if you need anything else.",
 };
 
+/** Сравнение подписи за постоянное время. */
+function sameText(expected: string, got: unknown) {
+  if (typeof got !== "string" || got.length !== expected.length) return false;
+  return timingSafeEqual(Buffer.from(expected), Buffer.from(got));
+}
+
 /** Новый статус оплаты: запись, отметка в разговоре, подтверждение клиенту, уведомления и событие. */
 export async function applyStatus(p: Payment, status: PaymentStatus): Promise<boolean> {
-  if (p.status === status || (p.status === "paid" && status !== "refunded")) return false;
+  // Возврат — окончательный: запоздавший или повторный «оплачено» после него не меняет статус
+  if (p.status === status || p.status === "refunded" || (p.status === "paid" && status !== "refunded")) return false;
   const updated = await db
     .update(payments)
     .set({ status, ...(status === "paid" ? { paidAt: new Date() } : {}) })
@@ -230,14 +237,15 @@ export async function refreshPayment(p: Payment): Promise<PaymentStatus> {
  */
 export async function handleCallback(provider: PayProvider, clientId: string, raw: string, contentType: string): Promise<{ status: number; body: string }> {
   const cfg = await getPayments(clientId);
-  if (!cfg || cfg.provider !== provider) return { status: 404, body: "unknown" };
+  // Без ключей подпись считалась бы по пустому секрету — такую подделать может кто угодно
+  if (!cfg || cfg.provider !== provider || !credentialsReady(cfg)) return { status: 404, body: "unknown" };
   const c = cfg.credentials;
   const find = async (orderId: string) => (await db.select().from(payments).where(and(eq(payments.orderId, orderId), eq(payments.clientId, clientId))))[0];
 
   if (provider === "liqpay") {
     const f = new URLSearchParams(raw);
     const data = f.get("data") ?? "";
-    if (!data || liqSign(c.privateKey ?? "", data) !== f.get("signature")) return { status: 403, body: "bad signature" };
+    if (!data || !sameText(liqSign(c.privateKey ?? "", data), f.get("signature"))) return { status: 403, body: "bad signature" };
     const j = JSON.parse(Buffer.from(data, "base64").toString("utf8")) as { order_id?: string; status?: string };
     const p = j.order_id ? await find(j.order_id) : undefined;
     const s = LIQ_STATUS[j.status ?? ""];
@@ -255,7 +263,7 @@ export async function handleCallback(provider: PayProvider, clientId: string, ra
       j = first ? JSON.parse(first) : {};
     }
     const fields = ["merchantAccount", "orderReference", "amount", "currency", "authCode", "cardPan", "transactionStatus", "reasonCode"].map((k) => String(j[k] ?? ""));
-    if (j.merchantAccount !== c.merchant || md5(c.secret ?? "", fields) !== j.merchantSignature) return { status: 403, body: "bad signature" };
+    if (!c.merchant || j.merchantAccount !== c.merchant || !sameText(md5(c.secret ?? "", fields), j.merchantSignature)) return { status: 403, body: "bad signature" };
     const orderId = String(j.orderReference);
     const p = await find(orderId);
     const s = WFP_STATUS[String(j.transactionStatus)];

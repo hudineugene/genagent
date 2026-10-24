@@ -27,11 +27,13 @@ export class ToolCallError extends Error {}
 export function isPrivateAddress(ip: string) {
   if (isIP(ip) === 4) {
     const [a, b] = ip.split(".").map(Number);
-    return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) || a >= 224;
+    return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 192 && b === 0) || (a === 198 && (b === 18 || b === 19)) || (a === 100 && b >= 64 && b <= 127) || a >= 224;
   }
   const v = ip.toLowerCase();
-  if (v.startsWith("::ffff:")) return isPrivateAddress(v.slice(7));
-  return v === "::1" || v === "::" || v.startsWith("fc") || v.startsWith("fd") || v.startsWith("fe8") || v.startsWith("fe9") || v.startsWith("fea") || v.startsWith("feb");
+  // Глобальный IPv6 не начинается с «::»: так записываются ::1, ::, IPv4 внутри IPv6 (::ffff:7f00:1, ::127.0.0.1) —
+  // их не разбираем, а сразу считаем внутренними. Так же — NAT64, документация, multicast, уникальные локальные.
+  if (v.startsWith("::") || /^(0{1,4}:){5}ffff:/.test(v) || v.startsWith("64:ff9b:") || v.startsWith("2001:db8:")) return true;
+  return v.startsWith("fc") || v.startsWith("fd") || v.startsWith("fe8") || v.startsWith("fe9") || v.startsWith("fea") || v.startsWith("feb") || v.startsWith("ff");
 }
 
 export async function assertPublicHost(hostname: string) {
@@ -94,19 +96,20 @@ export async function callTool(tool: ClientTool, input: Record<string, unknown>,
   }
 }
 
-async function readLimited(res: Response) {
+/** Тело ответа не больше limit байт: огромный или бесконечный ответ внешней системы не читается целиком. */
+export async function readLimited(res: Response, limit = MAX_BODY_BYTES) {
   if (!res.body) return "";
   const reader = res.body.getReader();
   const chunks: Uint8Array[] = [];
   let size = 0;
-  while (size < MAX_BODY_BYTES) {
+  while (size < limit) {
     const { done, value } = await reader.read();
     if (done) break;
     chunks.push(value);
     size += value.length;
   }
   await reader.cancel().catch(() => {});
-  return new TextDecoder().decode(Buffer.concat(chunks).subarray(0, MAX_BODY_BYTES));
+  return new TextDecoder().decode(Buffer.concat(chunks).subarray(0, limit));
 }
 
 function inputSchema(params: ToolParam[]) {

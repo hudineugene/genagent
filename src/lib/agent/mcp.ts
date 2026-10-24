@@ -1,5 +1,5 @@
 import "server-only";
-import { assertPublicHost, ToolCallError } from "./custom-tools";
+import { assertPublicHost, readLimited, ToolCallError } from "./custom-tools";
 
 /**
  * Клиент MCP (Model Context Protocol, транспорт Streamable HTTP): агент подключается к MCP-серверу клиента или
@@ -39,7 +39,7 @@ async function rpc(url: string, headers: Record<string, string>, method: string,
   if (notify) return { session: res.headers.get("mcp-session-id") ?? session, result: null };
   if (res.status === 401 || res.status === 403) throw new ToolCallError("mcp_unauthorized");
   if (!res.ok) throw new ToolCallError(`mcp_http_${res.status}`);
-  const text = (await res.text()).slice(0, 400_000);
+  const text = await readLimited(res, 400_000);
   const type = res.headers.get("content-type") ?? "";
   let msg: { result?: unknown; error?: { message?: string } } | undefined;
   if (type.includes("text/event-stream")) {

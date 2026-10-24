@@ -1,7 +1,7 @@
 "use server";
 
 import { refresh } from "next/cache";
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { conversations, knowledgeGaps, users } from "@/db/schema";
@@ -67,7 +67,7 @@ export async function resetOwnerLogin(userId: string): Promise<OwnerLoginResult>
   if (!u) return { error: "not_found" };
   await requireClient(u.clientIds?.[0] ?? "");
   const password = generatePassword();
-  await db.update(users).set({ passwordHash: await hashPassword(password), totpEnabled: false, totpSecret: null, recoveryCodes: [] }).where(eq(users.id, userId));
+  await db.update(users).set({ passwordHash: await hashPassword(password), totpEnabled: false, totpSecret: null, recoveryCodes: [], sessionVersion: sql`${users.sessionVersion} + 1` }).where(eq(users.id, userId));
   return { email: u.email, password };
 }
 

@@ -3,7 +3,7 @@
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { refresh } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, eq, lt, sql } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { db } from "@/db";
 import { users } from "@/db/schema";
@@ -40,7 +40,7 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
     return { step: "code" };
   }
   recordSuccess(email, ip);
-  await setSession({ userId: user.id });
+  await setSession({ userId: user.id, v: user.sessionVersion });
   redirect(user.role === "client" ? "/portal" : "/");
 }
 
@@ -54,13 +54,18 @@ export async function loginCode(_prev: LoginState, formData: FormData): Promise<
   if (!user?.totpSecret) return { error: "invalid" };
   const wait = lockedFor(user.email, ip);
   if (wait) return { error: "locked", minutes: Math.ceil(wait / 60_000), step: "code" };
-  const { consumeRecoveryCode, openSecret, verifyTotp } = await import("@/lib/totp");
-  let ok = verifyTotp(openSecret(user.totpSecret), code);
+  const { consumeRecoveryCode, openSecret, totpStep } = await import("@/lib/totp");
+  let ok = false;
+  const step = totpStep(openSecret(user.totpSecret), code);
+  // Код из приложения — один раз: шаг записывается, только если он новее последнего принятого (повтор — отказ)
+  if (step !== null && step > user.totpLastStep) {
+    ok = (await db.update(users).set({ totpLastStep: step }).where(and(eq(users.id, user.id), lt(users.totpLastStep, step))).returning({ id: users.id })).length > 0;
+  }
   if (!ok && code.length >= 8) {
     const rest = consumeRecoveryCode(user.recoveryCodes, code);
+    // Код восстановления — один раз и при одновременных входах: список меняется, только если его не изменили до нас
     if (rest) {
-      await db.update(users).set({ recoveryCodes: rest }).where(eq(users.id, user.id));
-      ok = true;
+      ok = (await db.update(users).set({ recoveryCodes: rest }).where(and(eq(users.id, user.id), sql`${users.recoveryCodes} = ${JSON.stringify(user.recoveryCodes)}`)).returning({ id: users.id })).length > 0;
     }
   }
   if (!ok) {
@@ -69,7 +74,7 @@ export async function loginCode(_prev: LoginState, formData: FormData): Promise<
     return after ? { error: "locked", minutes: Math.ceil(after / 60_000), step: "code" } : { error: "code", step: "code" };
   }
   recordSuccess(user.email, ip);
-  await setSession({ userId: user.id });
+  await setSession({ userId: user.id, v: user.sessionVersion });
   redirect(user.role === "client" ? "/portal" : "/");
 }
 
