@@ -12,6 +12,7 @@ import { findModel } from "@/lib/models";
 import { logUsage } from "@/lib/usage";
 import { MissingKeyError, streamChat } from "@/lib/llm";
 
+import { canAccess } from "@/lib/access";
 const bodySchema = z.object({
   clientId: z.string().uuid(),
   config: agentConfigSchema,
@@ -31,6 +32,7 @@ async function handle(req: Request) {
   const parsed = bodySchema.safeParse(await req.json());
   if (!parsed.success) return Response.json({ error: parsed.error.message }, { status: 400 });
   const { clientId, config, messages } = parsed.data;
+  if (!(await canAccess("client", clientId))) return new Response("Forbidden", { status: 403 });
 
   const [client] = await db.select().from(clients).where(eq(clients.id, clientId));
   if (!client) return new Response("Client not found", { status: 404 });

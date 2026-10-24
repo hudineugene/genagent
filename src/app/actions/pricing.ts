@@ -4,10 +4,10 @@ import { refresh } from "next/cache";
 import { z } from "zod";
 import { db } from "@/db";
 import { clientPricing } from "@/db/schema";
-import { requireUser } from "@/lib/auth";
 import { calcQuote, formatQuote, getPricing } from "@/lib/pricing";
 import { refreshTable } from "@/lib/data/tables";
 
+import { requireClient } from "@/lib/access";
 const schema = z.object({
   tableId: z.string().nullable(),
   nameColumn: z.string().max(200),
@@ -20,7 +20,7 @@ const schema = z.object({
 });
 
 export async function savePricing(clientId: string, input: z.input<typeof schema>): Promise<{ error?: string }> {
-  await requireUser();
+  await requireClient(clientId);
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { error: "invalid" };
   const values = { ...parsed.data, updatedAt: new Date() };
@@ -31,7 +31,7 @@ export async function savePricing(clientId: string, input: z.input<typeof schema
 
 /** Пробный расчёт: строки «название; количество». */
 export async function testQuote(clientId: string, lines: string): Promise<{ text?: string; error?: string }> {
-  await requireUser();
+  await requireClient(clientId);
   const found = await getPricing(clientId);
   if (!found) return { error: "not_configured" };
   const items = lines

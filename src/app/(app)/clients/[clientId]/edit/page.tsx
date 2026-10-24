@@ -13,10 +13,12 @@ import { BackLink } from "@/components/back-link";
 import { ConfirmButton } from "@/components/confirm-button";
 import { PageHeader } from "@/components/ui";
 
+import { guardPage } from "@/lib/access";
 const daysAgo = (n: number) => new Date(Date.now() - n * 86400_000);
 
 export default async function EditClientPage({ params }: { params: Promise<{ clientId: string }> }) {
   const { clientId } = await params;
+  await guardPage("client", clientId);
   const { t } = await getT();
   const [client] = await db.select().from(clients).where(eq(clients.id, clientId));
   if (!client) notFound();

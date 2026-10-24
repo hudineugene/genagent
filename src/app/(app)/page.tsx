@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { getT } from "@/lib/i18n/server";
 import type { Dict } from "@/lib/i18n";
+import { scope } from "@/lib/access";
 import { dashboardData, type Decision } from "@/lib/dashboard";
 import { ClientCard } from "@/components/client-card";
 import { contactLabel } from "@/lib/contact";
@@ -24,7 +25,8 @@ import { setupChecklist } from "@/lib/setup-checklist";
 /** Главная «Сегодня»: кто ждёт человека, что требует решения, сводка за сутки и клиенты. */
 export default async function TodayPage() {
   const { t, locale } = await getT();
-  const [data, setup] = await Promise.all([dashboardData(), setupChecklist()]);
+  const ids = await scope();
+  const [data, setup] = await Promise.all([dashboardData(ids), setupChecklist(undefined, ids)]);
   const { today, waiting, decisions } = data;
   const gaps = decisions.filter((d): d is Extract<Decision, { kind: "gaps" }> => d.kind === "gaps");
   const decisionRows = decisions.length - gaps.length + (gaps.length ? 1 : 0);

@@ -5,16 +5,16 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { testScenarios } from "@/db/schema";
-import { requireUser } from "@/lib/auth";
 import { findModel } from "@/lib/models";
 import { generateScenarios, scenarioFromConversation, startRun } from "@/lib/tests/engine";
 
+import { requireOwned } from "@/lib/access";
 export type TestsResult = { error?: string; ok?: boolean; runId?: string; count?: number };
 
 const errorCode = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 export async function generateTestScenarios(agentId: string): Promise<TestsResult> {
-  await requireUser();
+  await requireOwned("agent", agentId);
   try {
     const count = await generateScenarios(agentId);
     refresh();
@@ -27,7 +27,7 @@ export async function generateTestScenarios(agentId: string): Promise<TestsResul
 
 /** «В автотест» из «Диалогов»: сценарий-повтор реальной ошибки агента. */
 export async function scenarioFromConversationAction(conversationId: string): Promise<TestsResult & { agentId?: string; name?: string }> {
-  await requireUser();
+  await requireOwned("conversation", conversationId);
   try {
     const r = await scenarioFromConversation(conversationId);
     refresh();
@@ -52,7 +52,7 @@ export async function saveScenario(
   id: string | null,
   input: z.input<typeof scenarioSchema>,
 ): Promise<TestsResult> {
-  await requireUser();
+  await requireOwned("agent", agentId);
   const parsed = scenarioSchema.safeParse(input);
   if (!parsed.success) return { error: "invalid" };
   const d = parsed.data;
@@ -77,14 +77,14 @@ export async function saveScenario(
 }
 
 export async function deleteScenario(id: string): Promise<TestsResult> {
-  await requireUser();
+  await requireOwned("scenario", id);
   await db.delete(testScenarios).where(eq(testScenarios.id, id));
   refresh();
   return { ok: true };
 }
 
 export async function runTests(agentId: string, model?: string): Promise<TestsResult> {
-  const user = await requireUser();
+  const user = await requireOwned("agent", agentId);
   // Сравнение моделей: только модели из списка студии
   if (model && !findModel(model)) return { error: "invalid" };
   try {

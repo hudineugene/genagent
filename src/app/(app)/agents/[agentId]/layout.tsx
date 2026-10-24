@@ -25,6 +25,8 @@ export default async function AgentLayout({ children, params }: { children: Reac
     .innerJoin(clients, eq(clients.id, agents.clientId))
     .where(eq(agents.id, agentId));
   if (!row) notFound();
+  const { canAccess } = await import("@/lib/access");
+  if (!(await canAccess("client", row.clientId))) notFound();
   const { agent } = row;
   const config = agent.config as AgentConfig;
   const { week, monthStart } = periods();

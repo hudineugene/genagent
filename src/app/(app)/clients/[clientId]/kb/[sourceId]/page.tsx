@@ -8,8 +8,11 @@ import { BackLink } from "@/components/back-link";
 import { Card, PageHeader } from "@/components/ui";
 import { TextSourceEditor } from "./editor";
 
+import { guardPage } from "@/lib/access";
 export default async function SourcePage({ params }: { params: Promise<{ clientId: string; sourceId: string }> }) {
   const { clientId, sourceId } = await params;
+  await guardPage("client", clientId);
+  await guardPage("kbSource", sourceId);
   const { t } = await getT();
   const [row] = await db
     .select({ source: kbSources, clientName: clients.name })

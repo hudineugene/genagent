@@ -5,6 +5,7 @@ import { clients, dataTables } from "@/db/schema";
 import { findCurrentUser } from "@/lib/auth";
 import { DATA_EXTENSIONS, buildTable, readDataFile } from "@/lib/data/tables";
 
+import { canAccess } from "@/lib/access";
 const MAX_BYTES = 15 * 1024 * 1024;
 
 /**
@@ -15,6 +16,7 @@ export async function POST(req: Request) {
   if (!(await findCurrentUser())) return new Response("Unauthorized", { status: 401 });
   const form = await req.formData();
   const clientId = String(form.get("clientId") ?? "");
+  if (!(await canAccess("client", clientId))) return new Response("Forbidden", { status: 403 });
   const [client] = await db.select({ id: clients.id }).from(clients).where(eq(clients.id, clientId));
   if (!client) return Response.json({ error: "client_not_found" }, { status: 404 });
   const file = form.get("file");

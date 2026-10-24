@@ -5,8 +5,8 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { PAY_PROVIDERS, clientPayments, payments, type PayCredentials } from "@/db/schema";
-import { requireUser } from "@/lib/auth";
 
+import { requireClient, requireOwned } from "@/lib/access";
 const schema = z.object({
   provider: z.enum(PAY_PROVIDERS),
   publicKey: z.string().trim().max(200).default(""),
@@ -24,7 +24,7 @@ export type PaymentsInput = z.input<typeof schema>;
 
 /** Сохранить эквайринг клиента. Пустые секретные поля — оставить прежние (в браузер они не отдаются). */
 export async function savePayments(clientId: string, input: PaymentsInput): Promise<{ error?: string }> {
-  await requireUser();
+  await requireClient(clientId);
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { error: "invalid" };
   const d = parsed.data;
@@ -44,7 +44,7 @@ export async function savePayments(clientId: string, input: PaymentsInput): Prom
 
 /** Пробная ссылка на 1 единицу валюты — проверить ключи и страницу оплаты банка. */
 export async function testPaymentLink(clientId: string): Promise<{ link?: string; error?: string }> {
-  await requireUser();
+  await requireClient(clientId);
   const { createPayment } = await import("@/lib/payments");
   try {
     const r = await createPayment(clientId, { amount: 1, description: "Проверка оплаты" });
@@ -57,7 +57,7 @@ export async function testPaymentLink(clientId: string): Promise<{ link?: string
 
 /** Перепроверить статус оплаты у банка. */
 export async function recheckPayment(id: string): Promise<{ status?: string }> {
-  await requireUser();
+  await requireOwned("payment", id);
   const [p] = await db.select().from(payments).where(eq(payments.id, id));
   if (!p) return {};
   const { refreshPayment } = await import("@/lib/payments");

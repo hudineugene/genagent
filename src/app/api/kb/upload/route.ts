@@ -5,6 +5,7 @@ import { findCurrentUser } from "@/lib/auth";
 import { ExtractError, MAX_FILE_BYTES, extractFile } from "@/lib/kb/extract";
 import { indexSource } from "@/lib/kb/store";
 
+import { canAccess } from "@/lib/access";
 /**
  * Загрузка файлов в базу знаний клиента: извлекаем текст, режем на фрагменты, индексируем.
  * Источник создаётся только для успешно прочитанных файлов; ошибки возвращаются списком.
@@ -15,6 +16,7 @@ export async function POST(req: Request) {
 
   const form = await req.formData();
   const clientId = String(form.get("clientId") ?? "");
+  if (!(await canAccess("client", clientId))) return new Response("Forbidden", { status: 403 });
   const [client] = await db.select({ id: clients.id }).from(clients).where(eq(clients.id, clientId));
   if (!client) return Response.json({ error: "client_not_found" }, { status: 404 });
 

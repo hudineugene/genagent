@@ -6,6 +6,7 @@ import { findCurrentUser } from "@/lib/auth";
 import { addCandidates } from "@/lib/hiring";
 import { readDocument } from "@/lib/documents/intake";
 
+import { canAccess } from "@/lib/access";
 const EXTENSIONS = [".pdf", ".docx", ".txt", ".md", ".html", ".htm"];
 
 /** Резюме к вакансии (до 50 файлов): текст достаётся сразу, оценка идёт в фоне. Поля: vacancyId, files. */
@@ -13,6 +14,7 @@ export async function POST(req: Request) {
   if (!(await findCurrentUser())) return new Response("Unauthorized", { status: 401 });
   const form = await req.formData();
   const vacancyId = String(form.get("vacancyId") ?? "");
+  if (!(await canAccess("vacancy", vacancyId))) return new Response("Forbidden", { status: 403 });
   const [v] = await db.select({ id: vacancies.id }).from(vacancies).where(eq(vacancies.id, vacancyId));
   if (!v) return Response.json({ error: "not_found" }, { status: 404 });
   const files = form.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);

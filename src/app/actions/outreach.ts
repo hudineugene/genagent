@@ -5,12 +5,12 @@ import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { channels, contactLists, contacts, outreach, outreachMessages } from "@/db/schema";
-import { requireUser } from "@/lib/auth";
 import { generateOutreach, importContacts } from "@/lib/outreach/engine";
 
+import { requireClient, requireClientAnd, requireOwned } from "@/lib/access";
 /** Список контактов из Google Таблицы (доступ — сервисному аккаунту студии, как для «Данных»). */
 export async function importSheetList(clientId: string, input: { name: string; url: string; sheet: string }): Promise<{ error?: string; count?: number }> {
-  await requireUser();
+  await requireClient(clientId);
   const { readValues, spreadsheetId } = await import("@/lib/google/sheets");
   const id = spreadsheetId(input.url);
   if (!id) return { error: "sheet_url" };
@@ -27,7 +27,7 @@ export async function importSheetList(clientId: string, input: { name: string; u
 }
 
 export async function deleteContactList(id: string) {
-  await requireUser();
+  await requireOwned("contactList", id);
   await db.delete(contactLists).where(eq(contactLists.id, id));
   refresh();
 }
@@ -43,7 +43,7 @@ const schema = z.object({
 });
 
 export async function saveOutreach(clientId: string, id: string | null, input: z.input<typeof schema>): Promise<{ error?: string; id?: string }> {
-  await requireUser();
+  await requireClientAnd(clientId, "outreach", id);
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { error: "invalid" };
   const d = parsed.data;
@@ -64,7 +64,7 @@ export async function saveOutreach(clientId: string, id: string | null, input: z
 
 /** Подготовить письма (в фоне): исследование и черновик для каждого контакта. */
 export async function generateOutreachAction(id: string) {
-  await requireUser();
+  await requireOwned("outreach", id);
   await db.update(outreach).set({ status: "generating", updatedAt: new Date() }).where(eq(outreach.id, id));
   void generateOutreach(id).catch(async (e) => {
     console.error("outreach generation failed", e);
@@ -74,7 +74,7 @@ export async function generateOutreachAction(id: string) {
 }
 
 export async function getOutreachMessages(id: string) {
-  await requireUser();
+  await requireOwned("outreach", id);
   const rows = await db
     .select({ m: outreachMessages, c: contacts })
     .from(outreachMessages)
@@ -95,7 +95,7 @@ export async function getOutreachMessages(id: string) {
 const msgSchema = z.object({ subject: z.string().trim().max(200), body: z.string().trim().min(1).max(6000) });
 
 export async function saveOutreachMessage(id: string, input: z.input<typeof msgSchema>): Promise<{ error?: string }> {
-  await requireUser();
+  await requireOwned("outreachMessage", id);
   const parsed = msgSchema.safeParse(input);
   if (!parsed.success) return { error: "invalid" };
   await db.update(outreachMessages).set(parsed.data).where(and(eq(outreachMessages.id, id), inArray(outreachMessages.status, ["ready", "approved", "failed", "skipped"])));
@@ -103,20 +103,20 @@ export async function saveOutreachMessage(id: string, input: z.input<typeof msgS
 }
 
 export async function setOutreachMessageStatus(id: string, status: "approved" | "skipped" | "ready") {
-  await requireUser();
+  await requireOwned("outreachMessage", id);
   await db.update(outreachMessages).set({ status }).where(and(eq(outreachMessages.id, id), inArray(outreachMessages.status, ["ready", "approved", "skipped"])));
 }
 
 /** Одобрить все готовые черновики. */
 export async function approveAllOutreach(id: string) {
-  await requireUser();
+  await requireOwned("outreach", id);
   await db.update(outreachMessages).set({ status: "approved" }).where(and(eq(outreachMessages.outreachId, id), eq(outreachMessages.status, "ready")));
   refresh();
 }
 
 /** Начать или приостановить отправку одобренных писем. */
 export async function setOutreachSending(id: string, on: boolean): Promise<{ error?: string }> {
-  await requireUser();
+  await requireOwned("outreach", id);
   if (on) {
     const [left] = await db.select({ id: outreachMessages.id }).from(outreachMessages).where(and(eq(outreachMessages.outreachId, id), eq(outreachMessages.status, "approved"))).limit(1);
     if (!left) return { error: "nothing_approved" };
@@ -127,7 +127,7 @@ export async function setOutreachSending(id: string, on: boolean): Promise<{ err
 }
 
 export async function deleteOutreach(id: string) {
-  await requireUser();
+  await requireOwned("outreach", id);
   await db.delete(outreach).where(eq(outreach.id, id));
   refresh();
 }

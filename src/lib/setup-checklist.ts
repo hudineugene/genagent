@@ -32,17 +32,19 @@ export async function dismissSetupItem(key: string) {
 }
 
 /** Пункты для активных агентов (и общие). agentId — только для одного агента (карточка агента). */
-export async function setupChecklist(agentId?: string): Promise<SetupItem[]> {
-  const rows = await db
+/** ids — клиенты, доступные сотруднику (null — все): студийные пункты — только при полном доступе. */
+export async function setupChecklist(agentId?: string, ids: string[] | null = null): Promise<SetupItem[]> {
+  const all = await db
     .select({ agent: agents, client: clients })
     .from(agents)
     .innerJoin(clients, eq(clients.id, agents.clientId))
     .where(agentId ? eq(agents.id, agentId) : eq(agents.status, "active"));
+  const rows = ids ? all.filter((r) => ids.includes(r.client.id)) : all;
   const { getNotifySettings } = await import("@/lib/notify/telegram");
   const notify = await getNotifySettings();
   const items: SetupItem[] = [];
 
-  if (!agentId) {
+  if (!agentId && !ids) {
     if (!notify?.token || !notify.subscribers.length) items.push({ key: "notify", kind: "notify", title: "", href: "/integrations" });
     const { getTestAccounts } = await import("@/lib/test-accounts");
     if (!(await getTestAccounts()).length) items.push({ key: "testAccounts", kind: "testAccounts", title: "", href: "/team" });

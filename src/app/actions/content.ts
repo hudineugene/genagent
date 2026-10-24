@@ -7,10 +7,10 @@ import { db } from "@/db";
 import { channels, clients, contentItems } from "@/db/schema";
 import { defaultImagePrompt, generateContentImage, removeContentImage } from "@/lib/content/images";
 import { CONTENT_KINDS, CONTENT_PLATFORMS } from "@/lib/content/kinds";
-import { requireUser } from "@/lib/auth";
 import { withKeys } from "@/lib/keys";
 import { generateContent, publishItem } from "@/lib/content/studio";
 
+import { requireClient, requireClientAnd, requireOwned } from "@/lib/access";
 const genSchema = z.object({
   kind: z.enum(CONTENT_KINDS),
   platform: z.enum(CONTENT_PLATFORMS),
@@ -25,7 +25,7 @@ const genSchema = z.object({
 });
 
 async function generateContentAction__(clientId: string, input: z.input<typeof genSchema>): Promise<{ error?: string; batch?: string; imageError?: string }> {
-  await requireUser();
+  await requireClient(clientId);
   const parsed = genSchema.safeParse(input);
   if (!parsed.success) return { error: "invalid" };
   try {
@@ -67,7 +67,7 @@ const saveSchema = z.object({
 
 /** Правка текста и куда публиковать. */
 export async function saveContentItem(clientId: string, id: string, input: z.input<typeof saveSchema>): Promise<{ error?: string }> {
-  await requireUser();
+  await requireClientAnd(clientId, "content", id);
   const parsed = saveSchema.safeParse(input);
   if (!parsed.success) return { error: "invalid" };
   const d = parsed.data;
@@ -85,7 +85,7 @@ export async function saveContentItem(clientId: string, id: string, input: z.inp
 
 /** Опубликовать сейчас (at = null) или по расписанию; отменить расписание — cancel. */
 export async function scheduleContent(clientId: string, id: string, at: number | null): Promise<{ error?: string; url?: string }> {
-  await requireUser();
+  await requireClientAnd(clientId, "content", id);
   const [item] = await db.select().from(contentItems).where(and(eq(contentItems.id, id), eq(contentItems.clientId, clientId)));
   if (!item) return { error: "not_found" };
   if (!item.channelId) return { error: "no_target" };
@@ -103,13 +103,13 @@ export async function scheduleContent(clientId: string, id: string, at: number |
 }
 
 export async function unscheduleContent(id: string) {
-  await requireUser();
+  await requireOwned("content", id);
   await db.update(contentItems).set({ status: "draft", publishAt: null, updatedAt: new Date() }).where(and(eq(contentItems.id, id), eq(contentItems.status, "scheduled")));
   refresh();
 }
 
 export async function deleteContentItem(id: string) {
-  await requireUser();
+  await requireOwned("content", id);
   const [row] = await db.delete(contentItems).where(eq(contentItems.id, id)).returning({ image: contentItems.image });
   if (row?.image) removeContentImage(row.image);
   refresh();
@@ -117,7 +117,7 @@ export async function deleteContentItem(id: string) {
 
 /** Сгенерировать картинку к посту (заменяет прежнюю). Пустая подсказка — по теме поста. */
 async function generateImageAction__(clientId: string, id: string, prompt: string): Promise<{ error?: string }> {
-  await requireUser();
+  await requireClientAnd(clientId, "content", id);
   const [row] = await db
     .select({ item: contentItems, client: clients.name, industry: clients.industry })
     .from(contentItems)
@@ -139,7 +139,7 @@ async function generateImageAction__(clientId: string, id: string, prompt: strin
 }
 
 export async function removeImageAction(id: string) {
-  await requireUser();
+  await requireOwned("content", id);
   const [row] = await db.select({ image: contentItems.image }).from(contentItems).where(eq(contentItems.id, id));
   if (row?.image) removeContentImage(row.image);
   await db.update(contentItems).set({ image: "", updatedAt: new Date() }).where(eq(contentItems.id, id));

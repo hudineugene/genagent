@@ -7,7 +7,7 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { getSession } from "./session";
 
-export type CurrentUser = { id: string; name: string; email: string; role: "admin" | "member" };
+export type CurrentUser = { id: string; name: string; email: string; role: "admin" | "member"; clientIds: string[] | null; totpEnabled: boolean };
 
 /** Текущий пользователь или null. Дедуплицируется в рамках одного запроса. */
 export const findCurrentUser = cache(async (): Promise<CurrentUser | null> => {
@@ -15,7 +15,7 @@ export const findCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   const { userId } = await getSession();
   if (!userId) return null;
   const [u] = await db
-    .select({ id: users.id, name: users.name, email: users.email, role: users.role })
+    .select({ id: users.id, name: users.name, email: users.email, role: users.role, clientIds: users.clientIds, totpEnabled: users.totpEnabled })
     .from(users)
     .where(eq(users.id, userId));
   return u ?? null;

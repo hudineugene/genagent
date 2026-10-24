@@ -54,13 +54,14 @@ function currentKyivMonth() {
   return `${p.year}-${p.month}`;
 }
 
-export async function dashboardData() {
+/** ids — клиенты, доступные сотруднику (null — все). */
+export async function dashboardData(ids: string[] | null = null) {
   const now = Date.now();
   const day = new Date(now - DAY);
   const week = new Date(now - 7 * DAY);
   const month = new Date(monthRange(currentKyivMonth()).from);
 
-  const [clientRows, agentRows, waitingRows, dayMessages, costRows, gapRows, convRows, apiChannels] = await Promise.all([
+  const [allClients, allAgents, allWaiting, dayMessagesAll, allCosts, gapRows, allConv, allApi] = await Promise.all([
     db.select({ id: clients.id, name: clients.name, industry: clients.industry, color: clients.color }).from(clients).orderBy(desc(clients.createdAt)),
     db.select({ id: agents.id, clientId: agents.clientId, name: agents.name, status: agents.status, config: agents.config }).from(agents).orderBy(agents.createdAt),
     db
@@ -80,7 +81,7 @@ export async function dashboardData() {
       .where(and(eq(conversations.needsAttention, true), ne(conversations.status, "closed"), eq(conversations.isTest, false)))
       .orderBy(conversations.lastMessageAt),
     db
-      .select({ role: messages.role, text: messages.text, status: messages.status, conversationId: messages.conversationId })
+      .select({ role: messages.role, text: messages.text, status: messages.status, conversationId: messages.conversationId, clientId: conversations.clientId })
       .from(messages)
       .innerJoin(conversations, eq(conversations.id, messages.conversationId))
       .where(and(gt(messages.createdAt, day), eq(conversations.isTest, false))),
@@ -111,6 +112,14 @@ export async function dashboardData() {
       .where(and(eq(channels.type, "api"), eq(channels.enabled, true))),
   ]);
 
+  const mine = <T extends { clientId?: string | null; id?: string }>(rows: T[], key: (r: T) => string | null | undefined) => (ids ? rows.filter((r) => ids.includes(key(r) ?? "")) : rows);
+  const clientRows = mine(allClients, (r) => r.id);
+  const agentRows = mine(allAgents, (r) => r.clientId);
+  const waitingRows = mine(allWaiting, (r) => r.clientId);
+  const dayMessages = mine(dayMessagesAll, (r) => r.clientId);
+  const costRows = mine(allCosts, (r) => r.clientId);
+  const convRows = mine(allConv, (r) => r.clientId);
+  const apiChannels = mine(allApi, (r) => r.clientId);
   const clientById = new Map(clientRows.map((c) => [c.id, c]));
   const agentById = new Map(agentRows.map((a) => [a.id, a]));
 
@@ -167,6 +176,7 @@ export async function dashboardData() {
   });
   for (const g of gapRows) {
     const a = agentById.get(g.agentId);
+    if (!a) continue;
     if (a && g.n) decisions.push({ kind: "gaps", agentId: a.id, agent: a.name, client: clientById.get(a.clientId)?.name ?? "", count: g.n });
   }
   for (const a of agentRows) {

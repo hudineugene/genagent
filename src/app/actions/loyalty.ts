@@ -5,9 +5,9 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { loyaltyAccounts, loyaltyPrograms } from "@/db/schema";
-import { requireUser } from "@/lib/auth";
 import { adjust, ensureAccount, getProgram, newApiKey, normContact } from "@/lib/loyalty/engine";
 
+import { requireClientAnd, requireOwned } from "@/lib/access";
 const schema = z.object({
   name: z.string().trim().min(1).max(100),
   unit: z.string().trim().min(1).max(30),
@@ -20,7 +20,7 @@ const schema = z.object({
 });
 
 export async function saveProgram(clientId: string, id: string | null, input: z.input<typeof schema>): Promise<{ error?: string; id?: string }> {
-  await requireUser();
+  await requireClientAnd(clientId, "loyaltyProgram", id);
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues.some((i) => i.path[0] === "rewards") ? "rewards" : "invalid" };
   if (id) {
@@ -37,7 +37,7 @@ export async function saveProgram(clientId: string, id: string | null, input: z.
 }
 
 export async function renewProgramKey(id: string) {
-  await requireUser();
+  await requireOwned("loyaltyProgram", id);
   await db.update(loyaltyPrograms).set({ apiKey: newApiKey(), updatedAt: new Date() }).where(eq(loyaltyPrograms.id, id));
   refresh();
 }
@@ -51,7 +51,7 @@ const adjustSchema = z.object({
 
 /** Начислить или списать вручную (существующему счёту или новому по контакту). */
 export async function adjustPoints(programId: string, input: z.input<typeof adjustSchema>): Promise<{ error?: string; balance?: number }> {
-  await requireUser();
+  await requireOwned("loyaltyProgram", programId);
   const parsed = adjustSchema.safeParse(input);
   if (!parsed.success) return { error: "invalid" };
   const p = await getProgram(programId);
@@ -65,7 +65,7 @@ export async function adjustPoints(programId: string, input: z.input<typeof adju
 }
 
 export async function deleteAccount(id: string) {
-  await requireUser();
+  await requireOwned("loyaltyAccount", id);
   await db.delete(loyaltyAccounts).where(eq(loyaltyAccounts.id, id));
   refresh();
 }

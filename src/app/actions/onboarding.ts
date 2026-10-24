@@ -5,8 +5,8 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { onboardingPlans, onboardings } from "@/db/schema";
-import { requireUser } from "@/lib/auth";
 
+import { requireClient, requireClientAnd, requireOwned } from "@/lib/access";
 const planSchema = z.object({
   name: z.string().trim().min(1).max(100),
   steps: z
@@ -16,7 +16,7 @@ const planSchema = z.object({
 });
 
 export async function savePlan(clientId: string, id: string | null, input: z.input<typeof planSchema>): Promise<{ error?: string; id?: string }> {
-  await requireUser();
+  await requireClientAnd(clientId, "plan", id);
   const parsed = planSchema.safeParse(input);
   if (!parsed.success) return { error: "invalid" };
   const values = { ...parsed.data, updatedAt: new Date() };
@@ -31,7 +31,7 @@ export async function savePlan(clientId: string, id: string | null, input: z.inp
 }
 
 export async function deletePlan(id: string) {
-  await requireUser();
+  await requireOwned("plan", id);
   await db.delete(onboardingPlans).where(eq(onboardingPlans.id, id));
   refresh();
 }
@@ -50,7 +50,7 @@ const newSchema = z.object({
 
 /** Новый сотрудник: чек-лист, приветствие (сразу), ежедневные напоминания. */
 export async function startOnboarding(clientId: string, input: z.input<typeof newSchema>): Promise<{ error?: string; welcome?: string }> {
-  await requireUser();
+  await requireClient(clientId);
   const parsed = newSchema.safeParse(input);
   if (!parsed.success) return { error: "invalid" };
   const d = parsed.data;
@@ -64,14 +64,14 @@ export async function startOnboarding(clientId: string, input: z.input<typeof ne
 }
 
 export async function toggleOnboardingItem(id: string, itemId: string, done: boolean) {
-  await requireUser();
+  await requireOwned("onboarding", id);
   const { markItem } = await import("@/lib/onboarding");
   await markItem(id, itemId, done);
   refresh();
 }
 
 export async function resendOnboardingWelcome(id: string) {
-  await requireUser();
+  await requireOwned("onboarding", id);
   const { resendWelcome } = await import("@/lib/onboarding");
   const status = await resendWelcome(id);
   refresh();
@@ -79,7 +79,7 @@ export async function resendOnboardingWelcome(id: string) {
 }
 
 export async function deleteOnboarding(id: string) {
-  await requireUser();
+  await requireOwned("onboarding", id);
   await db.delete(onboardings).where(eq(onboardings.id, id));
   refresh();
 }

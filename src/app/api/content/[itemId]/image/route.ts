@@ -4,10 +4,12 @@ import { contentItems } from "@/db/schema";
 import { findCurrentUser } from "@/lib/auth";
 import { removeContentImage, saveContentImage } from "@/lib/content/images";
 
+import { canAccess } from "@/lib/access";
 /** Своя картинка к посту (JPG, PNG, WebP до 8 МБ) — заменяет прежнюю. Поле формы: file. */
 export async function POST(req: Request, { params }: { params: Promise<{ itemId: string }> }) {
   if (!(await findCurrentUser())) return new Response("Unauthorized", { status: 401 });
   const { itemId } = await params;
+  if (!(await canAccess("content", itemId))) return new Response("Forbidden", { status: 403 });
   const [item] = await db.select({ image: contentItems.image }).from(contentItems).where(eq(contentItems.id, itemId));
   if (!item) return Response.json({ error: "not_found" }, { status: 404 });
   const file = (await req.formData()).get("file");

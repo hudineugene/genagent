@@ -5,8 +5,8 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { clientRepeat, dataTables, reminders } from "@/db/schema";
-import { requireUser } from "@/lib/auth";
 
+import { requireClient, requireClientAnd, requireOwned } from "@/lib/access";
 const schema = z.object({
   name: z.string().trim().min(1).max(100),
   tableId: z.string().min(1).max(64),
@@ -25,7 +25,7 @@ const schema = z.object({
 });
 
 export async function saveReminder(clientId: string, id: string | null, input: z.input<typeof schema>): Promise<{ error?: string; id?: string }> {
-  await requireUser();
+  await requireClientAnd(clientId, "reminder", id);
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { error: "invalid" };
   const d = parsed.data;
@@ -47,14 +47,14 @@ export async function saveReminder(clientId: string, id: string | null, input: z
 }
 
 export async function deleteReminder(id: string) {
-  await requireUser();
+  await requireOwned("reminder", id);
   await db.delete(reminders).where(eq(reminders.id, id));
   refresh();
 }
 
 /** Выполнить сейчас (настоящая отправка тем, кому пора). */
 export async function runReminderNow(id: string) {
-  await requireUser();
+  await requireOwned("reminder", id);
   const [r] = await db.select().from(reminders).where(eq(reminders.id, id));
   if (!r) return { error: "not_found" };
   const { runReminder } = await import("@/lib/reminders");
@@ -64,14 +64,14 @@ export async function runReminderNow(id: string) {
 }
 
 export async function reminderLogAction(id: string) {
-  await requireUser();
+  await requireOwned("reminder", id);
   const { reminderHistory } = await import("@/lib/reminders");
   return (await reminderHistory(id)).map((x) => ({ ...x, createdAt: x.createdAt.getTime() }));
 }
 
 /** Предпросмотр: кому и что ушло бы сегодня (по дате) — без отправки. */
 export async function previewReminder(clientId: string, input: z.input<typeof schema>) {
-  await requireUser();
+  await requireClient(clientId);
   const parsed = schema.safeParse(input);
   if (!parsed.success || parsed.data.kind !== "date") return [];
   const [raw] = await db.select().from(dataTables).where(and(eq(dataTables.id, parsed.data.tableId), eq(dataTables.clientId, clientId)));
@@ -100,7 +100,7 @@ const repeatSchema = z.object({
 });
 
 export async function saveRepeat(clientId: string, input: z.input<typeof repeatSchema>): Promise<{ error?: string }> {
-  await requireUser();
+  await requireClient(clientId);
   const parsed = repeatSchema.safeParse(input);
   if (!parsed.success) return { error: "invalid" };
   const d = { ...parsed.data, channelId: parsed.data.channelId || null };
@@ -118,7 +118,7 @@ export async function saveRepeat(clientId: string, input: z.input<typeof repeatS
 }
 
 export async function runRepeatNow(clientId: string) {
-  await requireUser();
+  await requireClient(clientId);
   const { runRepeat } = await import("@/lib/repeat");
   const r = await runRepeat(clientId);
   refresh();
@@ -127,7 +127,7 @@ export async function runRepeatNow(clientId: string) {
 
 /** Список «пора покупать» → список контактов для «Писем по спискам» (группа — статус прогноза). */
 export async function repeatToContacts(clientId: string): Promise<{ error?: string; count?: number }> {
-  await requireUser();
+  await requireClient(clientId);
   const { loadRepeat, predictRepeat } = await import("@/lib/repeat");
   const { kyivNow } = await import("@/lib/reach");
   const found = await loadRepeat(clientId);

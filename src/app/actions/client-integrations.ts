@@ -6,9 +6,9 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { INTEGRATION_EVENTS, clientIntegrations } from "@/db/schema";
-import { requireUser } from "@/lib/auth";
 import { spreadsheetId } from "@/lib/google/sheets";
 
+import { requireClientAnd, requireOwned } from "@/lib/access";
 export type IntegrationResult = { error?: string; id?: string };
 
 const schema = z.object({
@@ -21,7 +21,7 @@ const schema = z.object({
 });
 
 export async function saveIntegration(clientId: string, id: string | null, input: z.input<typeof schema>): Promise<IntegrationResult> {
-  await requireUser();
+  await requireClientAnd(clientId, "integration", id);
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues.some((i) => i.path[0] === "events") ? "events" : "invalid" };
   const d = parsed.data;
@@ -52,14 +52,14 @@ export async function saveIntegration(clientId: string, id: string | null, input
 }
 
 export async function deleteIntegration(id: string) {
-  await requireUser();
+  await requireOwned("integration", id);
   await db.delete(clientIntegrations).where(eq(clientIntegrations.id, id));
   refresh();
 }
 
 /** Пробная отправка: строка в таблицу или пример заявки на вебхук. */
 export async function testIntegration(id: string): Promise<{ ok: boolean; error?: string }> {
-  await requireUser();
+  await requireOwned("integration", id);
   const [row] = await db.select().from(clientIntegrations).where(eq(clientIntegrations.id, id));
   if (!row) return { ok: false, error: "not_found" };
   const { sendTest } = await import("@/lib/integrations/events");

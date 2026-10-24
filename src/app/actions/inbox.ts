@@ -4,24 +4,24 @@ import { refresh } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { conversations } from "@/db/schema";
-import { requireUser } from "@/lib/auth";
 import { addMessage } from "@/lib/conversations";
 import { approveDraftCore, rejectDraftCore } from "@/lib/drafts";
 import { operatorReplyCore, returnToAgentCore } from "@/lib/operator";
 import { forgetClient } from "@/lib/agent/memory";
 
+import { requireOwned } from "@/lib/access";
 export type InboxResult = { error?: string };
 
 /** Ответ менеджера. Диалог переходит к менеджеру — агент перестаёт отвечать. */
 export async function sendOperatorMessage(conversationId: string, text: string): Promise<InboxResult> {
-  const user = await requireUser();
+  const user = await requireOwned("conversation", conversationId);
   const r = await operatorReplyCore(conversationId, text, user.id);
   refresh();
   return r;
 }
 
 export async function takeOver(conversationId: string): Promise<InboxResult> {
-  const user = await requireUser();
+  const user = await requireOwned("conversation", conversationId);
   await db.update(conversations).set({ mode: "human" }).where(eq(conversations.id, conversationId));
   await addMessage(conversationId, "system", "took_over", { authorId: user.id });
   refresh();
@@ -30,14 +30,14 @@ export async function takeOver(conversationId: string): Promise<InboxResult> {
 
 /** Вернуть диалог агенту; если последнее сообщение от клиента осталось без ответа — агент ответит. */
 export async function returnToAgent(conversationId: string): Promise<InboxResult> {
-  const user = await requireUser();
+  const user = await requireOwned("conversation", conversationId);
   const r = await returnToAgentCore(conversationId, user.id);
   refresh();
   return r;
 }
 
 export async function setConversationStatus(conversationId: string, status: "open" | "closed"): Promise<InboxResult> {
-  await requireUser();
+  await requireOwned("conversation", conversationId);
   await db
     .update(conversations)
     .set({ status, ...(status === "closed" ? { needsAttention: false, unread: 0 } : {}) })
@@ -47,21 +47,21 @@ export async function setConversationStatus(conversationId: string, status: "ope
 }
 
 export async function markRead(conversationId: string): Promise<InboxResult> {
-  await requireUser();
+  await requireOwned("conversation", conversationId);
   await db.update(conversations).set({ unread: 0 }).where(eq(conversations.id, conversationId));
   return {};
 }
 
 /** Одобрить черновик ответа агента (можно с правкой) — он публикуется от имени аккаунта. */
 export async function approveDraft(messageId: string, text?: string): Promise<InboxResult> {
-  const user = await requireUser();
+  const user = await requireOwned("message", messageId);
   const r = await approveDraftCore(messageId, { text, userId: user.id });
   refresh();
   return r;
 }
 
 export async function rejectDraft(messageId: string): Promise<InboxResult> {
-  await requireUser();
+  await requireOwned("message", messageId);
   await rejectDraftCore(messageId);
   refresh();
   return {};
@@ -69,7 +69,7 @@ export async function rejectDraft(messageId: string): Promise<InboxResult> {
 
 /** Удалить диалог целиком (со всеми сообщениями). Расходы на модели в аналитике остаются. */
 export async function deleteConversation(conversationId: string): Promise<InboxResult> {
-  await requireUser();
+  await requireOwned("conversation", conversationId);
   await db.delete(conversations).where(eq(conversations.id, conversationId));
   refresh();
   return {};
@@ -77,7 +77,7 @@ export async function deleteConversation(conversationId: string): Promise<InboxR
 
 /** Стереть долгую память агента об этом клиенте. */
 export async function forgetClientMemory(conversationId: string): Promise<InboxResult> {
-  await requireUser();
+  await requireOwned("conversation", conversationId);
   await forgetClient(conversationId);
   refresh();
   return {};
@@ -86,7 +86,7 @@ export async function forgetClientMemory(conversationId: string): Promise<InboxR
 /** «Проверить ответ» до отправки: оценка, замечания и улучшенный вариант (по правилам и базе знаний агента). */
 /** Бриф перед звонком клиенту (на одну страницу). */
 export async function callBriefAction(conversationId: string): Promise<{ text?: string; error?: string }> {
-  await requireUser();
+  await requireOwned("conversation", conversationId);
   try {
     const { callBrief } = await import("@/lib/agent/brief");
     const text = await callBrief(conversationId);
@@ -98,7 +98,7 @@ export async function callBriefAction(conversationId: string): Promise<{ text?: 
 }
 
 export async function checkOperatorDraft(conversationId: string, text: string): Promise<{ score: number; problems: string[]; better: string } | { error: string }> {
-  await requireUser();
+  await requireOwned("conversation", conversationId);
   if (!text.trim()) return { error: "empty" };
   const { reviewReply } = await import("@/lib/agent/operator-review");
   try {
@@ -111,7 +111,7 @@ export async function checkOperatorDraft(conversationId: string, text: string): 
 
 /** Удалить все данные человека у клиента (GDPR, ст. 17): все его разговоры, анкеты, документы, баллы, обучение. */
 export async function erasePersonAction(conversationId: string): Promise<InboxResult & { conversations?: number }> {
-  await requireUser();
+  await requireOwned("conversation", conversationId);
   const { erasePerson } = await import("@/lib/privacy");
   const r = await erasePerson(conversationId);
   refresh();

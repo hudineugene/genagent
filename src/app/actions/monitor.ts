@@ -5,8 +5,8 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { incidents, monitors } from "@/db/schema";
-import { requireUser } from "@/lib/auth";
 
+import { requireClientAnd, requireOwned } from "@/lib/access";
 const schema = z.object({
   name: z.string().trim().min(1).max(100),
   kind: z.enum(["http", "webhook"]),
@@ -20,7 +20,7 @@ const schema = z.object({
 });
 
 export async function saveMonitor(clientId: string, id: string | null, input: z.input<typeof schema>): Promise<{ error?: string; id?: string }> {
-  await requireUser();
+  await requireClientAnd(clientId, "monitor", id);
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { error: "invalid" };
   const d = parsed.data;
@@ -38,13 +38,13 @@ export async function saveMonitor(clientId: string, id: string | null, input: z.
 }
 
 export async function deleteMonitor(id: string) {
-  await requireUser();
+  await requireOwned("monitor", id);
   await db.delete(monitors).where(eq(monitors.id, id));
   refresh();
 }
 
 export async function checkMonitorNow(id: string) {
-  await requireUser();
+  await requireOwned("monitor", id);
   const [m] = await db.select().from(monitors).where(eq(monitors.id, id));
   if (!m) return null;
   const { runMonitor } = await import("@/lib/monitor");
@@ -54,7 +54,7 @@ export async function checkMonitorNow(id: string) {
 }
 
 export async function renewMonitorKey(id: string) {
-  await requireUser();
+  await requireOwned("monitor", id);
   const { newMonitorKey } = await import("@/lib/monitor");
   await db.update(monitors).set({ apiKey: newMonitorKey(), updatedAt: new Date() }).where(eq(monitors.id, id));
   refresh();
@@ -62,7 +62,7 @@ export async function renewMonitorKey(id: string) {
 
 /** Черновик → рассылка (выключенная, проверить и запустить во вкладке «Рассылки»). */
 export async function incidentToCampaign(incidentId: string, text: string, days: number, which: "draft" | "resolved"): Promise<{ error?: string; campaignId?: string }> {
-  await requireUser();
+  await requireOwned("incident", incidentId);
   if (text.trim().length < 10) return { error: "short" };
   const { draftToCampaign } = await import("@/lib/monitor");
   const c = await draftToCampaign(incidentId, text.trim().slice(0, 3000), Math.min(90, Math.max(1, Math.round(days))), which);
@@ -71,7 +71,7 @@ export async function incidentToCampaign(incidentId: string, text: string, days:
 }
 
 export async function closeIncident(id: string) {
-  await requireUser();
+  await requireOwned("incident", id);
   await db.update(incidents).set({ status: "resolved", resolvedAt: new Date() }).where(eq(incidents.id, id));
   refresh();
 }

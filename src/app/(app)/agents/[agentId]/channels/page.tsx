@@ -8,8 +8,10 @@ import { getMetaSettings, publicUrl } from "@/lib/settings";
 import { ChannelsManager, type ChannelItem } from "./manager";
 import { inboundStale, lastInbound, webhookTimes } from "@/lib/channels/health";
 
+import { guardPage } from "@/lib/access";
 export default async function AgentChannelsPage({ params }: { params: Promise<{ agentId: string }> }) {
   const { agentId } = await params;
+  await guardPage("agent", agentId);
   const user = await requireUser();
   const [row] = await db
     .select({ agent: agents, clientId: clients.id, clientName: clients.name })

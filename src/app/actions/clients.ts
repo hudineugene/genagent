@@ -6,9 +6,9 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { clients } from "@/db/schema";
-import { requireUser } from "@/lib/auth";
 import { removeIndexForClient } from "@/lib/kb/store";
 
+import { requireClient, requireUnscoped } from "@/lib/access";
 const clientSchema = z.object({
   name: z.string().trim().min(1).max(200),
   industry: z.string().trim().max(200).default(""),
@@ -26,19 +26,19 @@ function parse(formData: FormData) {
 }
 
 export async function createClient(formData: FormData) {
-  await requireUser();
+  await requireUnscoped();
   const [c] = await db.insert(clients).values(parse(formData)).returning({ id: clients.id });
   redirect(`/clients/${c.id}`);
 }
 
 export async function updateClient(id: string, formData: FormData) {
-  await requireUser();
+  await requireClient(id);
   await db.update(clients).set(parse(formData)).where(eq(clients.id, id));
   redirect(`/clients/${id}`);
 }
 
 export async function deleteClient(id: string) {
-  await requireUser();
+  await requireClient(id);
   removeIndexForClient(id);
   await db.delete(clients).where(eq(clients.id, id));
   refresh();
@@ -47,7 +47,7 @@ export async function deleteClient(id: string) {
 
 /** Срок хранения разговоров клиента (GDPR): null — бессрочно, иначе 7–3650 дней. */
 export async function saveRetention(clientId: string, days: number | null): Promise<{ error?: string }> {
-  await requireUser();
+  await requireClient(clientId);
   if (days != null && (!Number.isInteger(days) || days < 7 || days > 3650)) return { error: "invalid" };
   await db.update(clients).set({ retentionDays: days }).where(eq(clients.id, clientId));
   refresh();

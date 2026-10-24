@@ -11,6 +11,7 @@ import { ClientSelect } from "@/components/client-select";
 import { agentFunnels } from "@/lib/agent/funnel";
 import { InfoHint } from "@/components/hint";
 import { resolutionStats, sourceStats } from "@/lib/agent/resolution";
+import { inScope, scope } from "@/lib/access";
 
 const PERIODS = [7, 30, 90] as const;
 
@@ -21,7 +22,9 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
   const from = new Date();
   from.setHours(0, 0, 0, 0);
   from.setDate(from.getDate() - (days - 1));
-  const clientId = sp.client || null;
+  // Сотрудник с ограниченным доступом — аналитика по одному из своих клиентов
+  const ids = await scope();
+  const clientId = ids ? (sp.client && ids.includes(sp.client) ? sp.client : (ids[0] ?? "—")) : sp.client || null;
 
   // тестовые разговоры — не в счёт (расходы считаем все: деньги потрачены реально)
   const convWhere: SQL[] = [gte(conversations.createdAt, from), eq(conversations.isTest, false)];
@@ -38,7 +41,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
 
   const [clientList, [convTotals], [msgTotals], [usageTotals], convDaily, costDaily, bySource, byChannel, agentRows, agentUsage, monthUsage, [bookingTotals]] =
     await Promise.all([
-      db.select({ id: clients.id, name: clients.name }).from(clients).orderBy(asc(clients.name)),
+      db.select({ id: clients.id, name: clients.name }).from(clients).where(inScope(clients.id, ids)).orderBy(asc(clients.name)),
       db.select({ n: sql<number>`count(*)` }).from(conversations).where(and(...convWhere)),
       db
         .select({

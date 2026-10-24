@@ -5,6 +5,7 @@ import { clients } from "@/db/schema";
 import { findCurrentUser } from "@/lib/auth";
 import { ARCHIVE_EXTENSIONS, MAX_ARCHIVE_BYTES, archiveFiles } from "@/lib/documents/archive";
 
+import { canAccess } from "@/lib/access";
 /**
  * Загрузка документов в архив клиента (несколько файлов): тип, поля, единое имя и папка — сразу.
  * Поля формы: clientId, files (до 20).
@@ -13,6 +14,7 @@ export async function POST(req: Request) {
   if (!(await findCurrentUser())) return new Response("Unauthorized", { status: 401 });
   const form = await req.formData();
   const clientId = String(form.get("clientId") ?? "");
+  if (!(await canAccess("client", clientId))) return new Response("Forbidden", { status: 403 });
   const [client] = await db.select({ id: clients.id }).from(clients).where(eq(clients.id, clientId));
   if (!client) return Response.json({ error: "client_not_found" }, { status: 404 });
   const files = form.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);

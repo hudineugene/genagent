@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { Building2, Plus } from "lucide-react";
 import { getT } from "@/lib/i18n/server";
+import { scope } from "@/lib/access";
 import { dashboardData } from "@/lib/dashboard";
 import { ClientCard } from "@/components/client-card";
 import { EmptyState, PageHeader, buttonClass } from "@/components/ui";
 
 export default async function ClientsPage() {
   const { t } = await getT();
-  const { clients } = await dashboardData();
+  const { clients } = await dashboardData(await scope());
 
   return (
     <div className="mx-auto max-w-6xl">

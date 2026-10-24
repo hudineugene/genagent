@@ -4,9 +4,10 @@ import { refresh } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { conversations } from "@/db/schema";
-import { requireAdmin, requireUser } from "@/lib/auth";
+import { requireAdmin } from "@/lib/auth";
 import { addTestAccount, applyTestAccounts, getTestAccounts, saveTestAccounts } from "@/lib/test-accounts";
 
+import { requireOwned } from "@/lib/access";
 /** Список тестовых аккаунтов (страница «Сотрудники»): сохранить и пометить их старые разговоры. */
 export async function saveTestAccountsAction(raw: string): Promise<{ list: string[]; marked: number; bad: string[] }> {
   await requireAdmin();
@@ -17,7 +18,7 @@ export async function saveTestAccountsAction(raw: string): Promise<{ list: strin
 
 /** «Тестовый разговор» в «Диалогах»: пометить (и запомнить аккаунт — его новые разговоры тоже будут тестовыми) или снять. */
 export async function setConversationTest(conversationId: string, test: boolean): Promise<{ error?: string }> {
-  await requireUser();
+  await requireOwned("conversation", conversationId);
   const [c] = await db.select().from(conversations).where(eq(conversations.id, conversationId));
   if (!c) return { error: "not_found" };
   await db.update(conversations).set({ isTest: test, ...(test ? { needsAttention: false } : {}) }).where(eq(conversations.id, conversationId));

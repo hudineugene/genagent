@@ -5,10 +5,10 @@ import { and, eq, ne } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { clientTools } from "@/db/schema";
-import { requireUser } from "@/lib/auth";
 import { RESERVED_TOOL_NAMES, TOOL_NAME_RE, ToolCallError, callTool, searchSheetTool } from "@/lib/agent/custom-tools";
 import { spreadsheetId } from "@/lib/google/sheets";
 
+import { requireClientAnd, requireOwned } from "@/lib/access";
 export type ToolResult = { error?: string; id?: string };
 
 const paramSchema = z.object({
@@ -46,7 +46,7 @@ function parseHeaders(text: string): Record<string, string> | null {
 }
 
 export async function saveTool(clientId: string, id: string | null, input: z.input<typeof toolSchema>): Promise<ToolResult> {
-  await requireUser();
+  await requireClientAnd(clientId, "tool", id);
   const parsed = toolSchema.safeParse(input);
   if (!parsed.success) return { error: "invalid" };
   const d = parsed.data;
@@ -96,14 +96,14 @@ export async function saveTool(clientId: string, id: string | null, input: z.inp
 }
 
 export async function deleteTool(id: string) {
-  await requireUser();
+  await requireOwned("tool", id);
   await db.delete(clientTools).where(eq(clientTools.id, id));
   refresh();
 }
 
 /** Проверочный вызов из админки — настоящий запрос с введёнными значениями. */
 export async function testTool(id: string, input: Record<string, string>): Promise<{ ok: boolean; text: string }> {
-  await requireUser();
+  await requireOwned("tool", id);
   const [tool] = await db.select().from(clientTools).where(eq(clientTools.id, id));
   if (!tool) return { ok: false, text: "not_found" };
   if (tool.kind === "sheet") {

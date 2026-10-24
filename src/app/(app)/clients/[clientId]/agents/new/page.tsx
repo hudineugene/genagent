@@ -7,8 +7,10 @@ import { BackLink } from "@/components/back-link";
 import { PageHeader } from "@/components/ui";
 import { NewAgentWizard } from "./wizard";
 
+import { guardPage } from "@/lib/access";
 export default async function NewAgentPage({ params }: { params: Promise<{ clientId: string }> }) {
   const { clientId } = await params;
+  await guardPage("client", clientId);
   const { t } = await getT();
   const [client] = await db.select({ id: clients.id, name: clients.name }).from(clients).where(eq(clients.id, clientId));
   if (!client) notFound();

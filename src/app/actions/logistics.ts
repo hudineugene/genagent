@@ -4,10 +4,10 @@ import { refresh } from "next/cache";
 import { z } from "zod";
 import { db } from "@/db";
 import { clientLogistics } from "@/db/schema";
-import { requireUser } from "@/lib/auth";
 import { withKeys } from "@/lib/keys";
 import { MAX_STOPS, getLogistics, parseStops, planLoad, routeFrom, type PlannedRoute, type Stop } from "@/lib/logistics/routes";
 
+import { requireClient } from "@/lib/access";
 const settingsSchema = z.object({
   baseAddress: z.string().trim().max(300),
   stopMinutes: z.number().int().min(0).max(240),
@@ -16,7 +16,7 @@ const settingsSchema = z.object({
 });
 
 export async function saveLogistics(clientId: string, input: z.input<typeof settingsSchema>): Promise<{ error?: string }> {
-  await requireUser();
+  await requireClient(clientId);
   const parsed = settingsSchema.safeParse(input);
   if (!parsed.success) return { error: "invalid" };
   const values = { ...parsed.data, updatedAt: new Date() };
@@ -37,7 +37,7 @@ const planSchema = z.object({
 
 /** Маршруты на день: по одному или с распределением заказов по машинам (вес / объём). */
 async function planRoutes__(clientId: string, input: z.input<typeof planSchema>): Promise<{ error?: string; routes?: PlannedRoute[]; unassigned?: Stop[] }> {
-  await requireUser();
+  await requireClient(clientId);
   const parsed = planSchema.safeParse(input);
   if (!parsed.success) return { error: "invalid" };
   const l = await getLogistics(clientId);

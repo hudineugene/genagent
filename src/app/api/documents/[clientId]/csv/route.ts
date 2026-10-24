@@ -3,10 +3,12 @@ import { db } from "@/db";
 import { clientDocTypes, clientDocuments, conversations } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
 
+import { canAccess } from "@/lib/access";
 /** Разобранные документы клиента одного типа — таблицей CSV (?type=<id>; Excel: «;», UTF-8 с BOM). */
 export async function GET(req: Request, { params }: { params: Promise<{ clientId: string }> }) {
   await requireUser();
   const { clientId } = await params;
+  if (!(await canAccess("client", clientId))) return new Response("Forbidden", { status: 403 });
   const typeId = new URL(req.url).searchParams.get("type") ?? "";
   const [docType] = await db.select().from(clientDocTypes).where(eq(clientDocTypes.id, typeId));
   if (!docType || docType.clientId !== clientId) return new Response("not found", { status: 404 });

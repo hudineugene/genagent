@@ -1,9 +1,10 @@
 "use server";
 
-import { desc, eq, like, or } from "drizzle-orm";
+import { and, desc, eq, like, or } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { agents, clients, conversations } from "@/db/schema";
+import { inScope, scopeOf } from "@/lib/access";
 import { requireUser } from "@/lib/auth";
 import type { AgentConfig } from "@/lib/agent/types";
 
@@ -14,7 +15,7 @@ export type SearchHit =
 
 /** Быстрый поиск (Ctrl K): клиенты, агенты и диалоги по имени. Пустой запрос — клиенты, агенты и свежие диалоги. */
 export async function searchAll(query: string): Promise<SearchHit[]> {
-  await requireUser();
+  const ids = scopeOf(await requireUser());
   const q = z.string().trim().max(100).catch("").parse(query);
   const pattern = `%${q.replace(/[%_]/g, "")}%`;
 
@@ -22,13 +23,13 @@ export async function searchAll(query: string): Promise<SearchHit[]> {
     db
       .select({ id: clients.id, name: clients.name, industry: clients.industry, color: clients.color })
       .from(clients)
-      .where(q ? like(clients.name, pattern) : undefined)
+      .where(and(q ? like(clients.name, pattern) : undefined, inScope(clients.id, ids)))
       .limit(q ? 6 : 8),
     db
       .select({ id: agents.id, name: agents.name, config: agents.config, client: clients.name })
       .from(agents)
       .innerJoin(clients, eq(clients.id, agents.clientId))
-      .where(q ? or(like(agents.name, pattern), like(clients.name, pattern)) : undefined)
+      .where(and(q ? or(like(agents.name, pattern), like(clients.name, pattern)) : undefined, inScope(agents.clientId, ids)))
       .limit(q ? 6 : 8),
     db
       .select({
@@ -41,7 +42,7 @@ export async function searchAll(query: string): Promise<SearchHit[]> {
       })
       .from(conversations)
       .innerJoin(clients, eq(clients.id, conversations.clientId))
-      .where(q ? or(like(conversations.contactName, pattern), like(conversations.contactHandle, pattern), like(conversations.lastMessageText, pattern)) : undefined)
+      .where(and(q ? or(like(conversations.contactName, pattern), like(conversations.contactHandle, pattern), like(conversations.lastMessageText, pattern)) : undefined, inScope(conversations.clientId, ids)))
       .orderBy(desc(conversations.lastMessageAt))
       .limit(q ? 8 : 5),
   ]);

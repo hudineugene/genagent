@@ -5,10 +5,10 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { kbSources } from "@/db/schema";
-import { requireUser } from "@/lib/auth";
 import { normalizeText } from "@/lib/kb/text";
 import { indexSource, removeIndexForSource, startCrawl } from "@/lib/kb/store";
 
+import { requireClient, requireOwned } from "@/lib/access";
 export type KbResult = { error?: string; id?: string };
 
 const urlSchema = z.object({
@@ -21,7 +21,7 @@ const urlSchema = z.object({
 });
 
 export async function addUrlSource(clientId: string, _prev: KbResult | undefined, formData: FormData): Promise<KbResult> {
-  const user = await requireUser();
+  const user = await requireClient(clientId);
   const parsed = urlSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: "bad_url" };
   const { url, crawl } = parsed.data;
@@ -44,7 +44,7 @@ const textSchema = z.object({
 });
 
 export async function addTextSource(clientId: string, _prev: KbResult | undefined, formData: FormData): Promise<KbResult> {
-  const user = await requireUser();
+  const user = await requireClient(clientId);
   const parsed = textSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: "invalid" };
   const content = normalizeText(parsed.data.content);
@@ -59,7 +59,7 @@ export async function addTextSource(clientId: string, _prev: KbResult | undefine
 }
 
 export async function updateTextSource(id: string, _prev: KbResult | undefined, formData: FormData): Promise<KbResult> {
-  await requireUser();
+  await requireOwned("kbSource", id);
   const parsed = textSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: "invalid" };
   const [s] = await db.select().from(kbSources).where(eq(kbSources.id, id));
@@ -74,7 +74,7 @@ export async function updateTextSource(id: string, _prev: KbResult | undefined, 
 
 /** Сайт — скачать заново; файл и текст — переиндексировать сохранённый текст. */
 export async function refreshSource(id: string): Promise<KbResult> {
-  await requireUser();
+  await requireOwned("kbSource", id);
   const [s] = await db.select().from(kbSources).where(eq(kbSources.id, id));
   if (!s) return { error: "not_found" };
   if (s.type === "url") {
@@ -88,7 +88,7 @@ export async function refreshSource(id: string): Promise<KbResult> {
 }
 
 export async function deleteSource(id: string): Promise<KbResult> {
-  await requireUser();
+  await requireOwned("kbSource", id);
   removeIndexForSource(id);
   await db.delete(kbSources).where(eq(kbSources.id, id));
   refresh();

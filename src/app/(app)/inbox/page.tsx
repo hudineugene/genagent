@@ -5,6 +5,7 @@ import { ArrowRight, Bot, Building2, CheckCircle2, MessagesSquare, SearchX, X } 
 import { db } from "@/db";
 import { agents, channels, clients, conversations, messages, users } from "@/db/schema";
 import { getT } from "@/lib/i18n/server";
+import { inScope, scope } from "@/lib/access";
 import type { Dict } from "@/lib/i18n";
 import { isTyping } from "@/lib/conversations";
 import { contactLabel, waited } from "@/lib/contact";
@@ -33,6 +34,9 @@ export default async function InboxPage({
 
   // Клиент и поиск — общие для всех вкладок (и для счётчиков на вкладках)
   const base: SQL[] = [];
+  const ids = await scope();
+  const own = inScope(conversations.clientId, ids);
+  if (own) base.push(own);
   if (sp.client) base.push(eq(conversations.clientId, sp.client));
   if (sp.agent) base.push(eq(conversations.agentId, sp.agent));
   if (q) {
@@ -81,7 +85,7 @@ export default async function InboxPage({
       .where(and(...base, ...byFilter[filter]))
       .orderBy(desc(conversations.lastMessageAt))
       .limit(200),
-    db.select({ id: clients.id, name: clients.name }).from(clients).orderBy(asc(clients.name)),
+    db.select({ id: clients.id, name: clients.name }).from(clients).where(inScope(clients.id, ids)).orderBy(asc(clients.name)),
     db
       .select({
         all: sql<number>`coalesce(sum(case when ${conversations.isTest} = 0 and ${conversations.status} != 'closed' then 1 end), 0)`,
@@ -107,7 +111,7 @@ export default async function InboxPage({
           })
           .from(conversations)
           .innerJoin(clients, eq(clients.id, conversations.clientId))
-          .where(and(eq(conversations.isTest, false), eq(conversations.needsAttention, true), ne(conversations.status, "closed"), ...(sp.client ? [eq(conversations.clientId, sp.client)] : [])))
+          .where(and(eq(conversations.isTest, false), eq(conversations.needsAttention, true), ne(conversations.status, "closed"), own, ...(sp.client ? [eq(conversations.clientId, sp.client)] : [])))
           .orderBy(asc(conversations.lastMessageAt))
           .limit(5),
   ]);
@@ -124,7 +128,8 @@ export default async function InboxPage({
     }
   }
 
-  const thread = sp.c ? await loadThread(sp.c) : null;
+  const { canAccess } = await import("@/lib/access");
+  const thread = sp.c && (await canAccess("conversation", sp.c)) ? await loadThread(sp.c) : null;
   const agentFilter = sp.agent ? (await db.select({ name: agents.name }).from(agents).where(eq(agents.id, sp.agent)))[0]?.name : undefined;
 
   const qs = (patch: Record<string, string | undefined>) => {

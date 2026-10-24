@@ -5,9 +5,9 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { trips } from "@/db/schema";
-import { requireUser } from "@/lib/auth";
 import { withKeys } from "@/lib/keys";
 
+import { requireClient, requireOwned } from "@/lib/access";
 const stopSchema = z.object({
   name: z.string().max(200),
   address: z.string().max(300),
@@ -32,7 +32,7 @@ const schema = z.object({
 
 /** Сохранить построенный маршрут как рейс (и сразу отправить водителю). */
 export async function saveTrip(clientId: string, input: z.input<typeof schema>): Promise<{ error?: string; id?: string; sent?: string }> {
-  await requireUser();
+  await requireClient(clientId);
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { error: "invalid" };
   const d = parsed.data;
@@ -64,7 +64,7 @@ export async function saveTrip(clientId: string, input: z.input<typeof schema>):
 }
 
 export async function sendTrip(id: string, extra?: string) {
-  await requireUser();
+  await requireOwned("trip", id);
   const { sendToDriver } = await import("@/lib/logistics/trips");
   const r = await sendToDriver(id, extra?.trim() ? extra.trim().slice(0, 2000) : undefined);
   refresh();
@@ -72,7 +72,7 @@ export async function sendTrip(id: string, extra?: string) {
 }
 
 export async function markTripStop(id: string, index: number, status: "done" | "failed", note = "") {
-  await requireUser();
+  await requireOwned("trip", id);
   const [t] = await db.select({ clientId: trips.clientId }).from(trips).where(eq(trips.id, id));
   if (!t) return;
   const { markStop } = await import("@/lib/logistics/trips");
@@ -82,7 +82,7 @@ export async function markTripStop(id: string, index: number, status: "done" | "
 
 /** Пересчитать прогноз сейчас (без сообщений получателям). */
 export async function forecastTripNow(id: string) {
-  await requireUser();
+  await requireOwned("trip", id);
   const [t] = await db.select().from(trips).where(eq(trips.id, id));
   if (!t) return;
   const { forecastTrip } = await import("@/lib/logistics/trips");
@@ -92,7 +92,7 @@ export async function forecastTripNow(id: string) {
 }
 
 export async function deleteTrip(id: string) {
-  await requireUser();
+  await requireOwned("trip", id);
   await db.delete(trips).where(eq(trips.id, id));
   refresh();
 }

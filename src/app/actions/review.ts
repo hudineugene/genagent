@@ -4,16 +4,16 @@ import { refresh } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { agents } from "@/db/schema";
-import { requireUser } from "@/lib/auth";
 import { applyProposalToConfig, getAgentReview, reviewAgent, saveAgentReview } from "@/lib/agent/review";
 import type { AgentConfig } from "@/lib/agent/types";
 import { saveAgent } from "./agents";
 
+import { requireOwned } from "@/lib/access";
 export type ReviewResult = { ok?: boolean; error?: string; tests?: boolean };
 
 /** «Разобрать сейчас»: неделя агента — отчёт и предложения правок (один вызов дешёвой модели). */
 export async function reviewAgentNow(agentId: string): Promise<ReviewResult> {
-  await requireUser();
+  await requireOwned("agent", agentId);
   try {
     const r = await reviewAgent(agentId);
     refresh();
@@ -25,7 +25,7 @@ export async function reviewAgentNow(agentId: string): Promise<ReviewResult> {
 
 /** Принять правку: новая версия агента и автотесты в фоне (если у агента есть сценарии). */
 export async function applyReviewProposal(agentId: string, proposalId: string): Promise<ReviewResult> {
-  const user = await requireUser();
+  const user = await requireOwned("agent", agentId);
   const review = await getAgentReview(agentId);
   const p = review?.proposals.find((x) => x.id === proposalId);
   if (!review || !p || p.status !== "new") return { error: "not_found" };
@@ -50,7 +50,7 @@ export async function applyReviewProposal(agentId: string, proposalId: string): 
 }
 
 export async function rejectReviewProposal(agentId: string, proposalId: string): Promise<ReviewResult> {
-  await requireUser();
+  await requireOwned("agent", agentId);
   const review = await getAgentReview(agentId);
   const p = review?.proposals.find((x) => x.id === proposalId);
   if (!review || !p) return { error: "not_found" };

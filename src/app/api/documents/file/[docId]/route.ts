@@ -6,6 +6,7 @@ import { clientDocuments } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
 import { ARCHIVE_NAME, DOCS_DIR } from "@/lib/documents/archive";
 
+import { canAccess } from "@/lib/access";
 const TYPES: Record<string, string> = {
   ".pdf": "application/pdf",
   ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -23,6 +24,7 @@ const TYPES: Record<string, string> = {
 export async function GET(_req: Request, { params }: { params: Promise<{ docId: string }> }) {
   await requireUser();
   const { docId } = await params;
+  if (!(await canAccess("document", docId))) return new Response("Forbidden", { status: 403 });
   const [d] = await db.select().from(clientDocuments).where(eq(clientDocuments.id, docId));
   if (!d?.file || !ARCHIVE_NAME.test(d.file)) return new Response("not found", { status: 404 });
   const full = path.join(DOCS_DIR, d.file);

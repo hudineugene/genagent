@@ -9,10 +9,10 @@ import { db } from "@/db";
 import { agents, channels, clients, type ApiConfig, type EmailConfig, type InstagramConfig, type TelegramConfig, type ThreadsConfig, type WidgetConfig, WIDGET_LANGS, type WhatsAppConfig, type ViberConfig } from "@/db/schema";
 import { EmailError, GMAIL, pollNow, verifyEmail } from "@/lib/channels/email";
 import { createAuthorizeUrl } from "@/lib/channels/meta/connect";
-import { requireUser } from "@/lib/auth";
 import { TelegramError, getMe } from "@/lib/channels/telegram-api";
 import { startPoller, stopPoller } from "@/lib/channels/telegram-poller";
 
+import { requireOwned } from "@/lib/access";
 export type ChannelResult = { error?: string; ok?: boolean };
 
 async function loadAgent(agentId: string) {
@@ -29,7 +29,7 @@ export async function addTelegramChannel(
   _prev: ChannelResult | undefined,
   formData: FormData,
 ): Promise<ChannelResult> {
-  await requireUser();
+  await requireOwned("agent", agentId);
   const token = String(formData.get("token") ?? "").trim();
   if (!/^\d+:[\w-]{20,}$/.test(token)) return { error: "token_format" };
   const row = await loadAgent(agentId);
@@ -63,7 +63,7 @@ export async function addTelegramChannel(
 
 /** Свой бот: ответы на комментарии, которые он присылает, — на одобрение или сразу. */
 export async function updateApiChannel(channelId: string, patch: { approval?: boolean; botNote?: string; followUps?: boolean; orderNotes?: boolean; ratingInvite?: boolean }): Promise<ChannelResult> {
-  await requireUser();
+  await requireOwned("channel", channelId);
   const data = z.object({ approval: z.boolean().optional(), botNote: z.string().trim().max(1000).optional(), followUps: z.boolean().optional(), orderNotes: z.boolean().optional(), ratingInvite: z.boolean().optional() }).parse(patch);
   const [ch] = await db.select().from(channels).where(eq(channels.id, channelId));
   if (!ch || ch.type !== "api") return { error: "not_found" };
@@ -74,7 +74,7 @@ export async function updateApiChannel(channelId: string, patch: { approval?: bo
 
 /** Telegram: ответы на комментарии под постами канала и одобрение этих ответов. */
 export async function updateTelegramChannel(channelId: string, patch: { comments?: boolean; approval?: boolean }): Promise<ChannelResult> {
-  await requireUser();
+  await requireOwned("channel", channelId);
   const data = z.object({ comments: z.boolean().optional(), approval: z.boolean().optional() }).parse(patch);
   const [ch] = await db.select().from(channels).where(eq(channels.id, channelId));
   if (!ch || ch.type !== "telegram") return { error: "not_found" };
@@ -87,7 +87,7 @@ export async function updateTelegramChannel(channelId: string, patch: { comments
 }
 
 export async function addWidgetChannel(agentId: string): Promise<ChannelResult> {
-  await requireUser();
+  await requireOwned("agent", agentId);
   const row = await loadAgent(agentId);
   if (!row) return { error: "not_found" };
   const config: WidgetConfig = {
@@ -129,7 +129,7 @@ export async function updateWidget(
   _prev: ChannelResult | undefined,
   formData: FormData,
 ): Promise<ChannelResult> {
-  await requireUser();
+  await requireOwned("channel", channelId);
   const parsed = widgetSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: "invalid" };
   // Тексты на языках посетителя: l_<язык>_title / _subtitle / _greeting / _quick
@@ -146,7 +146,7 @@ export async function updateWidget(
 }
 
 export async function setChannelEnabled(channelId: string, enabled: boolean): Promise<ChannelResult> {
-  await requireUser();
+  await requireOwned("channel", channelId);
   const [ch] = await db
     .update(channels)
     .set({ enabled, error: null })
@@ -161,7 +161,7 @@ export async function setChannelEnabled(channelId: string, enabled: boolean): Pr
 }
 
 export async function deleteChannel(channelId: string): Promise<ChannelResult> {
-  await requireUser();
+  await requireOwned("channel", channelId);
   stopPoller(channelId);
   // Viber: снять вебхук, чтобы бот перестал слать сообщения на удалённый канал
   const [ch] = await db.select({ type: channels.type, config: channels.config }).from(channels).where(eq(channels.id, channelId));
@@ -179,7 +179,7 @@ export async function startSocialConnect(
   agentId: string,
   provider: "instagram" | "threads",
 ): Promise<{ url?: string; error?: string }> {
-  const user = await requireUser();
+  const user = await requireOwned("agent", agentId);
   try {
     return { url: await createAuthorizeUrl(provider, agentId, user.id) };
   } catch (e) {
@@ -198,7 +198,7 @@ export async function updateSocialChannel(
   channelId: string,
   patch: z.input<typeof socialSchema>,
 ): Promise<ChannelResult> {
-  await requireUser();
+  await requireOwned("channel", channelId);
   const data = socialSchema.parse(patch);
   const [ch] = await db.select().from(channels).where(eq(channels.id, channelId));
   if (!ch || (ch.type !== "instagram" && ch.type !== "threads")) return { error: "not_found" };
@@ -218,7 +218,7 @@ const triggerSchema = z
 
 /** Кодовые слова в комментариях Instagram → личное сообщение автору. */
 export async function saveInstagramTriggers(channelId: string, triggers: z.input<typeof triggerSchema>): Promise<ChannelResult> {
-  await requireUser();
+  await requireOwned("channel", channelId);
   const parsed = triggerSchema.safeParse(triggers.filter((t) => t.keyword.trim() || t.dm.trim()));
   if (!parsed.success) return { error: "invalid" };
   const [ch] = await db.select().from(channels).where(eq(channels.id, channelId));
@@ -243,7 +243,7 @@ export async function addEmailChannel(
   _prev: ChannelResult | undefined,
   formData: FormData,
 ): Promise<ChannelResult> {
-  await requireUser();
+  await requireOwned("agent", agentId);
   const parsed = emailSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.issues[0]?.path[0] === "address" ? "email_address" : "email_password" };
   const row = await loadAgent(agentId);
@@ -274,7 +274,7 @@ export async function addEmailChannel(
 }
 
 export async function updateEmailChannel(channelId: string, patch: { approval?: boolean; fromName?: string }): Promise<ChannelResult> {
-  await requireUser();
+  await requireOwned("channel", channelId);
   const data = z.object({ approval: z.boolean().optional(), fromName: z.string().trim().min(1).max(80).optional() }).parse(patch);
   const [ch] = await db.select().from(channels).where(eq(channels.id, channelId));
   if (!ch || ch.type !== "email") return { error: "not_found" };
@@ -289,7 +289,7 @@ const newApiKey = () => `ga_${randomBytes(24).toString("base64url")}`;
 
 /** Подключить свой бот клиента: бот обращается к агенту по адресу канала с ключом. */
 export async function addApiChannel(agentId: string, label: string): Promise<ChannelResult> {
-  await requireUser();
+  await requireOwned("agent", agentId);
   const row = await loadAgent(agentId);
   if (!row) return { error: "not_found" };
   const name = label.trim().slice(0, 80) || "API";
@@ -301,7 +301,7 @@ export async function addApiChannel(agentId: string, label: string): Promise<Cha
 
 /** WhatsApp Business: ID номера и постоянный токен — проверяем у Meta и создаём канал. */
 export async function addWhatsAppChannel(agentId: string, phoneNumberId: string, token: string): Promise<ChannelResult> {
-  await requireUser();
+  await requireOwned("agent", agentId);
   const row = await loadAgent(agentId);
   if (!row) return { error: "not_found" };
   const id = phoneNumberId.trim();
@@ -321,7 +321,7 @@ export async function addWhatsAppChannel(agentId: string, phoneNumberId: string,
 
 /** Viber: бот по токену из партнёрского кабинета; вебхук регистрируется сразу (Viber проверяет адрес). */
 export async function addViberChannel(agentId: string, token: string, welcome: string): Promise<ChannelResult> {
-  await requireUser();
+  await requireOwned("agent", agentId);
   const row = await loadAgent(agentId);
   if (!row) return { error: "not_found" };
   const tok = token.trim();
@@ -351,7 +351,7 @@ export async function addViberChannel(agentId: string, token: string, welcome: s
 }
 
 export async function updateViberChannel(channelId: string, welcome: string): Promise<ChannelResult> {
-  await requireUser();
+  await requireOwned("channel", channelId);
   const [ch] = await db.select().from(channels).where(eq(channels.id, channelId));
   if (!ch || ch.type !== "viber") return { error: "not_found" };
   await db.update(channels).set({ config: { ...(ch.config as ViberConfig), welcome: welcome.trim().slice(0, 500) } }).where(eq(channels.id, channelId));
@@ -361,7 +361,7 @@ export async function updateViberChannel(channelId: string, welcome: string): Pr
 
 /** Новый ключ: старый перестаёт работать сразу — его нужно заменить в настройках бота. */
 export async function regenerateApiKey(channelId: string): Promise<ChannelResult> {
-  await requireUser();
+  await requireOwned("channel", channelId);
   const [ch] = await db.select().from(channels).where(eq(channels.id, channelId));
   if (!ch || ch.type !== "api") return { error: "not_found" };
   await db.update(channels).set({ config: { ...(ch.config as ApiConfig), key: newApiKey() } }).where(eq(channels.id, channelId));
@@ -374,7 +374,7 @@ export async function saveWhatsAppSettings(
   channelId: string,
   input: { wabaId: string; proactiveTemplate: { name: string; language: string } | null; price: { service: number; template: number } },
 ): Promise<ChannelResult> {
-  await requireUser();
+  await requireOwned("channel", channelId);
   const [ch] = await db.select().from(channels).where(eq(channels.id, channelId));
   if (!ch || ch.type !== "whatsapp") return { error: "not_found" };
   const waba = input.wabaId.trim();
@@ -389,7 +389,7 @@ export async function saveWhatsAppSettings(
 
 /** Загрузить утверждённые шаблоны из Meta. */
 export async function syncWhatsAppTemplates(channelId: string): Promise<ChannelResult & { count?: number }> {
-  await requireUser();
+  await requireOwned("channel", channelId);
   const [ch] = await db.select().from(channels).where(eq(channels.id, channelId));
   if (!ch || ch.type !== "whatsapp") return { error: "not_found" };
   const cfg = ch.config as WhatsAppConfig;

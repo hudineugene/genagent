@@ -5,8 +5,10 @@ import { agents, clients } from "@/db/schema";
 import { getAgentReview } from "@/lib/agent/review";
 import { ReviewManager } from "./manager";
 
+import { guardPage } from "@/lib/access";
 export default async function AgentReviewPage({ params }: { params: Promise<{ agentId: string }> }) {
   const { agentId } = await params;
+  await guardPage("agent", agentId);
   const [row] = await db
     .select({ agent: agents, clientId: clients.id, clientName: clients.name })
     .from(agents)

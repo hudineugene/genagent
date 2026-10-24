@@ -5,8 +5,8 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { clientForms } from "@/db/schema";
-import { requireUser } from "@/lib/auth";
 
+import { requireClientAnd, requireOwned } from "@/lib/access";
 export type FormResult = { error?: string; id?: string };
 
 const fieldSchema = z.object({
@@ -30,7 +30,7 @@ const schema = z.object({
 });
 
 export async function saveForm(clientId: string, id: string | null, input: z.input<typeof schema>): Promise<FormResult> {
-  await requireUser();
+  await requireClientAnd(clientId, "form", id);
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues.some((i) => i.path[0] === "fields") ? "fields" : "invalid" };
   const d = parsed.data;
@@ -49,7 +49,7 @@ export async function saveForm(clientId: string, id: string | null, input: z.inp
 }
 
 export async function deleteForm(id: string) {
-  await requireUser();
+  await requireOwned("form", id);
   await db.delete(clientForms).where(eq(clientForms.id, id));
   refresh();
 }

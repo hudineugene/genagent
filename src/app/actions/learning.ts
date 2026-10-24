@@ -5,9 +5,9 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { courses, lessons } from "@/db/schema";
-import { requireUser } from "@/lib/auth";
 import { withKeys } from "@/lib/keys";
 
+import { requireClient, requireClientAnd, requireOwned } from "@/lib/access";
 const courseSchema = z.object({
   title: z.string().trim().min(1).max(150),
   description: z.string().trim().max(2000),
@@ -20,7 +20,7 @@ const courseSchema = z.object({
 });
 
 export async function saveCourse(clientId: string, id: string | null, input: z.input<typeof courseSchema>): Promise<{ error?: string; id?: string }> {
-  await requireUser();
+  await requireClientAnd(clientId, "course", id);
   const parsed = courseSchema.safeParse(input);
   if (!parsed.success) return { error: "invalid" };
   const values = { ...parsed.data, programId: parsed.data.programId || null, updatedAt: new Date() };
@@ -35,7 +35,7 @@ export async function saveCourse(clientId: string, id: string | null, input: z.i
 }
 
 export async function deleteCourse(id: string) {
-  await requireUser();
+  await requireOwned("course", id);
   await db.delete(courses).where(eq(courses.id, id));
   refresh();
 }
@@ -51,7 +51,7 @@ const lessonSchema = z.object({
 });
 
 export async function saveLesson(courseId: string, id: string | null, input: z.input<typeof lessonSchema>): Promise<{ error?: string; id?: string }> {
-  await requireUser();
+  await requireOwned("course", courseId);
   const parsed = lessonSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues.some((i) => i.path[0] === "quiz") ? "quiz" : "invalid" };
   if (parsed.data.quiz.some((q) => q.correct >= q.options.length)) return { error: "quiz" };
@@ -67,14 +67,14 @@ export async function saveLesson(courseId: string, id: string | null, input: z.i
 }
 
 export async function deleteLesson(id: string) {
-  await requireUser();
+  await requireOwned("lesson", id);
   await db.delete(lessons).where(eq(lessons.id, id));
   refresh();
 }
 
 /** Тест к уроку по его тексту (ИИ, в области ключей клиента). */
 export async function generateQuizAction(clientId: string, body: string) {
-  await requireUser();
+  await requireClient(clientId);
   if (body.trim().length < 50) return { error: "short" as const };
   try {
     const { generateQuiz } = await import("@/lib/learning");

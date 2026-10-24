@@ -33,3 +33,43 @@ export async function changePassword(_prev: FormResult | undefined, formData: Fo
   await db.update(users).set({ passwordHash: await hashPassword(next) }).where(eq(users.id, me.id));
   return { ok: true };
 }
+
+export type TwoFactorStart = { qr?: string; secret?: string; error?: string };
+
+/** Начать подключение второго фактора: новый секрет (ещё не включён), QR для приложения. */
+export async function startTwoFactor(): Promise<TwoFactorStart> {
+  const me = await requireUser();
+  const [u] = await db.select({ enabled: users.totpEnabled }).from(users).where(eq(users.id, me.id));
+  if (u?.enabled) return { error: "already" };
+  const { newSecret, otpauthUri, sealSecret } = await import("@/lib/totp");
+  const secret = newSecret();
+  await db.update(users).set({ totpSecret: sealSecret(secret), totpEnabled: false }).where(eq(users.id, me.id));
+  const QR = await import("qrcode");
+  const qr = await QR.toDataURL(otpauthUri(secret, me.email), { margin: 1, width: 220 });
+  return { qr, secret };
+}
+
+/** Подтвердить кодом из приложения — второй фактор включён, выдаём коды восстановления (показываются один раз). */
+export async function confirmTwoFactor(code: string): Promise<{ codes?: string[]; error?: string }> {
+  const me = await requireUser();
+  const [u] = await db.select({ secret: users.totpSecret, enabled: users.totpEnabled }).from(users).where(eq(users.id, me.id));
+  if (!u?.secret || u.enabled) return { error: "invalid" };
+  const { newRecoveryCodes, openSecret, verifyTotp } = await import("@/lib/totp");
+  if (!verifyTotp(openSecret(u.secret), code)) return { error: "code" };
+  const { codes, hashes } = newRecoveryCodes();
+  await db.update(users).set({ totpEnabled: true, recoveryCodes: hashes }).where(eq(users.id, me.id));
+  refresh();
+  return { codes };
+}
+
+/** Отключить второй фактор — только с действующим кодом из приложения. */
+export async function disableTwoFactor(code: string): Promise<{ error?: string }> {
+  const me = await requireUser();
+  const [u] = await db.select({ secret: users.totpSecret, enabled: users.totpEnabled }).from(users).where(eq(users.id, me.id));
+  if (!u?.secret || !u.enabled) return {};
+  const { openSecret, verifyTotp } = await import("@/lib/totp");
+  if (!verifyTotp(openSecret(u.secret), code)) return { error: "code" };
+  await db.update(users).set({ totpEnabled: false, totpSecret: null, recoveryCodes: [] }).where(eq(users.id, me.id));
+  refresh();
+  return {};
+}

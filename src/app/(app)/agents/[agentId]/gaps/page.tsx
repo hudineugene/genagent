@@ -4,8 +4,10 @@ import { db } from "@/db";
 import { agents, clients, knowledgeGaps } from "@/db/schema";
 import { GapsManager } from "./manager";
 
+import { guardPage } from "@/lib/access";
 export default async function AgentGapsPage({ params }: { params: Promise<{ agentId: string }> }) {
   const { agentId } = await params;
+  await guardPage("agent", agentId);
   const [row] = await db
     .select({ agent: agents, clientId: clients.id, clientName: clients.name })
     .from(agents)

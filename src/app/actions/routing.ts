@@ -5,8 +5,8 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { routingRules } from "@/db/schema";
-import { requireUser } from "@/lib/auth";
 
+import { requireClientAnd, requireOwned } from "@/lib/access";
 const schema = z.object({
   name: z.string().trim().min(1).max(80),
   description: z.string().trim().max(500),
@@ -14,7 +14,7 @@ const schema = z.object({
 });
 
 export async function saveRoutingRule(clientId: string, id: string | null, input: z.input<typeof schema>): Promise<{ error?: string }> {
-  await requireUser();
+  await requireClientAnd(clientId, "routingRule", id);
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues.some((i) => i.path[0] === "chatIds") ? "no_people" : "invalid" };
   if (id) await db.update(routingRules).set(parsed.data).where(and(eq(routingRules.id, id), eq(routingRules.clientId, clientId)));
@@ -24,7 +24,7 @@ export async function saveRoutingRule(clientId: string, id: string | null, input
 }
 
 export async function deleteRoutingRule(id: string) {
-  await requireUser();
+  await requireOwned("routingRule", id);
   await db.delete(routingRules).where(eq(routingRules.id, id));
   refresh();
 }

@@ -10,8 +10,10 @@ import { getExamples } from "@/lib/agent/examples";
 import { SetupChecklist } from "@/components/setup-checklist";
 import { setupChecklist } from "@/lib/setup-checklist";
 
+import { guardPage } from "@/lib/access";
 export default async function AgentPage({ params }: { params: Promise<{ agentId: string }> }) {
   const { agentId } = await params;
+  await guardPage("agent", agentId);
   await connection();
   const [row] = await db
     .select({ agent: agents, client: clients })

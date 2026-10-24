@@ -3,10 +3,12 @@ import { db } from "@/db";
 import { clientForms, conversations, formResponses } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
 
+import { canAccess } from "@/lib/access";
 /** Ответы анкеты таблицей CSV (Excel открывает: разделитель «;», UTF-8 с BOM). */
 export async function GET(_req: Request, { params }: { params: Promise<{ formId: string }> }) {
   await requireUser();
   const { formId } = await params;
+  if (!(await canAccess("form", formId))) return new Response("Forbidden", { status: 403 });
   const [form] = await db.select().from(clientForms).where(eq(clientForms.id, formId));
   if (!form) return new Response("not found", { status: 404 });
   const rows = await db

@@ -5,8 +5,8 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { campaignRuns, campaigns, type CampaignSegment } from "@/db/schema";
-import { requireUser } from "@/lib/auth";
 
+import { requireClient, requireClientAnd, requireOwned } from "@/lib/access";
 export type CampaignResult = { error?: string; id?: string; count?: number };
 
 const segmentSchema = z.object({
@@ -33,7 +33,7 @@ const schema = z.object({
 });
 
 export async function saveCampaign(clientId: string, id: string | null, input: z.input<typeof schema>): Promise<CampaignResult> {
-  await requireUser();
+  await requireClientAnd(clientId, "campaign", id);
   const parsed = schema.safeParse(input);
   if (!parsed.success) {
     const path = String(parsed.error.issues[0]?.path[0] ?? "");
@@ -66,14 +66,14 @@ export async function saveCampaign(clientId: string, id: string | null, input: z
 }
 
 export async function deleteCampaign(id: string) {
-  await requireUser();
+  await requireOwned("campaign", id);
   await db.delete(campaigns).where(eq(campaigns.id, id));
   refresh();
 }
 
 /** Кому уйдёт: число и первые имена. */
 export async function previewSegment(clientId: string, segment: CampaignSegment): Promise<{ count: number; sample: string[] }> {
-  await requireUser();
+  await requireClient(clientId);
   const s = segmentSchema.safeParse(segment);
   if (!s.success) return { count: 0, sample: [] };
   const { matchSegment } = await import("@/lib/campaigns/engine");
@@ -83,7 +83,7 @@ export async function previewSegment(clientId: string, segment: CampaignSegment)
 
 /** Какой текст получит первый подходящий клиент (ничего не отправляется). */
 export async function previewMessage(id: string, step = 0): Promise<{ text?: string; error?: string }> {
-  await requireUser();
+  await requireOwned("campaign", id);
   const [c] = await db.select().from(campaigns).where(eq(campaigns.id, id));
   if (!c) return { error: "not_found" };
   const { matchSegment, previewStep } = await import("@/lib/campaigns/engine");
@@ -95,7 +95,7 @@ export async function previewMessage(id: string, step = 0): Promise<{ text?: str
 
 /** Рассылка: поставить сообщения всем из сегмента (сразу или ко времени). */
 export async function launchCampaign(id: string): Promise<CampaignResult> {
-  await requireUser();
+  await requireOwned("campaign", id);
   const { launchBroadcast } = await import("@/lib/campaigns/engine");
   const count = await launchBroadcast(id);
   refresh();
@@ -104,7 +104,7 @@ export async function launchCampaign(id: string): Promise<CampaignResult> {
 
 /** Цепочка: включить (набирает участников с этого момента) или выключить. */
 export async function setSequenceEnabled(id: string, enabled: boolean): Promise<CampaignResult> {
-  await requireUser();
+  await requireOwned("campaign", id);
   await db
     .update(campaigns)
     .set({ enabled, status: enabled ? "active" : "paused", ...(enabled ? { enabledAt: new Date() } : {}), updatedAt: new Date() })
@@ -115,7 +115,7 @@ export async function setSequenceEnabled(id: string, enabled: boolean): Promise<
 
 /** Остановить: ничего больше не отправлять. */
 export async function stopCampaign(id: string): Promise<CampaignResult> {
-  await requireUser();
+  await requireOwned("campaign", id);
   await db.update(campaigns).set({ enabled: false, status: "paused", updatedAt: new Date() }).where(eq(campaigns.id, id));
   await db.update(campaignRuns).set({ status: "stopped", error: "stopped_by_user" }).where(and(eq(campaignRuns.campaignId, id), eq(campaignRuns.status, "pending")));
   refresh();

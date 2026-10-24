@@ -5,12 +5,12 @@ import { desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { agents, agentVersions, clients, users } from "@/db/schema";
-import { requireUser } from "@/lib/auth";
 import { getLocale } from "@/lib/i18n/server";
 import { agentConfigSchema, type AgentConfig } from "@/lib/agent/types";
 import { TEMPLATE_MAP, configFromTemplate, emptyConfig } from "@/lib/agent/templates";
 import { generateAgentConfig } from "@/lib/agent/generate";
 
+import { requireClient, requireOwned } from "@/lib/access";
 async function insertAgent(clientId: string, name: string, config: AgentConfig, templateKey: string | null, userId: string) {
   const [a] = await db
     .insert(agents)
@@ -21,7 +21,7 @@ async function insertAgent(clientId: string, name: string, config: AgentConfig, 
 }
 
 export async function createAgent(clientId: string, templateKey: string | null) {
-  const user = await requireUser();
+  const user = await requireClient(clientId);
   const locale = await getLocale();
   const template = templateKey ? TEMPLATE_MAP.get(templateKey) : undefined;
   const name = template?.name[locale] ?? (locale === "uk" ? "Новий агент" : "Новый агент");
@@ -34,7 +34,7 @@ export async function generateAgent(
   _prev: { error?: string } | undefined,
   formData: FormData,
 ): Promise<{ error?: string }> {
-  const user = await requireUser();
+  const user = await requireClient(clientId);
   const brief = String(formData.get("brief") ?? "").trim();
   if (brief.length < 10) return { error: "brief" };
 
@@ -60,7 +60,7 @@ const saveSchema = z.object({
 });
 
 export async function saveAgent(id: string, input: z.input<typeof saveSchema>) {
-  const user = await requireUser();
+  const user = await requireOwned("agent", id);
   const data = saveSchema.parse(input);
   const [a] = await db
     .update(agents)
@@ -83,7 +83,7 @@ export async function saveAgent(id: string, input: z.input<typeof saveSchema>) {
 }
 
 export async function deleteAgent(id: string) {
-  await requireUser();
+  await requireOwned("agent", id);
   const [a] = await db.delete(agents).where(eq(agents.id, id)).returning({ clientId: agents.clientId });
   redirect(a ? `/clients/${a.clientId}` : "/");
 }
@@ -99,7 +99,7 @@ export type AgentVersionItem = {
 
 /** История сохранений агента, новые сверху. */
 export async function listVersions(agentId: string): Promise<AgentVersionItem[]> {
-  await requireUser();
+  await requireOwned("agent", agentId);
   return db
     .select({
       id: agentVersions.id,

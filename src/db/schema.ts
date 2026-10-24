@@ -18,6 +18,12 @@ export const users = sqliteTable("users", {
   name: text("name").notNull(),
   passwordHash: text("password_hash").notNull(),
   role: text("role", { enum: ["admin", "member"] }).notNull().default("member"),
+  /** Двухфакторный вход (TOTP): секрет зашифрован ключом сессий; коды восстановления — хэши, каждый на один раз */
+  totpSecret: text("totp_secret"),
+  totpEnabled: integer("totp_enabled", { mode: "boolean" }).notNull().default(false),
+  recoveryCodes: text("recovery_codes", { mode: "json" }).$type<string[]>().notNull().default([]),
+  /** Доступ сотрудника только к этим клиентам; null — ко всем (администратор видит всех всегда) */
+  clientIds: text("client_ids", { mode: "json" }).$type<string[] | null>(),
   createdAt: createdAt(),
 });
 

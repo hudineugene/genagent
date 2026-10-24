@@ -6,9 +6,9 @@ import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { db } from "@/db";
 import { clients } from "@/db/schema";
-import { requireUser } from "@/lib/auth";
 import { KEY_KINDS, forgetClientKeys, type KeyKind } from "@/lib/keys";
 
+import { requireClient } from "@/lib/access";
 /** Проверить ключ бесплатным запросом (список моделей); Google Maps — по формату (бесплатной проверки нет). */
 async function verify(kind: KeyKind, key: string): Promise<string | null> {
   try {
@@ -33,7 +33,7 @@ async function verify(kind: KeyKind, key: string): Promise<string | null> {
 
 /** Сохранить ключ клиента (после проверки) или убрать (пустое значение). */
 export async function saveClientKey(clientId: string, kind: KeyKind, value: string): Promise<{ error?: string }> {
-  await requireUser();
+  await requireClient(clientId);
   if (!KEY_KINDS.includes(kind)) return { error: "invalid" };
   const key = value.trim();
   if (key.length > 500) return { error: "invalid" };

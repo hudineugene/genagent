@@ -5,8 +5,8 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { docTemplates } from "@/db/schema";
-import { requireUser } from "@/lib/auth";
 
+import { requireClientAnd, requireOwned } from "@/lib/access";
 export type DocTemplateResult = { error?: string; id?: string };
 
 const schema = z.object({
@@ -20,7 +20,7 @@ const schema = z.object({
 const BUILTIN = new Set(["date", "number", "client"]);
 
 export async function saveDocTemplate(clientId: string, id: string | null, input: z.input<typeof schema>): Promise<DocTemplateResult> {
-  await requireUser();
+  await requireClientAnd(clientId, "docTemplate", id);
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues.some((i) => i.path[0] === "fields") ? "fields" : "invalid" };
   const d = parsed.data;
@@ -40,7 +40,7 @@ export async function saveDocTemplate(clientId: string, id: string | null, input
 }
 
 export async function deleteDocTemplate(id: string) {
-  await requireUser();
+  await requireOwned("docTemplate", id);
   await db.delete(docTemplates).where(eq(docTemplates.id, id));
   refresh();
 }

@@ -6,6 +6,7 @@ import { clients, meetings } from "@/db/schema";
 import { findCurrentUser } from "@/lib/auth";
 import { AUDIO_EXTENSIONS, MAX_AUDIO_BYTES, TEXT_EXTENSIONS, processMeeting } from "@/lib/meetings/engine";
 
+import { canAccess } from "@/lib/access";
 const KINDS = ["protocol", "interview", "sales", "custom"] as const;
 
 /**
@@ -17,6 +18,7 @@ export async function POST(req: Request) {
   if (!(await findCurrentUser())) return new Response("Unauthorized", { status: 401 });
   const form = await req.formData();
   const clientId = String(form.get("clientId") ?? "");
+  if (!(await canAccess("client", clientId))) return new Response("Forbidden", { status: 403 });
   const [client] = await db.select({ id: clients.id }).from(clients).where(eq(clients.id, clientId));
   if (!client) return Response.json({ error: "client_not_found" }, { status: 404 });
   const kind = KINDS.find((k) => k === form.get("kind")) ?? "protocol";

@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { agents, clients, testResults, testRuns, testScenarios } from "@/db/schema";
 import { TestsManager } from "./manager";
 
+import { guardPage } from "@/lib/access";
 export default async function AgentTestsPage({
   params,
   searchParams,
@@ -12,6 +13,7 @@ export default async function AgentTestsPage({
   searchParams: Promise<{ run?: string }>;
 }) {
   const [{ agentId }, sp] = await Promise.all([params, searchParams]);
+  await guardPage("agent", agentId);
   const [row] = await db
     .select({ agent: agents, clientId: clients.id, clientName: clients.name })
     .from(agents)

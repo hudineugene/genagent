@@ -1,10 +1,12 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
-import { Check, Copy, KeyRound, Trash2, UserPlus } from "lucide-react";
+import { Check, Copy, KeyRound, ShieldOff, Trash2, UserPlus } from "lucide-react";
 import {
   addMember,
   deleteMember,
+  resetMemberTwoFactor,
+  setMemberClients,
   resetMemberPassword,
   setMemberRole,
   type TeamResult,
@@ -13,10 +15,10 @@ import { useI18n } from "@/lib/i18n/client";
 import { Badge, Button, Card, Field, Input, Select, Spinner, cx } from "@/components/ui";
 
 type Role = "admin" | "member";
-type Member = { id: string; name: string; email: string; role: Role; createdAt: Date };
+type Member = { id: string; name: string; email: string; role: Role; createdAt: Date; clientIds: string[] | null; totp: boolean };
 type ErrorKey = keyof ReturnType<typeof useI18n>["t"]["team"]["errors"];
 
-export function TeamManager({ members, meId }: { members: Member[]; meId: string }) {
+export function TeamManager({ members, meId, clients }: { members: Member[]; meId: string; clients: { id: string; name: string }[] }) {
   const { t, locale } = useI18n();
   const [creds, setCreds] = useState<{ title: string; email: string; password: string } | null>(null);
   const [addState, addAction, adding] = useActionState(
@@ -97,10 +99,12 @@ export function TeamManager({ members, meId }: { members: Member[]; meId: string
                 <div className="flex items-center gap-2 font-medium">
                   <span className="truncate">{m.name}</span>
                   {isMe && <Badge tone="accent">{t.team.you}</Badge>}
+                  <Badge tone={m.totp ? "success" : "neutral"}>{m.totp ? t.team.twoFactorOn : t.team.twoFactorOff}</Badge>
                 </div>
                 <div className="truncate text-sm text-muted">
                   {m.email} · {t.team.since} {fmt.format(new Date(m.createdAt))}
                 </div>
+                {m.role === "member" && <ClientAccess member={m} clients={clients} onSave={(ids) => act(m.id, () => setMemberClients(m.id, ids))} />}
               </div>
               <div className="flex items-center gap-2">
                 {busy && <Spinner className="text-muted" />}
@@ -129,6 +133,11 @@ export function TeamManager({ members, meId }: { members: Member[]; meId: string
                 >
                   <KeyRound className="size-4" />
                 </Button>
+                {m.totp && !isMe && (
+                  <Button variant="ghost" size="sm" title={t.team.resetTwoFactor} disabled={busy} onClick={() => confirm(t.team.resetTwoFactorConfirm) && act(m.id, () => resetMemberTwoFactor(m.id))}>
+                    <ShieldOff className="size-4" />
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="sm"
@@ -195,5 +204,43 @@ function CredsCard({
         <Button onClick={onClose}>{t.team.close}</Button>
       </div>
     </Card>
+  );
+}
+
+/** Доступ сотрудника: ко всем клиентам или только к отмеченным. */
+function ClientAccess({ member, clients, onSave }: { member: Member; clients: { id: string; name: string }[]; onSave: (ids: string[] | null) => void }) {
+  const { t } = useI18n();
+  const [all, setAll] = useState(member.clientIds === null);
+  const [ids, setIds] = useState<string[]>(member.clientIds ?? []);
+  const label = all ? t.team.accessAll : t.team.accessSome.replace("{n}", String(ids.length));
+  return (
+    <details className="mt-1 text-sm">
+      <summary className="cursor-pointer text-xs text-accent">{t.team.access}: {label}</summary>
+      <div className="mt-2 space-y-2 rounded-lg border border-border p-3">
+        <label className="flex items-center gap-2">
+          <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={all} onChange={(e) => setAll(e.target.checked)} />
+          {t.team.accessAll}
+        </label>
+        {!all && (
+          <div className="grid max-h-56 grid-cols-1 gap-1 overflow-y-auto sm:grid-cols-2">
+            {clients.map((c) => (
+              <label key={c.id} className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  className="size-4 accent-[var(--accent)]"
+                  checked={ids.includes(c.id)}
+                  onChange={(e) => setIds(e.target.checked ? [...ids, c.id] : ids.filter((x) => x !== c.id))}
+                />
+                <span className="truncate">{c.name}</span>
+              </label>
+            ))}
+          </div>
+        )}
+        <p className="text-xs text-muted">{t.team.accessHint}</p>
+        <Button size="sm" variant="secondary" onClick={() => onSave(all ? null : ids)}>
+          {t.common.save}
+        </Button>
+      </div>
+    </details>
   );
 }

@@ -5,10 +5,10 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { dataTables } from "@/db/schema";
-import { requireUser } from "@/lib/auth";
 import { askData, type ChartSpec } from "@/lib/data/analyst";
 import { refreshTable } from "@/lib/data/tables";
 
+import { requireClient, requireClientAnd, requireOwned } from "@/lib/access";
 export type DataResult = { error?: string; id?: string };
 
 const metaSchema = z.object({
@@ -19,7 +19,7 @@ const metaSchema = z.object({
 
 /** Название, описание и включение таблицы (данные меняются загрузкой файла или обновлением из Google). */
 export async function saveTableMeta(clientId: string, id: string, input: z.input<typeof metaSchema>): Promise<DataResult> {
-  await requireUser();
+  await requireClientAnd(clientId, "dataTable", id);
   const parsed = metaSchema.safeParse(input);
   if (!parsed.success) return { error: "invalid" };
   await db
@@ -39,7 +39,7 @@ const sheetSchema = z.object({
 
 /** Подключить Google Таблицу: читаем сразу, ошибку показываем (доступ, неверная ссылка). */
 export async function addSheetTable(clientId: string, input: z.input<typeof sheetSchema>): Promise<DataResult> {
-  await requireUser();
+  await requireClient(clientId);
   const parsed = sheetSchema.safeParse(input);
   if (!parsed.success) return { error: "invalid" };
   const { spreadsheetId } = await import("@/lib/google/sheets");
@@ -52,7 +52,7 @@ export async function addSheetTable(clientId: string, input: z.input<typeof shee
 }
 
 export async function refreshTableNow(id: string): Promise<DataResult> {
-  await requireUser();
+  await requireOwned("dataTable", id);
   const [t] = await db.select().from(dataTables).where(eq(dataTables.id, id));
   if (!t) return { error: "not_found" };
   const fresh = await refreshTable(t, true);
@@ -61,7 +61,7 @@ export async function refreshTableNow(id: string): Promise<DataResult> {
 }
 
 export async function deleteTable(id: string) {
-  await requireUser();
+  await requireOwned("dataTable", id);
   await db.delete(dataTables).where(eq(dataTables.id, id));
   refresh();
 }
@@ -76,7 +76,7 @@ export async function askDataAction(
   clientId: string,
   input: z.input<typeof askSchema>,
 ): Promise<{ answer: string; charts: ChartSpec[]; queries: number; error?: string }> {
-  await requireUser();
+  await requireClient(clientId);
   const parsed = askSchema.safeParse(input);
   if (!parsed.success) return { answer: "", charts: [], queries: 0, error: "invalid" };
   try {

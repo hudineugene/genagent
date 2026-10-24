@@ -5,8 +5,8 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { routines } from "@/db/schema";
-import { requireUser } from "@/lib/auth";
 
+import { requireClientAnd, requireOwned } from "@/lib/access";
 export type RoutineResult = { error?: string; id?: string };
 
 const sourceSchema = z.discriminatedUnion("type", [
@@ -32,7 +32,7 @@ const schema = z.object({
 });
 
 export async function saveRoutine(clientId: string, id: string | null, input: z.input<typeof schema>): Promise<RoutineResult> {
-  await requireUser();
+  await requireClientAnd(clientId, "routine", id);
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues.some((i) => i.path[0] === "sources") ? "sources" : "invalid" };
   const d = parsed.data;
@@ -49,14 +49,14 @@ export async function saveRoutine(clientId: string, id: string | null, input: z.
 }
 
 export async function deleteRoutine(id: string) {
-  await requireUser();
+  await requireOwned("routine", id);
   await db.delete(routines).where(eq(routines.id, id));
   refresh();
 }
 
 /** Запустить сейчас (и отправить, как по расписанию) — для проверки. */
 export async function runRoutineNow(id: string): Promise<{ ok: boolean; text: string }> {
-  await requireUser();
+  await requireOwned("routine", id);
   const { runRoutine } = await import("@/lib/routines/engine");
   const r = await runRoutine(id);
   refresh();

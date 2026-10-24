@@ -4,7 +4,7 @@ import { refresh } from "next/cache";
 import { and, count, eq, ne } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { users } from "@/db/schema";
+import { clients, users } from "@/db/schema";
 import { requireAdmin } from "@/lib/auth";
 import { generatePassword, hashPassword } from "@/lib/passwords";
 
@@ -54,6 +54,25 @@ export async function setMemberRole(userId: string, role: "admin" | "member"): P
   if (userId === me.id) return { error: "self" };
   if (role === "member" && (await otherAdmins(userId)) === 0) return { error: "last_admin" };
   await db.update(users).set({ role }).where(eq(users.id, userId));
+  refresh();
+  return {};
+}
+
+/** Каким клиентам доступен сотрудник: список id или null — всем. */
+export async function setMemberClients(userId: string, clientIds: string[] | null): Promise<TeamResult> {
+  await requireAdmin();
+  const ids = clientIds ? z.array(z.string().max(64)).max(500).parse(clientIds) : null;
+  const known = ids ? new Set((await db.select({ id: clients.id }).from(clients)).map((c) => c.id)) : null;
+  await db.update(users).set({ clientIds: ids ? ids.filter((i) => known!.has(i)) : null }).where(eq(users.id, userId));
+  refresh();
+  return {};
+}
+
+/** Сотрудник потерял телефон: выключить ему вход с кодом (включит заново в профиле). */
+export async function resetMemberTwoFactor(userId: string): Promise<TeamResult> {
+  const me = await requireAdmin();
+  if (userId === me.id) return { error: "self" };
+  await db.update(users).set({ totpEnabled: false, totpSecret: null, recoveryCodes: [] }).where(eq(users.id, userId));
   refresh();
   return {};
 }

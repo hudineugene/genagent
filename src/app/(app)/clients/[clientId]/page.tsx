@@ -40,6 +40,7 @@ import { previousMonth } from "@/lib/agent/report";
 import { hasTeamAgents } from "@/lib/team/approvals";
 import { hasKey } from "@/lib/keys";
 
+import { guardPage } from "@/lib/access";
 export default async function ClientPage({
   params,
   searchParams,
@@ -48,6 +49,7 @@ export default async function ClientPage({
   searchParams: Promise<{ tab?: string }>;
 }) {
   const [{ clientId }, { tab }] = await Promise.all([params, searchParams]);
+  await guardPage("client", clientId);
   const { t, locale } = await getT();
   const [client] = await db.select().from(clients).where(eq(clients.id, clientId));
   if (!client) notFound();
