@@ -333,26 +333,26 @@ async function judge(
 const running = new Set<string>();
 
 /** Запуск всех сценариев агента в фоне. Возвращает id прогона. */
-export async function startRun(agentId: string, userId: string | null, opts: { model?: string } = {}) {
+export async function startRun(agentId: string, userId: string | null, opts: { model?: string; k?: number } = {}) {
   return (await startRunTracked(agentId, userId, opts)).runId;
 }
 
 /** То же, но с обещанием окончания прогона — для еженедельной проверки (ждёт результат и шлёт отчёт). */
-export async function startRunTracked(agentId: string, userId: string | null, opts: { model?: string } = {}) {
+export async function startRunTracked(agentId: string, userId: string | null, opts: { model?: string; k?: number } = {}) {
   const { agent } = await loadAgent(agentId);
   anthropicKey();
   const scenarios = await db.select().from(testScenarios).where(eq(testScenarios.agentId, agentId)).orderBy(asc(testScenarios.createdAt));
   if (!scenarios.length) throw new Error("no_scenarios");
   const [run] = await db
     .insert(testRuns)
-    .values({ agentId, agentVersion: agent.version, model: opts.model ?? null, total: scenarios.length, createdBy: userId })
+    .values({ agentId, agentVersion: agent.version, model: opts.model ?? null, k: Math.min(5, Math.max(1, opts.k ?? 1)), total: scenarios.length, createdBy: userId })
     .returning({ id: testRuns.id });
   running.add(run.id);
-  const done = execute(run.id, agentId, scenarios, opts.model).finally(() => running.delete(run.id));
+  const done = execute(run.id, agentId, scenarios, opts.model, Math.min(5, Math.max(1, opts.k ?? 1))).finally(() => running.delete(run.id));
   return { runId: run.id, done };
 }
 
-async function execute(runId: string, agentId: string, scenarios: TestScenario[], model?: string) {
+async function execute(runId: string, agentId: string, scenarios: TestScenario[], model?: string, k = 1) {
   try {
     const loaded = await loadAgent(agentId);
     const client = loaded.client;
@@ -364,10 +364,21 @@ async function execute(runId: string, agentId: string, scenarios: TestScenario[]
     let scored = 0;
     let runCost = 0;
 
-    // По 3 сценария параллельно — быстрее, но без лишней нагрузки на лимиты API.
-    const queue = [...scenarios];
+    // pass^k: каждый сценарий — k прогонов; пройден, только если прошёл все (ловит нестабильные ответы)
+    const attempts = new Map<string, { done: number; ok: boolean }>();
+    const finish = (id: string, ok: boolean) => {
+      const a = attempts.get(id) ?? { done: 0, ok: true };
+      a.done++;
+      a.ok = a.ok && ok;
+      attempts.set(id, a);
+      passed = [...attempts.values()].filter((x) => x.done === k && x.ok).length;
+    };
+    // По 3 прогона параллельно — быстрее, но без лишней нагрузки на лимиты API.
+    const queue = scenarios.flatMap((s) => Array.from({ length: k }, (_, i) => ({ s, i })));
     const worker = async () => {
-      for (let s = queue.shift(); s; s = queue.shift()) {
+      for (let item = queue.shift(); item; item = queue.shift()) {
+        const { s, i: attempt } = item;
+        const name = k > 1 ? `${s.name} · ${attempt + 1}/${k}` : s.name;
         const t: Transcript = [];
         const seen = new Set<string>();
         let cost = 0;
@@ -395,13 +406,13 @@ async function execute(runId: string, agentId: string, scenarios: TestScenario[]
           const j = await judge(config, [brief, ...seen].join("\n\n"), s, t, agentId, client.id);
           cost += j.cost;
           const ok = scenarioPassed(j.verdicts, j.score, s.criteria.length);
-          if (ok) passed++;
+          finish(s.id, ok);
           scoreSum += j.score;
           scored++;
           await db.insert(testResults).values({
             runId,
             scenarioId: s.id,
-            scenarioName: s.name,
+            scenarioName: name,
             transcript: t,
             verdicts: j.verdicts,
             score: j.score,
@@ -410,10 +421,11 @@ async function execute(runId: string, agentId: string, scenarios: TestScenario[]
             cost,
           });
         } catch (e) {
+          finish(s.id, false);
           await db.insert(testResults).values({
             runId,
             scenarioId: s.id,
-            scenarioName: s.name,
+            scenarioName: name,
             transcript: t,
             verdicts: [],
             passed: false,

@@ -30,7 +30,7 @@ const MODEL = "claude-haiku-5-5";
 const PER_TICK = 30;
 const WINDOW_MS = 24 * 60 * 60 * 1000;
 /** Каналы, куда можно написать первым */
-export const PUSH_CHANNELS = ["telegram", "api", "email", "whatsapp", "instagram", "viber"];
+export const PUSH_CHANNELS = ["telegram", "api", "email", "whatsapp", "instagram", "viber", "sms"];
 const OPT_OUT_RE = /^\s*(стоп|stop|отписаться|відписатися|отписка|unsubscribe)\s*[.!]?\s*$/i;
 
 export const isOptOut = (text: string) => OPT_OUT_RE.test(text);

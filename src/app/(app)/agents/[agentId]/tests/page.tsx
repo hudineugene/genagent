@@ -50,6 +50,7 @@ export default async function AgentTestsPage({
           id: r.id,
           agentVersion: r.agentVersion,
           model: r.model,
+          k: r.k,
           status: r.status,
           total: r.total,
           passed: r.passed,

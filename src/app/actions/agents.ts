@@ -88,6 +88,25 @@ export async function deleteAgent(id: string) {
   redirect(a ? `/clients/${a.clientId}` : "/");
 }
 
+/** A/B: версия агента отвечает в доле новых разговоров (1–50%). */
+export async function startExperimentAction(agentId: string, versionId: string, share: number) {
+  await requireOwned("agent", agentId);
+  const { startExperiment } = await import("@/lib/agent/experiments");
+  return startExperiment(agentId, versionId, share);
+}
+
+export async function stopExperimentAction(agentId: string) {
+  await requireOwned("agent", agentId);
+  const { stopExperiment } = await import("@/lib/agent/experiments");
+  await stopExperiment(agentId);
+}
+
+export async function experimentStatsAction(agentId: string) {
+  await requireOwned("agent", agentId);
+  const { experimentStats } = await import("@/lib/agent/experiments");
+  return experimentStats(agentId);
+}
+
 export type AgentVersionItem = {
   id: string;
   version: number;

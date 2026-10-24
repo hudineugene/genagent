@@ -6,7 +6,7 @@ import { refresh } from "next/cache";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { agents, channels, clients, type ApiConfig, type EmailConfig, type InstagramConfig, type TelegramConfig, type ThreadsConfig, type WidgetConfig, WIDGET_LANGS, type WhatsAppConfig, type ViberConfig } from "@/db/schema";
+import { agents, channels, clients, type ApiConfig, type EmailConfig, type InstagramConfig, type TelegramConfig, type ThreadsConfig, type WidgetConfig, WIDGET_LANGS, type WhatsAppConfig, type ViberConfig, type VoiceConfig, type MessengerConfig, type SmsChannelConfig } from "@/db/schema";
 import { EmailError, GMAIL, pollNow, verifyEmail } from "@/lib/channels/email";
 import { createAuthorizeUrl } from "@/lib/channels/meta/connect";
 import { TelegramError, getMe } from "@/lib/channels/telegram-api";
@@ -114,6 +114,7 @@ const widgetSchema = z.object({
     .transform((s) => s.replace(/^@/, "")),
   teaser: z.string().trim().max(140).default(""),
   teaserDelay: z.coerce.number().int().min(3).max(300).default(20),
+  voice: z.preprocess((v) => v === "on" || v === "true", z.boolean()).default(false),
 });
 
 /** Кнопки-подсказки: по одной в строке, до 4, каждая до 40 символов. */
@@ -299,6 +300,69 @@ export async function addApiChannel(agentId: string, label: string): Promise<Cha
   return { ok: true };
 }
 
+/** Facebook Messenger: токен страницы — проверяем у Meta, подписываем страницу на вебхуки, создаём канал. */
+export async function addMessengerChannel(agentId: string, token: string): Promise<ChannelResult> {
+  await requireOwned("agent", agentId);
+  const row = await loadAgent(agentId);
+  if (!row) return { error: "not_found" };
+  const tok = token.trim();
+  if (tok.length < 20) return { error: "invalid" };
+  const m = await import("@/lib/channels/meta/messenger");
+  let page: { id: string; name: string };
+  try {
+    page = await m.getPage(tok);
+    await m.subscribePage(tok, page.id);
+  } catch (e) {
+    return { error: e instanceof Error ? `messenger: ${e.message.slice(0, 150)}` : "messenger_error" };
+  }
+  const existing = await db.select({ config: channels.config }).from(channels).where(eq(channels.type, "messenger"));
+  if (existing.some((c) => (c.config as MessengerConfig).pageId === page.id)) return { error: "token_used" };
+  const config: MessengerConfig = { pageId: page.id, pageName: page.name, token: tok };
+  await db.insert(channels).values({ agentId, clientId: row.client.id, type: "messenger", name: page.name, config });
+  refresh();
+  return { ok: true };
+}
+
+/** SMS через Twilio: аккаунт проверяется; адрес для входящих — в карточке канала. */
+export async function addSmsChannel(agentId: string, input: { accountSid: string; authToken: string; from: string }): Promise<ChannelResult> {
+  await requireOwned("agent", agentId);
+  const row = await loadAgent(agentId);
+  if (!row) return { error: "not_found" };
+  const d = z.object({ accountSid: z.string().trim().regex(/^AC[0-9a-f]{32}$/i), authToken: z.string().trim().min(20).max(100), from: z.string().trim().regex(/^\+\d{8,15}$/) }).safeParse(input);
+  if (!d.success) return { error: "sms_invalid" };
+  const { checkTwilio } = await import("@/lib/channels/sms");
+  try {
+    await checkTwilio(d.data);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "twilio_error" };
+  }
+  const config: SmsChannelConfig = d.data;
+  await db.insert(channels).values({ agentId, clientId: row.client.id, type: "sms", name: d.data.from, config });
+  refresh();
+  return { ok: true };
+}
+
+/** Звонки: агент как «своя модель» для Vapi / ElevenLabs — канал с ключом и адресом /chat/completions. */
+export async function addVoiceChannel(agentId: string, provider: "vapi" | "elevenlabs" | "other"): Promise<ChannelResult> {
+  await requireOwned("agent", agentId);
+  const row = await loadAgent(agentId);
+  if (!row) return { error: "not_found" };
+  const p = (["vapi", "elevenlabs", "other"] as const).includes(provider) ? provider : "other";
+  const config: VoiceConfig = { key: newApiKey(), provider: p };
+  await db.insert(channels).values({ agentId, clientId: row.client.id, type: "voice", name: p === "vapi" ? "Vapi" : p === "elevenlabs" ? "ElevenLabs" : "Voice", config });
+  refresh();
+  return { ok: true };
+}
+
+export async function updateVoiceChannel(channelId: string, phone: string): Promise<ChannelResult> {
+  await requireOwned("channel", channelId);
+  const [ch] = await db.select().from(channels).where(eq(channels.id, channelId));
+  if (!ch || ch.type !== "voice") return { error: "not_found" };
+  await db.update(channels).set({ config: { ...(ch.config as VoiceConfig), phone: phone.trim().slice(0, 40) } }).where(eq(channels.id, channelId));
+  refresh();
+  return { ok: true };
+}
+
 /** WhatsApp Business: ID номера и постоянный токен — проверяем у Meta и создаём канал. */
 export async function addWhatsAppChannel(agentId: string, phoneNumberId: string, token: string): Promise<ChannelResult> {
   await requireOwned("agent", agentId);
@@ -363,7 +427,7 @@ export async function updateViberChannel(channelId: string, welcome: string): Pr
 export async function regenerateApiKey(channelId: string): Promise<ChannelResult> {
   await requireOwned("channel", channelId);
   const [ch] = await db.select().from(channels).where(eq(channels.id, channelId));
-  if (!ch || ch.type !== "api") return { error: "not_found" };
+  if (!ch || (ch.type !== "api" && ch.type !== "voice")) return { error: "not_found" };
   await db.update(channels).set({ config: { ...(ch.config as ApiConfig), key: newApiKey() } }).where(eq(channels.id, channelId));
   refresh();
   return { ok: true };

@@ -140,6 +140,20 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
   const funnels = (await agentFunnels(from.getTime())).filter((f) => !clientId || f.clientId === clientId);
   const [resolution, sources] = await Promise.all([resolutionStats(from, clientId), sourceStats(from, clientId)]);
   const pct = (v: number | null) => (v === null ? "—" : `${Math.round(v * 100)}%`);
+  // Задержка ответа агента: медиана и 95-й процентиль (по ответам за период)
+  const times = (
+    await db
+      .select({ ms: sql<number>`json_extract(${messages.meta}, '$.ms')` })
+      .from(messages)
+      .innerJoin(conversations, eq(conversations.id, messages.conversationId))
+      .where(and(...msgWhere, eq(messages.role, "assistant"), sql`json_extract(${messages.meta}, '$.ms') is not null`))
+      .limit(20000)
+  )
+    .map((r) => Number(r.ms))
+    .sort((a, b) => a - b);
+  const q = (p: number) => (times.length ? times[Math.min(times.length - 1, Math.floor(p * times.length))] / 1000 : null);
+  const p50 = q(0.5);
+  const p95 = q(0.95);
   const R = t.analytics.resolution;
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -173,7 +187,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
             value: activeConvs ? `${Math.round((handoffConvs / activeConvs) * 100)}%` : "—",
             hint: t.analytics.handoffsIn.replace("{n}", String(handoffs)).replace("{c}", String(handoffConvs)),
           },
-          { label: t.analytics.avgResponse, value: msgTotals?.avgMs ? `${(Number(msgTotals.avgMs) / 1000).toFixed(1)} ${t.analytics.sec}` : "—" },
+          { label: t.analytics.avgResponse, value: p50 !== null ? `${p50.toFixed(1)} ${t.analytics.sec}` : "—", hint: p95 !== null ? `p50 · p95 ${p95.toFixed(1)} ${t.analytics.sec}` : undefined },
           { label: t.analytics.spend, value: money(totalCost), hint: totalConvs ? `${money(totalCost / totalConvs)} ${t.analytics.perConversation}` : undefined },
         ]}
         extra={[

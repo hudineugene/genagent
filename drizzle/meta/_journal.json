@@ -309,6 +309,13 @@
       "when": 1793250000000,
       "tag": "0043_studio_templates",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "6",
+      "when": 1793300000000,
+      "tag": "0044_pass_k",
+      "breakpoints": true
     }
   ]
 }

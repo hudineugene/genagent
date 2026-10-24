@@ -67,6 +67,8 @@ function rateLimited(key: string) {
 const postSchema = z.object({
   visitor: visitorSchema,
   text: z.string().trim().min(1).max(4000),
+  /** Сообщение надиктовано голосом (кнопка микрофона) */
+  voice: z.boolean().optional(),
   /** Язык страницы сайта (ru, uk, en, es…) — агент отвечает на нём */
   lang: z.string().trim().toLowerCase().regex(/^[a-z]{2}$/).optional(),
   /** Какую страницу посетитель смотрит сейчас */
@@ -90,6 +92,7 @@ function widgetView(cfg: WidgetConfig, agentCfg: { greeting?: string; icon?: str
     quick: loc?.quick?.length ? loc.quick : (cfg.quick ?? []),
     teaser: loc?.teaser || cfg.teaser || "",
     teaserDelay: cfg.teaserDelay ?? 20,
+    voice: Boolean(cfg.voice),
   };
 }
 
@@ -131,7 +134,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ channel
       .set({ context: { ...conversation.context, ...(lang ? { language: lang } : {}), ...(botContext ? { botContext } : {}) } })
       .where(eq(conversations.id, conversation.id));
   }
-  const m = await addMessage(conversation.id, "user", parsed.data.text);
+  const m = await addMessage(conversation.id, "user", parsed.data.text, parsed.data.voice ? { meta: { kind: "voice" } } : {});
   scheduleReply(conversation.id);
   return Response.json({ ok: true, id: m.id });
 }

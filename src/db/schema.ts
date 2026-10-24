@@ -1494,6 +1494,8 @@ export type WidgetConfig = {
   teaserDelay?: number;
   /** Тексты на языке посетителя (сайт на нескольких языках): заголовок, подзаголовок, приветствие, подсказки */
   locales?: Partial<Record<WidgetLang, WidgetLocale>>;
+  /** Голосовой ввод: кнопка микрофона, речь → текст на сервере; ответ на голос браузер читает вслух */
+  voice?: boolean;
 };
 export const WIDGET_LANGS = ["ru", "uk", "en", "es"] as const;
 export type WidgetLang = (typeof WIDGET_LANGS)[number];
@@ -1595,8 +1597,17 @@ export type ViberConfig = {
   /** Приветствие при открытии чата (событие conversation_started) */
   welcome?: string;
 };
-export type ChannelConfig = TelegramConfig | WidgetConfig | InstagramConfig | ThreadsConfig | EmailConfig | ApiConfig | WhatsAppConfig | ViberConfig;
-export const CHANNEL_TYPES = ["telegram", "widget", "instagram", "threads", "email", "api", "whatsapp", "viber"] as const;
+/**
+ * Голос (телефон): агент как «своя модель» для голосовых платформ (Vapi, ElevenLabs) — они распознают речь, звонят
+ * и говорят, а ответы берут у агента по адресу /api/agent/{id}/chat/completions (формат OpenAI) с ключом канала.
+ */
+export type VoiceConfig = { key: string; provider: "vapi" | "elevenlabs" | "other"; /** Номер, на который звонят клиенты (для людей) */ phone?: string };
+/** Facebook Messenger: страница компании (id, название) и её токен из Meta Business. */
+export type MessengerConfig = { pageId: string; pageName: string; token: string };
+/** SMS через Twilio: аккаунт, токен, номер-отправитель. */
+export type SmsChannelConfig = { accountSid: string; authToken: string; from: string };
+export type ChannelConfig = TelegramConfig | WidgetConfig | InstagramConfig | ThreadsConfig | EmailConfig | ApiConfig | WhatsAppConfig | ViberConfig | VoiceConfig | MessengerConfig | SmsChannelConfig;
+export const CHANNEL_TYPES = ["telegram", "widget", "instagram", "threads", "email", "api", "whatsapp", "viber", "voice", "messenger", "sms"] as const;
 export type ChannelType = (typeof CHANNEL_TYPES)[number];
 
 /** Канал, через который агент общается с клиентами: Telegram-бот или виджет на сайте. */
@@ -1747,6 +1758,8 @@ export type ConversationContext = {
   /** Разговор продолжен в боте (id разговора там) / пришёл с сайта (id разговора виджета) */
   linkedTo?: string;
   linkedFrom?: string;
+  /** A/B-проверка версий агента: в каком варианте разговор («A» или «B:{id версии}») */
+  variant?: string;
   /** Процедура с обязательными шагами, которая сейчас идёт в разговоре */
   procedure?: ProcedureState;
   /** Лиды, созданные в CRM из этого разговора: id подключения → id в CRM */
@@ -1792,6 +1805,8 @@ export type MessageMeta = {
   procedure?: boolean;
   /** Кнопки быстрых ответов под сообщением (Telegram, Viber) */
   buttons?: string[];
+  /** Трассировка ответа: вызовы инструментов (вход и результат, коротко), вариант A/B */
+  trace?: { steps: { tool: string; input: string; result: string; error?: boolean }[]; variant?: string };
   /** Агент дословно пересказывал служебные инструкции — ответ заменён отказом */
   leakBlocked?: boolean;
   /** Утренняя проверка качества: замечание к ответу (или ok — проверен, в порядке) */
@@ -1903,6 +1918,8 @@ export const testRuns = sqliteTable(
     agentVersion: integer("agent_version").notNull(),
     /** Сравнение моделей: прогон на другой модели (агент не меняется). null — модель агента */
     model: text("model"),
+    /** pass^k: сколько раз прогонялся каждый сценарий (пройден — только если прошёл все k раз) */
+    k: integer("k").notNull().default(1),
     status: text("status", { enum: ["running", "done", "error"] }).notNull().default("running"),
     total: integer("total").notNull().default(0),
     passed: integer("passed").notNull().default(0),

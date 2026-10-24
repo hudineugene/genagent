@@ -14,6 +14,8 @@ import { type ApiConfig,
   type InstagramConfig,
   type TelegramConfig,
   type ViberConfig,
+  type MessengerConfig,
+  type SmsChannelConfig,
   type ConversationSource,
   type ThreadsConfig,
   type EmailConfig,
@@ -220,7 +222,9 @@ async function respond__(conversationId: string): Promise<void> {
     }
     const pendingHandoff = openHandoff(history);
 
-    const config = agentConfigSchema.parse(agent.config);
+    // A/B-проверка версий: в варианте B отвечает выбранная версия агента (разговор не переключается посередине)
+    const { pickVariant } = await import("@/lib/agent/experiments");
+    const { config, variant } = await pickVariant(agent.id, conversation, agentConfigSchema.parse(agent.config), history.some((m) => m.role === "assistant"));
     // Агент для сотрудников: посторонним — один раз вежливый отказ, без затрат на модель
     if (config.team?.enabled) {
       const { isAllowed } = await import("@/lib/team/approvals");
@@ -274,7 +278,7 @@ async function respond__(conversationId: string): Promise<void> {
             ? apiNote(conversation.context?.language, conversation.context?.botContext, (channel.config as ApiConfig).botNote, botActivity(history), ordersNote(conversation.context?.orders), handoffEtaNote(conversation.context?.team, await measuredReplyMinutes(channel.id)))
             : undefined,
         conversation.kind === "dm" ? sourceNote(conversation.context?.source) : undefined,
-        config.quickReplies && conversation.kind === "dm" && (channel.type === "telegram" || channel.type === "viber") ? BUTTONS_NOTE : undefined,
+        config.quickReplies && conversation.kind === "dm" && (channel.type === "telegram" || channel.type === "viber" || channel.type === "messenger") ? BUTTONS_NOTE : undefined,
         pendingHandoff ? handoffPendingNote(pendingHandoff.createdAt) : undefined,
         channel.type === "api" && (channel.config as ApiConfig).ratingInvite && !conversation.context?.ratingAskedAt ? RATING_NOTE : undefined,
         ].filter(Boolean).join("\n\n") || undefined,
@@ -302,6 +306,7 @@ async function respond__(conversationId: string): Promise<void> {
     let meta: MessageMeta = {};
     const used: { name: string; error?: boolean }[] = [];
     const toolResults: string[] = [];
+    const steps: NonNullable<MessageMeta["trace"]>["steps"] = [];
     let booked = false;
     for await (const ev of streamChat({ model: config.model, effort: config.effort, system, messages: prepared, tools, webSearch })) {
       if (ev.type === "text") {
@@ -310,6 +315,7 @@ async function respond__(conversationId: string): Promise<void> {
       } else if (ev.type === "tool") {
         used.push({ name: ev.name, ...(ev.error ? { error: true } : {}) });
         toolResults.push(ev.result);
+        steps.push({ tool: ev.name, input: JSON.stringify(ev.input ?? {}).slice(0, 300), result: ev.result.slice(0, 500), ...(ev.error ? { error: true } : {}) });
         if (ev.name === "book_appointment" && !ev.error && ev.result.startsWith("Booked:")) booked = true;
       } else {
         const ms = Date.now() - started;
@@ -330,6 +336,7 @@ async function respond__(conversationId: string): Promise<void> {
           ms,
           kb: kb ? { mode: kb.mode, sources: kb.sources.map((s) => s.title) } : null,
           ...(used.length ? { tools: used } : {}),
+          ...(steps.length || variant ? { trace: { steps, ...(variant ? { variant } : {}) } } : {}),
         };
         if (ev.stopReason === "refusal" && !text.trim()) throw new Error("refusal");
       }
@@ -366,7 +373,7 @@ async function respond__(conversationId: string): Promise<void> {
       await db.update(conversations).set({ context: { ...cur?.context, ratingAskedAt: Date.now() } }).where(eq(conversations.id, conversationId));
     }
     // Кнопки быстрых ответов (Telegram, Viber) — под сообщением, не в тексте
-    const buttons = config.quickReplies && (channel.type === "telegram" || channel.type === "viber") ? [...new Set(all.filter((a) => a.type === "button").map((a) => a.value.slice(0, 30)))].slice(0, 4) : [];
+    const buttons = config.quickReplies && (channel.type === "telegram" || channel.type === "viber" || channel.type === "messenger") ? [...new Set(all.filter((a) => a.type === "button").map((a) => a.value.slice(0, 30)))].slice(0, 4) : [];
     const actions = all.filter((a) => a.type !== "reason" && a.type !== "ask_rating" && !(buttons.length && a.type === "button"));
     if (buttons.length) meta = { ...meta, buttons };
     if (stream) await stream.done();
@@ -760,6 +767,14 @@ export async function deliver(
       const cfg = channel.config as ViberConfig;
       const { sendText: viberText } = await import("@/lib/channels/viber");
       return viberText(cfg.token, conversation.externalId, toPlainText(text), { name: cfg.botName, avatar: cfg.avatar }, opts.buttons?.map((b) => ({ text: b })));
+    }
+    case "messenger": {
+      const { sendMessenger } = await import("@/lib/channels/meta/messenger");
+      return sendMessenger((channel.config as MessengerConfig).token, conversation.externalId, toPlainText(text), opts.buttons);
+    }
+    case "sms": {
+      const { sendSms } = await import("@/lib/channels/sms");
+      return sendSms(channel.config as SmsChannelConfig, conversation.externalId, toPlainText(text));
     }
     case "whatsapp": {
       const { sendWhatsApp } = await import("@/lib/channels/meta/wa-send");

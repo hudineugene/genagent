@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { History, RotateCcw, X } from "lucide-react";
-import { listVersions, type AgentVersionItem } from "@/app/actions/agents";
+import { experimentStatsAction, listVersions, startExperimentAction, stopExperimentAction, type AgentVersionItem } from "@/app/actions/agents";
 import { SKILL_MAP } from "@/lib/agent/skills";
 import { emptyConfig } from "@/lib/agent/templates";
 import type { AgentConfig } from "@/lib/agent/types";
@@ -240,6 +240,7 @@ export function VersionsPanel({
         </div>
 
         <div className="flex-1 overflow-y-auto p-4">
+          <AbTest agentId={agentId} versions={versions ?? []} onPromote={(v) => onRestore(normalize(v))} />
           {!versions ? (
             <div className="grid place-items-center py-16 text-muted">
               <Spinner className="size-6" />
@@ -296,7 +297,8 @@ export function VersionsPanel({
                           </dl>
                         )}
                         {changes.length > 0 && (
-                          <div className="mt-4 flex justify-end">
+                          <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+                            <StartAb agentId={agentId} versionId={v.id} version={v.version} />
                             <Button size="sm" onClick={() => onRestore(normalize(v))}>
                               <RotateCcw className="size-4" />
                               {t.versions.restore} v{v.version}
@@ -313,5 +315,85 @@ export function VersionsPanel({
         </div>
       </aside>
     </div>
+  );
+}
+
+type Stats = Awaited<ReturnType<typeof experimentStatsAction>>;
+
+/** Идущая A/B-проверка: доля, итоги A и B, «сделать B основной» или остановить. */
+function AbTest({ agentId, versions, onPromote }: { agentId: string; versions: AgentVersionItem[]; onPromote: (v: AgentVersionItem) => void }) {
+  const { t } = useI18n();
+  const a = t.versions.ab;
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [pending, start] = useTransition();
+  useEffect(() => {
+    experimentStatsAction(agentId).then(setStats);
+  }, [agentId]);
+  if (!stats?.exp) return null;
+  const exp = stats.exp;
+  const b = versions.find((v) => v.id === exp.versionId);
+  const pct = (x: number | null) => (x === null ? "—" : `${Math.round(x * 100)}%`);
+  const usd = (x: number | null) => (x === null ? "—" : `$${x.toFixed(3)}`);
+  return (
+    <div className="mb-4 space-y-3 rounded-xl border border-accent/50 bg-accent-soft/40 p-4 text-sm">
+      <div className="font-semibold">{a.running.replace("{v}", String(exp.version)).replace("{share}", String(exp.share))}</div>
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="text-left text-muted">
+            <th className="py-1 font-medium" />
+            <th className="py-1 font-medium">{a.conversations}</th>
+            <th className="py-1 font-medium">{a.resolved}</th>
+            <th className="py-1 font-medium">{a.handoffs}</th>
+            <th className="py-1 font-medium">{a.cost}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {(["A", "B"] as const).map((k) => (
+            <tr key={k}>
+              <td className="py-1 font-semibold">{k === "A" ? a.current : `B · v${exp.version}`}</td>
+              <td className="py-1 tabular-nums">{stats[k].conversations}</td>
+              <td className="py-1 tabular-nums">{pct(stats[k].resolved)}</td>
+              <td className="py-1 tabular-nums">{pct(stats[k].handoffRate)}</td>
+              <td className="py-1 tabular-nums">{usd(stats[k].costPerConversation)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="text-xs text-muted">{a.hint}</p>
+      <div className="flex flex-wrap gap-2">
+        {b && (
+          <Button size="sm" disabled={pending} onClick={() => start(async () => { await stopExperimentAction(agentId); onPromote(b); })}>
+            {a.promote}
+          </Button>
+        )}
+        <Button size="sm" variant="secondary" disabled={pending} onClick={() => start(async () => { await stopExperimentAction(agentId); setStats(await experimentStatsAction(agentId)); })}>
+          {a.stop}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/** Запустить A/B: эта версия отвечает в доле новых разговоров. */
+function StartAb({ agentId, versionId, version }: { agentId: string; versionId: string; version: number }) {
+  const { t } = useI18n();
+  const a = t.versions.ab;
+  const [share, setShare] = useState(10);
+  const [done, setDone] = useState(false);
+  const [pending, start] = useTransition();
+  if (done) return <span className="text-xs text-success">{a.started}</span>;
+  return (
+    <span className="flex items-center gap-1.5 text-xs">
+      <select className="h-8 rounded-lg border border-border bg-surface px-1" value={share} onChange={(e) => setShare(Number(e.target.value))}>
+        {[5, 10, 20, 50].map((x) => (
+          <option key={x} value={x}>
+            {x}%
+          </option>
+        ))}
+      </select>
+      <Button size="sm" variant="secondary" disabled={pending} onClick={() => start(async () => { await startExperimentAction(agentId, versionId, share); setDone(true); })}>
+        {a.start.replace("{v}", String(version))}
+      </Button>
+    </span>
   );
 }

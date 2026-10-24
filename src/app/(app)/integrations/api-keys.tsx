@@ -95,7 +95,9 @@ GET  /api/v1/agents?client_id=…
 GET  /api/v1/conversations?client_id=…&updated_since=2026-10-01T00:00:00Z&status=open&limit=50
 GET  /api/v1/conversations/{id}
 POST /api/v1/conversations/{id}/messages   {"text":"…"}   (write)
-GET  /api/v1/usage?month=2026-10&client_id=…`}</pre>
+GET  /api/v1/usage?month=2026-10&client_id=…
+
+MCP (Claude Desktop, Cursor): ${base}/api/v1/mcp — тот же ключ в Authorization: Bearer …`}</pre>
       </Card>
     </div>
   );

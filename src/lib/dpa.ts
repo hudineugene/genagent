@@ -24,8 +24,9 @@ export async function subprocessors(clientId: string): Promise<Subprocessor[]> {
   if (usesOpenAi) list.push({ name: "OpenAI, L.L.C.", purpose: "Расшифровка и озвучка голосовых, картинки", data: "Голосовые сообщения, тексты для озвучки", location: "США (стандартные договорные условия ЕС)" });
   if (configs.some((c) => c.model?.startsWith("openrouter:")) || client.apiKeys.openrouter) list.push({ name: "OpenRouter, Inc.", purpose: "Доступ к другим моделям ИИ", data: "Текст сообщений", location: "США" });
   if (types.has("telegram") || types.has("api")) list.push({ name: "Telegram Messenger Inc.", purpose: "Канал общения, уведомления сотрудникам", data: "Сообщения, имя и ник пользователя", location: "ОАЭ / Нидерланды" });
+  if (types.has("sms")) list.push({ name: "Twilio Inc.", purpose: "Канал SMS", data: "Номер телефона, текст SMS", location: "США (стандартные договорные условия ЕС)" });
   if (types.has("viber")) list.push({ name: "Viber Media S.à r.l.", purpose: "Канал Viber", data: "Сообщения, имя профиля, идентификатор пользователя", location: "Люксембург (ЕС)" });
-  if (types.has("whatsapp") || types.has("instagram") || types.has("threads")) list.push({ name: "Meta Platforms Ireland Ltd.", purpose: "Каналы WhatsApp, Instagram, Threads", data: "Сообщения, номер телефона, имя профиля", location: "Ирландия (ЕС)" });
+  if (types.has("whatsapp") || types.has("instagram") || types.has("threads") || types.has("messenger")) list.push({ name: "Meta Platforms Ireland Ltd.", purpose: "Каналы WhatsApp, Instagram, Threads", data: "Сообщения, номер телефона, имя профиля", location: "Ирландия (ЕС)" });
   if (configs.some((c) => c.calendar?.enabled) || logi?.baseAddress || client.apiKeys.googleMaps) list.push({ name: "Google LLC", purpose: "Календарь записи, Google Таблицы, маршруты", data: "Имя, контакт, время записи, адреса доставки", location: "США / ЕС" });
   const [pay] = await db.select({ provider: clientPayments.provider, enabled: clientPayments.enabled }).from(clientPayments).where(eq(clientPayments.clientId, clientId));
   if (pay?.enabled) {

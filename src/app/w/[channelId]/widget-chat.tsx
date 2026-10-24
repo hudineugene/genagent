@@ -3,14 +3,14 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 type Msg = { id: string; role: "user" | "agent"; text: string; pending?: boolean; suggest?: string[] };
-type Config = { title: string; subtitle: string; color: string; greeting: string; icon: string; telegramBot?: string; quick?: string[] };
+type Config = { title: string; subtitle: string; color: string; greeting: string; icon: string; telegramBot?: string; quick?: string[]; voice?: boolean };
 
 // Язык окна: как у страницы сайта (?lang=), иначе — язык браузера посетителя.
 const TEXTS = {
-  ru: { placeholder: "Напишите сообщение…", online: "онлайн", typing: "печатает…", operator: "Менеджер на связи", error: "Не удалось отправить. Попробуйте ещё раз.", close: "Закрыть", unavailable: "Чат временно недоступен", telegram: "Продолжить в Telegram" },
-  uk: { placeholder: "Напишіть повідомлення…", online: "онлайн", typing: "друкує…", operator: "Менеджер на зв'язку", error: "Не вдалося надіслати. Спробуйте ще раз.", close: "Закрити", unavailable: "Чат тимчасово недоступний", telegram: "Продовжити в Telegram" },
-  en: { placeholder: "Type a message…", online: "online", typing: "typing…", operator: "A manager has joined", error: "Couldn't send. Please try again.", close: "Close", unavailable: "Chat is temporarily unavailable", telegram: "Continue in Telegram" },
-  es: { placeholder: "Escribe un mensaje…", online: "en línea", typing: "escribiendo…", operator: "Un gestor se ha unido", error: "No se pudo enviar. Inténtalo de nuevo.", close: "Cerrar", unavailable: "El chat no está disponible por ahora", telegram: "Continuar en Telegram" },
+  ru: { listening: "Говорите… нажмите ещё раз, чтобы отправить", voiceError: "Не удалось распознать — попробуйте ещё раз или напишите", placeholder: "Напишите сообщение…", online: "онлайн", typing: "печатает…", operator: "Менеджер на связи", error: "Не удалось отправить. Попробуйте ещё раз.", close: "Закрыть", unavailable: "Чат временно недоступен", telegram: "Продолжить в Telegram" },
+  uk: { listening: "Говоріть… натисніть ще раз, щоб надіслати", voiceError: "Не вдалося розпізнати — спробуйте ще раз або напишіть", placeholder: "Напишіть повідомлення…", online: "онлайн", typing: "друкує…", operator: "Менеджер на зв'язку", error: "Не вдалося надіслати. Спробуйте ще раз.", close: "Закрити", unavailable: "Чат тимчасово недоступний", telegram: "Продовжити в Telegram" },
+  en: { listening: "Listening… tap again to send", voiceError: "Couldn't recognise that — try again or type", placeholder: "Type a message…", online: "online", typing: "typing…", operator: "A manager has joined", error: "Couldn't send. Please try again.", close: "Close", unavailable: "Chat is temporarily unavailable", telegram: "Continue in Telegram" },
+  es: { listening: "Te escucho… toca otra vez para enviar", voiceError: "No se pudo reconocer — inténtalo de nuevo o escribe", placeholder: "Escribe un mensaje…", online: "en línea", typing: "escribiendo…", operator: "Un gestor se ha unido", error: "No se pudo enviar. Inténtalo de nuevo.", close: "Cerrar", unavailable: "El chat no está disponible por ahora", telegram: "Continuar en Telegram" },
 };
 
 type Lang = keyof typeof TEXTS;
@@ -88,7 +88,66 @@ export function WidgetChat({ channelId }: { channelId: string }) {
     endRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
   }, [msgs.length, typing]);
 
-  const send = async (preset?: string) => {
+  // Голос: запись → WAV 16 кГц → текст на сервере → обычное сообщение; ответ на голос читается вслух
+  const [recording, setRecording] = useState(false);
+  const [voiceBusy, setVoiceBusy] = useState(false);
+  const recorder = useRef<MediaRecorder | null>(null);
+  const spokenFor = useRef<string | null>(null);
+  const lastVoice = useRef(false);
+  const toggleVoice = async () => {
+    if (recording) {
+      recorder.current?.stop();
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const rec = new MediaRecorder(stream);
+      const chunks: Blob[] = [];
+      rec.ondataavailable = (e) => chunks.push(e.data);
+      rec.onstop = async () => {
+        stream.getTracks().forEach((tr) => tr.stop());
+        setRecording(false);
+        setVoiceBusy(true);
+        try {
+          const wav = await toWav16k(await new Blob(chunks).arrayBuffer());
+          const res = await fetch(`/api/widget/${channelId}/voice`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ visitor: visitor.current, lang, data: wav }) });
+          const d = res.ok ? await res.json() : null;
+          if (!d?.text) throw new Error("empty");
+          lastVoice.current = true;
+          await send(d.text, true);
+        } catch {
+          setError(true);
+          setInput("");
+        } finally {
+          setVoiceBusy(false);
+        }
+      };
+      recorder.current = rec;
+      rec.start();
+      setRecording(true);
+      // Не дольше минуты
+      setTimeout(() => rec.state === "recording" && rec.stop(), 60_000);
+    } catch {
+      setError(true);
+    }
+  };
+
+  // Ответ на голосовое сообщение — вслух (синтез речи браузера, бесплатно)
+  useEffect(() => {
+    const lastMsg = msgs.at(-1);
+    if (!lastVoice.current || !lastMsg || lastMsg.role !== "agent" || lastMsg.pending || spokenFor.current === lastMsg.id) return;
+    spokenFor.current = lastMsg.id;
+    lastVoice.current = false;
+    try {
+      const u = new SpeechSynthesisUtterance(lastMsg.text.replace(/https?:\/\/\S+/g, ""));
+      u.lang = lang === "uk" ? "uk-UA" : lang === "ru" ? "ru-RU" : lang === "es" ? "es-ES" : "en-US";
+      window.speechSynthesis?.speak(u);
+    } catch {
+      /* синтеза речи нет — ответ остаётся текстом */
+    }
+  }, [msgs, lang]);
+
+  const send = async (preset?: string, voice = false) => {
     const text = (preset ?? input).trim();
     if (!text) return;
     if (!preset) setInput("");
@@ -100,7 +159,7 @@ export function WidgetChat({ channelId }: { channelId: string }) {
       const res = await fetch(`/api/widget/${channelId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ visitor: visitor.current, text, lang, ...page.current }),
+        body: JSON.stringify({ visitor: visitor.current, text, lang, ...(voice ? { voice: true } : {}), ...page.current }),
       });
       if (!res.ok) throw new Error(String(res.status));
       setMsgs((m) => m.filter((x) => x.id !== tmp.id));
@@ -231,6 +290,7 @@ export function WidgetChat({ channelId }: { channelId: string }) {
           {t.telegram}
         </a>
       )}
+      {recording && <p className="bg-[#fff7e6] px-4 py-2 text-xs text-[#9a6700]">{t.listening}</p>}
       {error && <p className="bg-[#fff1f2] px-4 py-2 text-xs text-[#dc3545]">{t.error}</p>}
       <form
         className="flex items-end gap-2 border-t border-[#e3e6ef] bg-white p-3"
@@ -253,6 +313,22 @@ export function WidgetChat({ channelId }: { channelId: string }) {
           placeholder={t.placeholder}
           className="max-h-28 min-h-11 flex-1 resize-none rounded-xl border border-[#e3e6ef] px-3 py-2.5 text-[15px] outline-none focus:border-[#98a2b3]"
         />
+        {config?.voice && (
+          <button
+            type="button"
+            onClick={() => void toggleVoice()}
+            disabled={voiceBusy}
+            title={recording ? t.listening : undefined}
+            aria-label="Voice"
+            className={"grid size-11 shrink-0 place-items-center rounded-xl border " + (recording ? "animate-pulse text-white" : "border-[#e3e6ef] text-[#667085]")}
+            style={recording ? { background: "#dc3545", borderColor: "#dc3545" } : undefined}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="9" y="2" width="6" height="12" rx="3" />
+              <path d="M5 10a7 7 0 0 0 14 0M12 17v5" />
+            </svg>
+          </button>
+        )}
         <button
           type="submit"
           disabled={!input.trim() || !config}
@@ -268,4 +344,38 @@ export function WidgetChat({ channelId }: { channelId: string }) {
       </form>
     </div>
   );
+}
+
+/** Запись браузера (webm/ogg/mp4) → WAV 16 кГц моно, base64 — сервер распознаёт его без сторонних кодеков. */
+async function toWav16k(buf: ArrayBuffer): Promise<string> {
+  const ctx = new AudioContext();
+  const decoded = await ctx.decodeAudioData(buf.slice(0));
+  void ctx.close();
+  const rate = 16000;
+  const off = new OfflineAudioContext(1, Math.ceil(decoded.duration * rate), rate);
+  const src = off.createBufferSource();
+  src.buffer = decoded;
+  src.connect(off.destination);
+  src.start();
+  const pcm = (await off.startRendering()).getChannelData(0);
+  const out = new DataView(new ArrayBuffer(44 + pcm.length * 2));
+  const str = (o: number, v: string) => [...v].forEach((c, i) => out.setUint8(o + i, c.charCodeAt(0)));
+  str(0, "RIFF");
+  out.setUint32(4, 36 + pcm.length * 2, true);
+  str(8, "WAVE");
+  str(12, "fmt ");
+  out.setUint32(16, 16, true);
+  out.setUint16(20, 1, true);
+  out.setUint16(22, 1, true);
+  out.setUint32(24, rate, true);
+  out.setUint32(28, rate * 2, true);
+  out.setUint16(32, 2, true);
+  out.setUint16(34, 16, true);
+  str(36, "data");
+  out.setUint32(40, pcm.length * 2, true);
+  for (let i = 0; i < pcm.length; i++) out.setInt16(44 + i * 2, Math.max(-1, Math.min(1, pcm[i])) * 0x7fff, true);
+  const bytes = new Uint8Array(out.buffer);
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
 }

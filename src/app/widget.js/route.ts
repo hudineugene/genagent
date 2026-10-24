@@ -72,7 +72,7 @@ const SCRIPT = `(function () {
         frame.id = "genagent-frame";
         frame.src = base + "/w/" + channel + (lang ? "?lang=" + encodeURIComponent(lang) : "");
         frame.title = cfg.title || "Chat";
-        frame.allow = "clipboard-write";
+        frame.allow = "clipboard-write; microphone; autoplay";
         document.body.appendChild(frame);
       }
       btn.innerHTML = open ? closeIcon : chatIcon;

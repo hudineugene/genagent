@@ -420,6 +420,27 @@ export function Thread({ data, backHref }: { data: ThreadData; backHref: string 
                 {m.meta?.rating === "down" && <span className="text-danger"> · 👎</span>}
                 {m.meta?.fromSite && ` · ${t.inbox.fromSite}`}
               </div>
+              {m.role === "assistant" && (m.meta?.trace || m.meta?.model) ? (
+                <details className="mt-0.5 max-w-[85%] px-1 text-[11px] text-muted">
+                  <summary className="cursor-pointer select-none">{t.inbox.trace}</summary>
+                  <div className="mt-1 space-y-1 rounded-lg bg-surface-2/60 p-2 font-mono">
+                    <div>
+                      {m.meta.model} · {m.meta.ms ? `${(m.meta.ms / 1000).toFixed(1)} s` : "—"} · in {m.meta.inputTokens ?? 0} / out {m.meta.outputTokens ?? 0}
+                      {m.meta.cost !== undefined && ` · $${m.meta.cost.toFixed(4)}`}
+                      {m.meta.trace?.variant && ` · ${t.inbox.variant} ${m.meta.trace.variant}`}
+                    </div>
+                    {m.meta.kb?.sources.length ? <div>📚 {m.meta.kb.sources.join(", ")}</div> : null}
+                    {m.meta.trace?.steps.map((st, i) => (
+                      <div key={i} className={cx("border-l-2 pl-2", st.error ? "border-danger" : "border-accent/40")}>
+                        <div className="font-semibold">
+                          {i + 1}. {st.tool}({st.input})
+                        </div>
+                        <div className="whitespace-pre-wrap break-words">→ {st.result}</div>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              ) : null}
               {m.meta?.unverified?.length ? (
                 <div className="mt-0.5 px-1 text-[11px] text-warning" title={t.inbox.unverifiedHint}>
                   ⚠️ {t.inbox.unverified}: {m.meta.unverified.join(", ")}

@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useState, useSyncExternalStore, useTransition } from "react";
 import Link from "next/link";
-import { AlertTriangle, AtSign, Bot, Camera, Check, Copy, ExternalLink, Eye, Globe, Mail, MessageCircle, Phone, Plus, Power, RefreshCw, Send, Trash2 } from "lucide-react";
+import { AlertTriangle, AtSign, Bot, Camera, Check, Copy, ExternalLink, Eye, Globe, Mail, MessageCircle, MessagesSquare, Phone, PhoneCall, Plus, Smartphone, Power, RefreshCw, Send, Trash2 } from "lucide-react";
 import {
   addApiChannel,
   addEmailChannel,
@@ -16,7 +16,7 @@ import {
   updateApiChannel,
   updateSocialChannel,
   updateTelegramChannel,
-  updateWidget, addWhatsAppChannel, saveWhatsAppSettings, syncWhatsAppTemplates, addViberChannel, updateViberChannel, saveInstagramTriggers } from "@/app/actions/channels";
+  updateWidget, addWhatsAppChannel, saveWhatsAppSettings, syncWhatsAppTemplates, addViberChannel, updateViberChannel, saveInstagramTriggers, addVoiceChannel, updateVoiceChannel, addMessengerChannel, addSmsChannel } from "@/app/actions/channels";
 import { WIDGET_LANGS, type ChannelType, type WidgetConfig } from "@/db/schema";
 import { useI18n } from "@/lib/i18n/client";
 import { Badge, Button, Card, Field, Input, Select, Spinner, Textarea, cx } from "@/components/ui";
@@ -50,6 +50,7 @@ export type ChannelItem = {
   api: { key: string; label: string; approval: boolean; botNote: string; followUps: boolean; orderNotes: boolean; ratingInvite: boolean } | null;
   telegram: { comments: boolean; approval: boolean; group: { id: number; title: string; channel?: string } | null } | null;
   viber?: { uri: string; welcome: string } | null;
+  voice?: { key: string; provider: "vapi" | "elevenlabs" | "other"; phone: string } | null;
 };
 
 type SocialReady = { publicUrl: boolean; instagram: boolean; threads: boolean; whatsapp: boolean };
@@ -72,7 +73,7 @@ export function ChannelsManager({
   isAdmin: boolean;
 }) {
   const { t } = useI18n();
-  const [adding, setAdding] = useState<"telegram" | "instagram" | "threads" | "email" | "api" | "whatsapp" | "viber" | null>(null);
+  const [adding, setAdding] = useState<"telegram" | "instagram" | "threads" | "email" | "api" | "whatsapp" | "viber" | "voice" | "messenger" | "sms" | null>(null);
   const [pending, start] = useTransition();
   const errText = (code: string | null | undefined) =>
     code ? (t.channels.errors[code as ErrKey] ?? code) : null;
@@ -99,6 +100,12 @@ export function ChannelsManager({
           <WhatsAppCard key={c.id} c={c} />
         ) : c.type === "viber" ? (
           <ViberCard key={c.id} c={c} />
+        ) : c.type === "voice" ? (
+          <VoiceCard key={c.id} c={c} publicUrl={publicUrl} />
+        ) : c.type === "messenger" ? (
+          <SimpleCard key={c.id} c={c} icon={<MessagesSquare className="size-5" />} title={`Messenger · ${c.name}`} note={t.channels.messengerNote} />
+        ) : c.type === "sms" ? (
+          <SimpleCard key={c.id} c={c} icon={<Smartphone className="size-5" />} title={`SMS · ${c.name}`} note={t.channels.smsNote} copy={`${publicUrl ?? ""}/api/webhooks/sms/${c.id}`} />
         ) : (
           <SocialCard key={c.id} c={c} agentId={agentId} errText={errText} />
         ),
@@ -156,6 +163,27 @@ export function ChannelsManager({
             onClick={() => setAdding(adding === "viber" ? null : "viber")}
           />
           <AddCard
+            icon={<MessagesSquare className="size-5" />}
+            title="Facebook Messenger"
+            desc={t.channels.messengerDesc}
+            active={adding === "messenger"}
+            onClick={() => setAdding(adding === "messenger" ? null : "messenger")}
+          />
+          <AddCard
+            icon={<Smartphone className="size-5" />}
+            title="SMS"
+            desc={t.channels.smsDesc}
+            active={adding === "sms"}
+            onClick={() => setAdding(adding === "sms" ? null : "sms")}
+          />
+          <AddCard
+            icon={<PhoneCall className="size-5" />}
+            title={t.channels.voice}
+            desc={t.channels.voiceDesc}
+            active={adding === "voice"}
+            onClick={() => setAdding(adding === "voice" ? null : "voice")}
+          />
+          <AddCard
             icon={<Bot className="size-5" />}
             title={t.channels.api}
             desc={t.channels.apiDesc}
@@ -165,6 +193,9 @@ export function ChannelsManager({
         </div>
         {adding === "api" && <ApiForm agentId={agentId} onDone={() => setAdding(null)} />}
         {adding === "whatsapp" && <WhatsAppForm agentId={agentId} ready={socialReady.whatsapp && socialReady.publicUrl} onDone={() => setAdding(null)} />}
+        {adding === "voice" && <VoiceForm agentId={agentId} onDone={() => setAdding(null)} />}
+        {adding === "messenger" && <MessengerForm agentId={agentId} onDone={() => setAdding(null)} ready={socialReady.whatsapp || socialReady.instagram} />}
+        {adding === "sms" && <SmsForm agentId={agentId} onDone={() => setAdding(null)} />}
         {adding === "viber" && <ViberForm agentId={agentId} onDone={() => setAdding(null)} errText={errText} />}
         {adding === "email" && <EmailForm agentId={agentId} onDone={() => setAdding(null)} errText={errText} />}
         {adding === "telegram" && <TelegramForm agentId={agentId} onDone={() => setAdding(null)} errText={errText} />}
@@ -391,6 +422,13 @@ function WidgetCard({ c, publicUrl }: { c: ChannelItem; publicUrl: string | null
             <Input name="teaserDelay" type="number" min={3} max={300} defaultValue={w.teaserDelay ?? 20} />
           </Field>
         </div>
+        <label className="flex items-start gap-2.5 text-sm">
+          <input type="checkbox" name="voice" defaultChecked={Boolean(w.voice)} className="mt-0.5 size-4 accent-[var(--accent)]" />
+          <span>
+            <span className="font-medium">{t.channels.widgetVoice}</span>
+            <span className="block text-xs text-muted">{t.channels.widgetVoiceHint}</span>
+          </span>
+        </label>
         <details className="rounded-xl border border-border px-4 py-3">
           <summary className="cursor-pointer text-sm font-medium select-none">
             {t.channels.widgetLocales}
@@ -870,6 +908,144 @@ function WhatsAppForm({ agentId, ready, onDone }: { agentId: string; ready: bool
           </Button>
         </div>
       </form>
+    </Card>
+  );
+}
+
+function MessengerForm({ agentId, onDone, ready }: { agentId: string; onDone: () => void; ready: boolean }) {
+  const { t } = useI18n();
+  const ch = t.channels;
+  const [token, setToken] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  return (
+    <Card className="mt-3 space-y-3 p-5">
+      <p className="text-sm text-muted">{ready ? ch.messengerHow : ch.messengerNotReady}</p>
+      <Field label={ch.messengerToken}>
+        <Input type="password" autoComplete="new-password" value={token} onChange={(e) => setToken(e.target.value)} />
+      </Field>
+      <div className="flex items-center justify-end gap-3">
+        {error && <p className="text-sm text-danger">{error}</p>}
+        <Button disabled={pending || !token.trim() || !ready} onClick={() => start(async () => { const r = await addMessengerChannel(agentId, token); if (r.ok) onDone(); else setError(r.error ?? "error"); })}>
+          {pending ? <Spinner /> : <Plus className="size-4" />}
+          {ch.connect}
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+function SmsForm({ agentId, onDone }: { agentId: string; onDone: () => void }) {
+  const { t } = useI18n();
+  const ch = t.channels;
+  const [v, setV] = useState({ accountSid: "", authToken: "", from: "" });
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  return (
+    <Card className="mt-3 space-y-3 p-5">
+      <p className="text-sm text-muted">{ch.smsHow}</p>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Field label="Account SID">
+          <Input value={v.accountSid} placeholder="AC…" onChange={(e) => setV({ ...v, accountSid: e.target.value })} />
+        </Field>
+        <Field label="Auth Token">
+          <Input type="password" autoComplete="new-password" value={v.authToken} onChange={(e) => setV({ ...v, authToken: e.target.value })} />
+        </Field>
+        <Field label={ch.smsFrom}>
+          <Input value={v.from} placeholder="+1 …" onChange={(e) => setV({ ...v, from: e.target.value.replace(/[\s()-]/g, "") })} />
+        </Field>
+      </div>
+      <div className="flex items-center justify-end gap-3">
+        {error && <p className="text-sm text-danger">{(ch.errors as Record<string, string>)[error] ?? error}</p>}
+        <Button disabled={pending || !v.accountSid || !v.authToken || !v.from} onClick={() => start(async () => { const r = await addSmsChannel(agentId, v); if (r.ok) onDone(); else setError(r.error ?? "error"); })}>
+          {pending ? <Spinner /> : <Plus className="size-4" />}
+          {ch.connect}
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+/** Простой канал: заголовок, пояснение и (если нужно) адрес для настройки у провайдера. */
+function SimpleCard({ c, icon, title, note, copy }: { c: ChannelItem; icon: React.ReactNode; title: string; note: string; copy?: string }) {
+  const { t } = useI18n();
+  return (
+    <Card className="space-y-3 p-5">
+      <ChannelHeader c={c} icon={icon} title={title} />
+      <p className="text-sm text-muted">{note}</p>
+      {copy && <CopyLine label={t.channels.webhookUrl} value={copy} />}
+    </Card>
+  );
+}
+
+function VoiceForm({ agentId, onDone }: { agentId: string; onDone: () => void }) {
+  const { t } = useI18n();
+  const ch = t.channels;
+  const [pending, start] = useTransition();
+  return (
+    <Card className="mt-3 space-y-3 p-5">
+      <p className="text-sm text-muted">{ch.voiceHow}</p>
+      <div className="flex flex-wrap gap-2">
+        {(["vapi", "elevenlabs", "other"] as const).map((p) => (
+          <Button key={p} variant="secondary" disabled={pending} onClick={() => start(async () => void ((await addVoiceChannel(agentId, p)).ok && onDone()))}>
+            {pending ? <Spinner /> : <Plus className="size-4" />}
+            {ch.voiceProviders[p]}
+          </Button>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+/** Звонки: адрес и ключ для голосовой платформы, номер, пошаговая настройка (Vapi, ElevenLabs, номер +380 через SIP). */
+function VoiceCard({ c, publicUrl }: { c: ChannelItem; publicUrl: string | null }) {
+  const { t } = useI18n();
+  const ch = t.channels;
+  const v = c.voice!;
+  const [shown, setShown] = useState(false);
+  const [phone, setPhone] = useState(v.phone);
+  const [pending, start] = useTransition();
+  const origin = useSyncExternalStore(noopSubscribe, () => publicUrl ?? window.location.origin, () => publicUrl ?? "");
+  return (
+    <Card className="space-y-4 p-5">
+      <ChannelHeader c={c} icon={<PhoneCall className="size-5" />} title={`${ch.voice} · ${ch.voiceProviders[v.provider]}`} />
+      <CopyLine label={ch.voiceUrl} value={`${origin}/api/agent/${c.id}`} />
+      <div>
+        <div className="mb-1.5 flex items-center justify-between gap-2">
+          <span className="text-sm font-medium">{ch.apiKey}</span>
+          <span className="flex gap-1">
+            <Button size="sm" variant="ghost" onClick={() => setShown(!shown)} title={ch.apiShow}>
+              <Eye className="size-4" />
+            </Button>
+            <Button size="sm" variant="ghost" disabled={pending} title={ch.apiRegenerate} onClick={() => confirm(ch.apiRegenerateConfirm) && start(async () => void (await regenerateApiKey(c.id)))}>
+              <RefreshCw className="size-4" />
+            </Button>
+          </span>
+        </div>
+        <CopyLine value={v.key} masked={!shown} />
+      </div>
+      <div className="flex flex-wrap items-end gap-2">
+        <Field label={ch.voicePhone} hint={ch.voicePhoneHint}>
+          <Input className="w-56" value={phone} placeholder="+380 44 000 00 00" onChange={(e) => setPhone(e.target.value)} />
+        </Field>
+        <Button size="sm" variant="secondary" disabled={pending} onClick={() => start(async () => void (await updateVoiceChannel(c.id, phone)))}>
+          {t.common.save}
+        </Button>
+      </div>
+      <details className="text-sm">
+        <summary className="cursor-pointer font-medium text-accent">{ch.voiceSteps}</summary>
+        <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-muted">
+          {(ch.voiceGuide[v.provider] as string[]).map((s, i) => (
+            <li key={i}>{s}</li>
+          ))}
+        </ol>
+        <div className="mt-3 font-medium">{ch.voiceSipTitle}</div>
+        <ol className="mt-1 list-decimal space-y-1.5 pl-5 text-muted">
+          {(ch.voiceSip as string[]).map((s, i) => (
+            <li key={i}>{s}</li>
+          ))}
+        </ol>
+      </details>
     </Card>
   );
 }

@@ -83,12 +83,12 @@ export async function deleteScenario(id: string): Promise<TestsResult> {
   return { ok: true };
 }
 
-export async function runTests(agentId: string, model?: string): Promise<TestsResult> {
+export async function runTests(agentId: string, model?: string, k = 1): Promise<TestsResult> {
   const user = await requireOwned("agent", agentId);
   // Сравнение моделей: только модели из списка студии
   if (model && !findModel(model)) return { error: "invalid" };
   try {
-    const runId = await startRun(agentId, user.id, model ? { model } : {});
+    const runId = await startRun(agentId, user.id, { ...(model ? { model } : {}), k: Math.min(5, Math.max(1, Math.round(k) || 1)) });
     refresh();
     return { ok: true, runId };
   } catch (e) {

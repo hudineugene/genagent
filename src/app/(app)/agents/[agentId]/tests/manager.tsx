@@ -25,6 +25,8 @@ type Run = {
   agentVersion: number;
   /** Прогон на другой модели (сравнение); null — модель агента */
   model: string | null;
+  /** pass^k: прогонов на сценарий */
+  k: number;
   status: "running" | "done" | "error";
   total: number;
   passed: number;
@@ -98,6 +100,7 @@ export function TestsManager({
       else if (r.runId) router.replace(`/agents/${agentId}/tests?run=${r.runId}`);
     });
 
+  const [k, setK] = useState(1);
   const selected = runs.find((r) => r.id === selectedRunId) ?? null;
   // История оценок агента — без прогонов на других моделях (сравнения)
   const history = [...runs].reverse().filter((r) => r.status === "done" && r.score !== null && !r.model);
@@ -107,7 +110,14 @@ export function TestsManager({
       <p className="text-sm text-muted">{tt.subtitle}</p>
 
       <div className="flex flex-wrap items-center gap-2">
-        <Button disabled={pending || running || !scenarios.length} onClick={() => act("run", () => runTests(agentId))}>
+        <select className="h-10 rounded-xl border border-border bg-surface px-2 text-sm" value={k} title={tt.passKHint} onChange={(e) => setK(Number(e.target.value))}>
+          {[1, 3, 5].map((x) => (
+            <option key={x} value={x}>
+              {x === 1 ? tt.passK1 : tt.passKn.replace("{k}", String(x))}
+            </option>
+          ))}
+        </select>
+        <Button disabled={pending || running || !scenarios.length} onClick={() => act("run", () => runTests(agentId, undefined, k))}>
           {busy === "run" || running ? <Spinner /> : <Play className="size-4" />}
           {running ? tt.running : `${tt.run} (${scenarios.length})`}
         </Button>
@@ -180,7 +190,7 @@ export function TestsManager({
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <StatTile
               label={tt.passed}
-              value={`${selected.passed} / ${selected.total}`}
+              value={`${selected.passed} / ${selected.total}${selected.k > 1 ? ` · pass^${selected.k}` : ""}`}
               hint={selected.status === "running" ? `${tt.inProgress}: ${results.length}/${selected.total}` : undefined}
             />
             <StatTile label={tt.avgScore} value={selected.score !== null ? `${selected.score.toFixed(1)} / 10` : "—"} />
