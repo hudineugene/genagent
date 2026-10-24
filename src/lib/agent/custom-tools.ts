@@ -1,6 +1,10 @@
 import "server-only";
+import { lookup as dnsLookup, type LookupAddress, type LookupOptions } from "node:dns";
 import { lookup } from "node:dns/promises";
+import http from "node:http";
+import https from "node:https";
 import { isIP } from "node:net";
+import { Readable } from "node:stream";
 import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
@@ -38,13 +42,49 @@ export function isPrivateAddress(ip: string) {
 
 export async function assertPublicHost(hostname: string) {
   // Только для автотестов на локальном макете системы; на сервере не задаётся
-  if (process.env.TOOLS_ALLOW_PRIVATE_FOR_TESTS === "1") return;
+  if (allowPrivate()) return;
   const host = hostname.replace(/^\[|\]$/g, "");
   if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".internal") || host.endsWith(".local")) throw new ToolCallError("private_address");
   const addrs = isIP(host) ? [{ address: host }] : await lookup(host, { all: true }).catch(() => {
     throw new ToolCallError("dns_failed");
   });
   if (!addrs.length || addrs.some((a) => isPrivateAddress(a.address))) throw new ToolCallError("private_address");
+}
+
+const allowPrivate = () => process.env.TOOLS_ALLOW_PRIVATE_FOR_TESTS === "1";
+
+/** Разрешение имени при самом соединении: внутренний адрес — отказ (имя не может «переехать» на 127.0.0.1 после проверки). */
+function guardedLookup(hostname: string, options: LookupOptions, cb: (err: NodeJS.ErrnoException | null, address: string | LookupAddress[], family?: number) => void) {
+  dnsLookup(hostname, { ...options, all: true }, (err, list: LookupAddress[]) => {
+    if (err) return cb(err, "");
+    if (!list.length || (!allowPrivate() && list.some((a) => isPrivateAddress(a.address)))) return cb(new ToolCallError("private_address"), "");
+    if (options.all) return cb(null, list);
+    cb(null, list[0].address, list[0].family);
+  });
+}
+
+/**
+ * Запрос во внешнюю систему клиента (свои инструменты, CRM, MCP): адрес проверяется и до запроса, и при соединении,
+ * перенаправления не выполняются, ответ — обычный Response (тело — поток).
+ */
+export async function safeFetch(url: URL, init: { method: string; headers?: Record<string, string>; body?: string; signal?: AbortSignal }): Promise<Response> {
+  await assertPublicHost(url.hostname);
+  const mod = url.protocol === "https:" ? https : http;
+  return new Promise((resolve, reject) => {
+    const req = mod.request(url, { method: init.method, headers: init.headers, lookup: guardedLookup as never, signal: init.signal }, (res) => {
+      // Тело дочитали частично или отменили, а таймаут сработал позже — без необработанной ошибки
+      res.on("error", () => {});
+      const headers = new Headers();
+      for (const [k, v] of Object.entries(res.headers)) if (v != null) headers.set(k, Array.isArray(v) ? v.join(", ") : String(v));
+      const status = res.statusCode ?? 502;
+      const empty = status === 204 || status === 304 || init.method === "HEAD";
+      if (empty) res.resume();
+      resolve(new Response(empty ? null : (Readable.toWeb(res) as ReadableStream), { status: status < 200 ? 502 : status, statusText: res.statusMessage, headers }));
+    });
+    req.on("error", (e) => reject(init.signal?.aborted ? init.signal.reason : e));
+    if (init.body) req.write(init.body);
+    req.end();
+  });
 }
 
 /** Готовый запрос: адрес с подставленными параметрами, тело. Хост берётся из шаблона и не меняется. */
@@ -78,11 +118,10 @@ export async function callTool(tool: ClientTool, input: Record<string, unknown>,
   await assertPublicHost(url.hostname);
   let status = "error";
   try {
-    const res = await fetch(url, {
+    const res = await safeFetch(url, {
       method: tool.method,
       headers: { accept: "application/json, text/plain;q=0.9, */*;q=0.5", ...(body ? { "content-type": "application/json" } : {}), ...tool.headers },
       body,
-      redirect: "manual",
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     status = String(res.status);

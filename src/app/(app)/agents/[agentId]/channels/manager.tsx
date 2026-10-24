@@ -277,8 +277,8 @@ function TelegramForm({
 
 /** «Последнее сообщение: 15 окт., 18:35» (или «ещё не было») — и для Meta: когда пришло последнее уведомление. */
 function LastActivity({ c }: { c: ChannelItem }) {
-  const { t, locale } = useI18n();
-  const fmt = new Intl.DateTimeFormat(locale === "uk" ? "uk-UA" : "ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Kyiv" });
+  const { t, locale, timeZone } = useI18n();
+  const fmt = new Intl.DateTimeFormat(locale === "uk" ? "uk-UA" : "ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone });
   const stale = c.inboundStale;
   const meta = c.type === "instagram" || c.type === "threads" || c.type === "whatsapp";
   return (

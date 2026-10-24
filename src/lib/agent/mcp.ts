@@ -1,5 +1,5 @@
 import "server-only";
-import { assertPublicHost, readLimited, ToolCallError } from "./custom-tools";
+import { readLimited, safeFetch, ToolCallError } from "./custom-tools";
 
 /**
  * Клиент MCP (Model Context Protocol, транспорт Streamable HTTP): агент подключается к MCP-серверу клиента или
@@ -22,8 +22,7 @@ let seq = 0;
 
 async function rpc(url: string, headers: Record<string, string>, method: string, params: unknown, session?: string, notify = false) {
   const u = new URL(url);
-  await assertPublicHost(u.hostname);
-  const res = await fetch(u, {
+  const res = await safeFetch(u, {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -33,9 +32,9 @@ async function rpc(url: string, headers: Record<string, string>, method: string,
       ...headers,
     },
     body: JSON.stringify(notify ? { jsonrpc: "2.0", method, params } : { jsonrpc: "2.0", id: ++seq, method, params }),
-    redirect: "manual",
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
+  if (notify || !res.ok) void res.body?.cancel().catch(() => {});
   if (notify) return { session: res.headers.get("mcp-session-id") ?? session, result: null };
   if (res.status === 401 || res.status === 403) throw new ToolCallError("mcp_unauthorized");
   if (!res.ok) throw new ToolCallError(`mcp_http_${res.status}`);

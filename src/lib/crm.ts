@@ -1,6 +1,6 @@
 import "server-only";
 import { z } from "zod";
-import { assertPublicHost, readLimited, ToolCallError } from "@/lib/agent/custom-tools";
+import { readLimited, safeFetch, ToolCallError } from "@/lib/agent/custom-tools";
 import type { AgentTool } from "@/lib/llm";
 
 /**
@@ -60,14 +60,13 @@ function auth(c: CrmConfig): Record<string, string> {
 async function req<T>(c: CrmConfig, method: string, path: string, body?: unknown): Promise<T> {
   const url = new URL(`${base(c)}${path}`);
   if (url.protocol !== "https:" && process.env.TOOLS_ALLOW_PRIVATE_FOR_TESTS !== "1") throw new ToolCallError("bad_url");
-  await assertPublicHost(url.hostname);
-  const res = await fetch(url, {
+  const res = await safeFetch(url, {
     method,
     headers: { accept: "application/json", ...(body ? { "content-type": "application/json" } : {}), ...auth(c) },
     body: body ? JSON.stringify(body) : undefined,
-    redirect: "manual",
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
+  if (!res.ok) void res.body?.cancel().catch(() => {});
   if (res.status === 401 || res.status === 403) throw new ToolCallError("crm_unauthorized");
   if (!res.ok) throw new ToolCallError(`crm_http_${res.status}`);
   try {

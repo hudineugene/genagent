@@ -35,7 +35,7 @@ async function Shell({ children }: { children: ReactNode }) {
     .from(conversations)
     .where(and(eq(conversations.isTest, false), eq(conversations.needsAttention, true), ne(conversations.status, "closed"), inScope(conversations.clientId, scopeOf(user))));
   return (
-    <I18nProvider locale={locale}>
+    <I18nProvider locale={locale} timeZone={general.timeZone}>
       <div className="flex min-h-dvh flex-col md:flex-row">
         <Sidebar userName={user.name} isAdmin={user.role === "admin"} inboxBadge={attention} studioName={general.studioName} />
         <main className="min-w-0 flex-1 px-4 py-6 md:px-8 md:py-8">{children}</main>

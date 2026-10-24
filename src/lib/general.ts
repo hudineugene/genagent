@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { REPLY_LANGUAGES, type AgentConfig } from "@/lib/agent/types";
+import { REPLY_LANGUAGES, calendarConfigSchema, type AgentConfig } from "@/lib/agent/types";
 import { DEFAULT_MODEL } from "@/lib/models";
 import { getSetting, setSetting } from "@/lib/settings";
 
@@ -121,5 +121,7 @@ export function newAgentBase(s: General): Partial<AgentConfig> {
     streaming: n.streaming,
     answerCheck: n.answerCheck,
     monthlyBudgetUsd: n.monthlyBudgetUsd,
+    // Календарь записи — в часовом поясе студии (у каждого агента меняется отдельно)
+    calendar: calendarConfigSchema.parse({ timezone: s.timeZone }),
   };
 }
