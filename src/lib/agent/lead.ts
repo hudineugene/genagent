@@ -7,6 +7,7 @@ import { agents, conversations, messages, type LeadCard } from "@/db/schema";
 import { generateJson } from "@/lib/llm/anthropic";
 import { logUsage } from "@/lib/usage";
 import { jsonText } from "@/db/dialect";
+import { studioTz } from "@/lib/general";
 
 /**
  * Карточка лида: дешёвая модель по переписке заполняет, что клиент хочет (поля задаются в агенте — бюджет, спальни,
@@ -99,7 +100,7 @@ async function updateLead__(conversationId: string): Promise<LeadCard | null> {
 async function inWorkHours(now = new Date()) {
   const { getWaitingSettings } = await import("./waiting");
   const s = await getWaitingSettings();
-  const hour = Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Kyiv", hour: "2-digit", hourCycle: "h23" }).format(now));
+  const hour = Number(new Intl.DateTimeFormat("en-GB", { timeZone: studioTz(), hour: "2-digit", hourCycle: "h23" }).format(now));
   return s.fromHour <= s.toHour ? hour >= s.fromHour && hour < s.toHour : hour >= s.fromHour || hour < s.toHour;
 }
 

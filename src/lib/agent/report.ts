@@ -5,6 +5,7 @@ import { agentEvents, agents, clients, conversations, messages, usageLog } from 
 import { getSetting, setSetting } from "@/lib/settings";
 import { agentReviewHistory } from "./review";
 import type { AgentConfig } from "./types";
+import { studioTz } from "@/lib/general";
 
 /**
  * Отчёт владельцу бизнеса за месяц — польза агента в цифрах: сколько людей написали, скольким ответил агент
@@ -50,7 +51,7 @@ export type ClientReport = {
 /** Смещение времени Киева от UTC в момент t (зима +2 ч, лето +3 ч). */
 function kyivOffsetMs(t: number) {
   const p = Object.fromEntries(
-    new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Kyiv", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+    new Intl.DateTimeFormat("en-CA", { timeZone: studioTz(), year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
       .formatToParts(new Date(t))
       .map((x) => [x.type, x.value]),
   );
@@ -68,7 +69,7 @@ export function monthRange(month: string): { from: number; to: number } {
 }
 
 export function previousMonth(now = new Date()): string {
-  const p = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Kyiv", year: "numeric", month: "2-digit" }).formatToParts(now).map((x) => [x.type, x.value]));
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: studioTz(), year: "numeric", month: "2-digit" }).formatToParts(now).map((x) => [x.type, x.value]));
   const y = Number(p.year);
   const m = Number(p.month);
   return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, "0")}`;
@@ -104,7 +105,7 @@ export async function clientReport(clientId: string, month: string): Promise<Cli
   const byChannel = new Map<string, Set<string>>();
   const byDay = new Map<string, Set<string>>();
   let answers = 0;
-  const dayKey = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Kyiv" }).format(d);
+  const dayKey = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: studioTz() }).format(d);
   for (const m of rows) {
     if (m.meta?.fromSite) continue; // перенесено с сайта — уже посчитано там
     const who = person(m.conversationId);
@@ -289,7 +290,7 @@ const num = (n: number) => Math.round(n).toLocaleString("ru-RU").replace(/\s/g, 
 
 export function reportMonthTitle(r: ClientReport) {
   const d = new Date(r.from + 12 * 3_600_000);
-  const p = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Kyiv", year: "numeric", month: "2-digit" }).formatToParts(d).map((x) => [x.type, x.value]));
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: studioTz(), year: "numeric", month: "2-digit" }).formatToParts(d).map((x) => [x.type, x.value]));
   return `${T[r.lang].months[Number(p.month) - 1]} ${p.year}`;
 }
 
@@ -395,7 +396,7 @@ export function startMonthlyReports() {
   if (g.__reportTimer) return;
   const tick = async () => {
     const p = Object.fromEntries(
-      new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Kyiv", day: "2-digit", hour: "2-digit", hourCycle: "h23" }).formatToParts(new Date()).map((x) => [x.type, x.value]),
+      new Intl.DateTimeFormat("en-GB", { timeZone: studioTz(), day: "2-digit", hour: "2-digit", hourCycle: "h23" }).formatToParts(new Date()).map((x) => [x.type, x.value]),
     );
     if (Number(p.day) !== 1 || Number(p.hour) < 10) return;
     const month = previousMonth();

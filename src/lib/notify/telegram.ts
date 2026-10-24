@@ -580,6 +580,21 @@ export async function notifySiteLead(lead: { name: string; contact: string; need
   }
 }
 
+/** Расходы ИИ студии за месяц дошли до 80% или 100% лимита из общих настроек. */
+export async function notifyStudioLimit(spent: number, limit: number, level: 80 | 100) {
+  try {
+    await broadcast(
+      [
+        level === 100 ? "🔴 <b>Лимит расходов ИИ студии исчерпан</b>" : "🟡 <b>Расходы ИИ студии — 80% лимита</b>",
+        `Потрачено в этом месяце: <b>$${spent.toFixed(2)}</b> из $${limit.toFixed(2)}.`,
+        "Агенты продолжают работать: останавливают их только лимиты агента и клиента. Лимит меняется в «Настройках».",
+      ].join("\n"),
+    );
+  } catch (e) {
+    console.error("notify studio limit failed", e);
+  }
+}
+
 /** Проверочное сообщение из «Интеграций». */
 export async function notifyTest() {
   await broadcast("✅ Уведомления GenAgent работают. Сюда будут приходить передачи клиентов менеджеру, черновики на одобрение и сбои.");

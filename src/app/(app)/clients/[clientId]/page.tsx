@@ -43,6 +43,7 @@ import { hasTeamAgents } from "@/lib/team/approvals";
 import { hasKey } from "@/lib/keys";
 
 import { guardPage } from "@/lib/access";
+import { getGeneral, studioTz } from "@/lib/general";
 export default async function ClientPage({
   params,
   searchParams,
@@ -527,6 +528,7 @@ async function PaymentsTab({ clientId }: { clientId: string }) {
   return (
     <PaymentsManager
       clientId={clientId}
+      currency={(await getGeneral()).currency}
       initial={
         cfg
           ? {
@@ -547,7 +549,7 @@ async function PaymentsTab({ clientId }: { clientId: string }) {
       month={{ paid: paid.length, links: month.length, sum: [...sums].map(([cur, n]) => `${Math.round(n * 100) / 100} ${cur}`).join(" + ") }}
       list={list.map((x) => ({
         id: x.p.id,
-        at: x.p.createdAt.toLocaleString("ru-RU", { timeZone: "Europe/Kyiv", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }),
+        at: x.p.createdAt.toLocaleString("ru-RU", { timeZone: studioTz(), day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }),
         amount: x.p.amount,
         currency: x.p.currency,
         description: x.p.description,

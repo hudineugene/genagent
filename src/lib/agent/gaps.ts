@@ -7,6 +7,7 @@ import { agents, conversations, knowledgeGaps, messages } from "@/db/schema";
 import { generateJson } from "@/lib/llm/anthropic";
 import { getSetting, setSetting } from "@/lib/settings";
 import { logUsage } from "@/lib/usage";
+import { getGeneral } from "@/lib/general";
 
 /**
  * «Вопросы без ответа»: раз в сутки дешёвая модель просматривает новые переписки агента и находит вопросы,
@@ -182,6 +183,7 @@ export function startGapsAnalysis() {
   const g = globalThis as unknown as { __gapsTimer?: ReturnType<typeof setInterval> };
   if (g.__gapsTimer) return;
   const run = async () => {
+    if (!(await getGeneral()).jobs.gapsAnalysis) return;
     const last = (await getSetting<number>("gapsLastRun")) ?? 0;
     if (Date.now() - last < RUN_EVERY_MS - 60_000) return;
     await setSetting("gapsLastRun", Date.now());

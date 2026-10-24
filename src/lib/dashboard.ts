@@ -6,6 +6,7 @@ import { getSetting } from "@/lib/settings";
 import { monthRange } from "@/lib/agent/report";
 import type { AgentReview } from "@/lib/agent/review";
 import type { AgentConfig } from "@/lib/agent/types";
+import { studioTz } from "@/lib/general";
 
 /**
  * Главная «Сегодня»: что требует человека прямо сейчас (кто ждёт ответа, правки из разбора недели, вопросы без
@@ -49,7 +50,7 @@ export type ClientSummary = {
 
 function currentKyivMonth() {
   const p = Object.fromEntries(
-    new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Kyiv", year: "numeric", month: "2-digit" }).formatToParts(new Date()).map((x) => [x.type, x.value]),
+    new Intl.DateTimeFormat("en-CA", { timeZone: studioTz(), year: "numeric", month: "2-digit" }).formatToParts(new Date()).map((x) => [x.type, x.value]),
   );
   return `${p.year}-${p.month}`;
 }

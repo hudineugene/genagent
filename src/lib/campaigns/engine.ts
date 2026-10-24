@@ -1,7 +1,7 @@
 import "server-only";
 import { withKeys } from "@/lib/keys";
 import { apiKey as keyOf } from "@/lib/keys";
-import { and, asc, desc, eq, gt, inArray, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   agents,
@@ -18,6 +18,8 @@ import {
 } from "@/db/schema";
 import { generateJson } from "@/lib/llm/anthropic";
 import { logUsage } from "@/lib/usage";
+import { jsonText } from "@/db/dialect";
+import { getGeneral, quietEnd, studioDayStart } from "@/lib/general";
 
 /**
  * Рассылки и цепочки. Раз в минуту: цепочки набирают новых участников (события после включения), сообщения,
@@ -109,13 +111,24 @@ export async function matchSegment(clientId: string, seg: CampaignSegment): Prom
     }));
 }
 
-/** Тихие часы: 21:00–9:00 по Киеву → ближайшие 9:00. Возвращает null, если писать можно сейчас. */
+/** Тихие часы из общих настроек (по умолчанию 21:00–9:00 по часовому поясу студии) → их конец; null — писать можно. */
 export function quietUntil(now = new Date()): Date | null {
-  const hour = Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Kyiv", hour: "2-digit", hourCycle: "h23" }).format(now));
-  if (hour >= 9 && hour < 21) return null;
-  const hoursTo9 = hour >= 21 ? 24 - hour + 9 : 9 - hour;
-  const minutes = Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Kyiv", minute: "2-digit" }).format(now));
-  return new Date(now.getTime() + hoursTo9 * 3600_000 - minutes * 60_000);
+  return quietEnd(now);
+}
+
+/** Лимит рассылок в сутки на канал (общие настройки): исчерпан — когда можно продолжить, иначе null. */
+async function channelLimitUntil(channelId: string, now = new Date()): Promise<Date | null> {
+  const limit = (await getGeneral()).broadcastDailyLimit;
+  if (!limit) return null;
+  const day = studioDayStart(now);
+  const [{ n }] = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(messages)
+    .innerJoin(conversations, eq(conversations.id, messages.conversationId))
+    .where(and(eq(conversations.channelId, channelId), gte(messages.createdAt, day), sql`${jsonText(messages.meta, "campaign.id")} is not null`));
+  if (Number(n) < limit) return null;
+  const next = new Date(day.getTime() + 86400_000);
+  return quietEnd(next) ?? next;
 }
 
 /** Запустить рассылку: найти получателей сейчас и поставить им сообщение (сразу или ко времени). */
@@ -278,6 +291,8 @@ export async function sendRun(run: CampaignRun): Promise<void> {
     const later = quietUntil();
     if (later) return void (await db.update(campaignRuns).set({ dueAt: later }).where(eq(campaignRuns.id, run.id)));
   }
+  const tomorrow = await channelLimitUntil(row.channel.id);
+  if (tomorrow) return void (await db.update(campaignRuns).set({ dueAt: tomorrow }).where(eq(campaignRuns.id, run.id)));
   if (row.channel.type === "whatsapp" || row.channel.type === "instagram") {
     const [last] = await db
       .select({ at: messages.createdAt })

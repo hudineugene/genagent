@@ -1,18 +1,18 @@
 import "server-only";
 import { getSetting, setSetting } from "@/lib/settings";
+import { studioTz } from "@/lib/general";
 
 /**
  * Раз в неделю (понедельник, 10:00 по Киеву) владельцам клиентов — вопросы клиентов, на которые агент не знал ответа,
  * с кнопкой «✍️ Ответить» (ответ сразу попадает в базу знаний). Только тем клиентам, у кого подписан владелец.
  */
 const KEY = "ownerGapsDigest";
-const TZ = "Europe/Kyiv";
 const WEEKDAY = "Mon";
 const HOUR = 10;
 
 function kyivNow() {
   const parts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit", weekday: "short", hour: "2-digit", hourCycle: "h23" })
+    new Intl.DateTimeFormat("en-CA", { timeZone: studioTz(), year: "numeric", month: "2-digit", day: "2-digit", weekday: "short", hour: "2-digit", hourCycle: "h23" })
       .formatToParts(new Date())
       .map((p) => [p.type, p.value]),
   );

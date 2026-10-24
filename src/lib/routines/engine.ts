@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { agents, clients, conversations, dataTables, messages, routines, type Routine, type RoutineSchedule, type RoutineSource } from "@/db/schema";
 import { streamChat } from "@/lib/llm";
 import { logUsage } from "@/lib/usage";
+import { studioTz } from "@/lib/general";
 
 /**
  * Отчёты по расписанию. Раз в 10 минут проверяем, кому пора (время — по Киеву); отчёт: данные из источников →
@@ -15,10 +16,9 @@ const MODEL = "anthropic:claude-haiku-5-5";
 const SOURCE_CHARS = 40_000;
 const TOTAL_CHARS = 120_000;
 
-const TZ = "Europe/Kyiv";
 function kyiv(at: Date) {
   const p = Object.fromEntries(
-    new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit", weekday: "short", hour: "2-digit", hourCycle: "h23" })
+    new Intl.DateTimeFormat("en-CA", { timeZone: studioTz(), year: "numeric", month: "2-digit", day: "2-digit", weekday: "short", hour: "2-digit", hourCycle: "h23" })
       .formatToParts(at)
       .map((x) => [x.type, x.value]),
   );
@@ -135,7 +135,7 @@ async function runRoutine__(id: string, opts: { send?: boolean } = {}): Promise<
     const tableIds = r.sources.flatMap((s) => (s.type === "table" ? [s.tableId] : []));
     const { loadTables, tableTool } = await import("@/lib/data/tables");
     const tools = (await loadTables(r.clientId, tableIds)).map((t) => tableTool(t));
-    const today = new Intl.DateTimeFormat("ru-RU", { timeZone: TZ, dateStyle: "long" }).format(new Date());
+    const today = new Intl.DateTimeFormat("ru-RU", { timeZone: studioTz(), dateStyle: "long" }).format(new Date());
     let text = "";
     const started = Date.now();
     for await (const ev of streamChat({

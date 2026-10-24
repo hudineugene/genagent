@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { conversations, knowledgeGaps, messages, usageLog } from "@/db/schema";
 import { getSetting, setSetting } from "@/lib/settings";
 import { agentFunnels } from "./funnel";
+import { studioTz } from "@/lib/general";
 
 /**
  * Ежедневная сводка в Telegram (бот уведомлений): за последние сутки по каждому агенту — сколько людей написали,
@@ -19,7 +20,6 @@ export type DailyDigestSettings = {
 };
 
 const KEY = "dailyDigest";
-const TZ = "Europe/Kyiv";
 export const DAILY_DEFAULTS: DailyDigestSettings = { enabled: true, hour: 20 };
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -33,7 +33,7 @@ export async function saveDailyDigest(patch: Partial<DailyDigestSettings>) {
 
 function kyivNow() {
   const parts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23" })
+    new Intl.DateTimeFormat("en-CA", { timeZone: studioTz(), year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23" })
       .formatToParts(new Date())
       .map((p) => [p.type, p.value]),
   );

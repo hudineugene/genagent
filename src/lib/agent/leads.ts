@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { agentEvents, clients, conversations, messages } from "@/db/schema";
 import { getSetting, setSetting } from "@/lib/settings";
 import { jsonText } from "@/db/dialect";
+import { studioTz } from "@/lib/general";
 
 /**
  * Утренняя сводка лидов (Telegram, бот уведомлений). Лид — разговор за сутки, где клиент дошёл до дела: агент передал
@@ -13,7 +14,6 @@ import { jsonText } from "@/db/dialect";
  */
 export type LeadsSettings = { enabled: boolean; hour: number; lastDay?: string };
 const KEY = "leadsDigest";
-const TZ = "Europe/Kyiv";
 export const LEADS_DEFAULTS: LeadsSettings = { enabled: true, hour: 9 };
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_LEADS = 15;
@@ -159,7 +159,7 @@ export async function sendLeadsDigest(sinceMs?: number): Promise<boolean> {
 
 function kyivNow() {
   const parts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23" })
+    new Intl.DateTimeFormat("en-CA", { timeZone: studioTz(), year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23" })
       .formatToParts(new Date())
       .map((p) => [p.type, p.value]),
   );

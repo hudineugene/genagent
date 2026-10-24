@@ -6,6 +6,8 @@ export async function register() {
   const { db } = await import("./db");
   const { runMigrations } = await import("./db/migrate");
   await runMigrations(db);
+  // Общие настройки (часовой пояс, тихие часы) — в память до запуска фоновых задач
+  await (await import("./lib/general")).getGeneral().catch(() => {});
 
   const { users } = await import("./db/schema");
   const email = process.env.SEED_ADMIN_EMAIL?.trim().toLowerCase();
@@ -57,6 +59,8 @@ export async function register() {
   startWeeklyReview();
   const { startCampaigns } = await import("./lib/campaigns/engine");
   startCampaigns();
+  const { startStudioLimitWatch } = await import("./lib/usage");
+  startStudioLimitWatch();
   const { startRoutines } = await import("./lib/routines/engine");
   startRoutines();
   const { startContent } = await import("./lib/content/studio");

@@ -3,6 +3,7 @@ import { and, desc, eq, inArray, like, ne, notInArray } from "drizzle-orm";
 import { db } from "@/db";
 import { conversations, messages, settings } from "@/db/schema";
 import { getSetting, setSetting } from "@/lib/settings";
+import { studioTz } from "@/lib/general";
 
 /**
  * Напоминания, если клиент ждёт человека: клиента передали людям (диалог «требует внимания»), а после его
@@ -35,7 +36,7 @@ export async function saveWaitingSettings(patch: Partial<WaitingSettings>) {
 }
 
 function kyivHour(now = new Date()) {
-  return Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Kyiv", hour: "2-digit", hourCycle: "h23" }).format(now));
+  return Number(new Intl.DateTimeFormat("en-GB", { timeZone: studioTz(), hour: "2-digit", hourCycle: "h23" }).format(now));
 }
 
 /** С какого момента клиент ждёт: первое его сообщение после последнего ответа человека; null — не ждёт. */

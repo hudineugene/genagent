@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { agents, clients, conversations, messages, type ApiConfig, type Channel, type Conversation, type OrderState } from "@/db/schema";
 import { generateJson } from "@/lib/llm/anthropic";
 import { agentMonthSpend, logUsage } from "@/lib/usage";
+import { studioTz } from "@/lib/general";
 
 /**
  * Агент сопровождает заказ. Свой бот сообщает о смене статуса (POST /order): GenAgent запоминает ленту
@@ -42,7 +43,7 @@ export function withOrder(orders: OrderState[] | undefined, u: OrderUpdate, at =
 }
 
 const fmt = (ms: number) =>
-  new Date(ms).toLocaleString("ru-RU", { timeZone: "Europe/Kyiv", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  new Date(ms).toLocaleString("ru-RU", { timeZone: studioTz(), day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 
 /** Раздел контекста агента: заказы клиента по данным бота. */
 export function ordersNote(orders: OrderState[] | undefined): string | undefined {

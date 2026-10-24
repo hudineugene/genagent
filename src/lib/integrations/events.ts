@@ -14,6 +14,7 @@ import {
 } from "@/db/schema";
 import { appendRow, ensureHeader, spreadsheetId, updateRow } from "@/lib/google/sheets";
 import { assertPublicHost } from "@/lib/agent/custom-tools";
+import { studioTz } from "@/lib/general";
 
 /**
  * События клиента во внешние системы: заявка (карточка клиента обновилась), передача менеджеру, запись в календарь,
@@ -116,7 +117,7 @@ async function buildPayload(event: IntegrationEventType, input: EventInput): Pro
 
 /** Строка для Google Таблицы. */
 export function sheetRow(p: EventPayload): string[] {
-  const when = new Intl.DateTimeFormat("ru-RU", { timeZone: "Europe/Kyiv", dateStyle: "short", timeStyle: "short" }).format(new Date(p.at));
+  const when = new Intl.DateTimeFormat("ru-RU", { timeZone: studioTz(), dateStyle: "short", timeStyle: "short" }).format(new Date(p.at));
   const details =
     p.event === "booking" && p.booking
       ? `${p.booking.service} · ${p.booking.start} · ${p.booking.name} ${p.booking.phone}${p.booking.comment ? ` · ${p.booking.comment}` : ""}`

@@ -23,6 +23,7 @@ import { getWeeklyTests, weeklyCoverage } from "@/lib/tests/weekly";
 import { getAutoTests } from "@/lib/tests/auto";
 import { getDailyDigest } from "@/lib/agent/daily";
 import { getLeadsSettings } from "@/lib/agent/leads";
+import { studioTz } from "@/lib/general";
 
 const TABS = ["notify", "reports", "backup", "social", "google", "services", "api", "portal"] as const;
 type Tab = (typeof TABS)[number];
@@ -207,7 +208,7 @@ async function ApiTab() {
   const { asc, desc } = await import("drizzle-orm");
   const [keys, list] = await Promise.all([db.select().from(apiKeys).orderBy(desc(apiKeys.createdAt)), db.select({ id: clients.id, name: clients.name }).from(clients).orderBy(asc(clients.name))]);
   const names = new Map(list.map((c) => [c.id, c.name]));
-  const fmt = new Intl.DateTimeFormat("ru-RU", { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Kyiv" });
+  const fmt = new Intl.DateTimeFormat("ru-RU", { dateStyle: "short", timeStyle: "short", timeZone: studioTz() });
   return (
     <ApiKeys
       base={publicUrl() ?? ""}

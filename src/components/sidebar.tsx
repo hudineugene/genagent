@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, useSyncExternalStore, useTransition } from
 import {
   BarChart3,
   Building2,
+  CircleHelp,
   House,
   LayoutTemplate,
   LogOut,
@@ -14,6 +15,7 @@ import {
   MoreHorizontal,
   Moon,
   Plug,
+  SlidersHorizontal,
   Search,
   Sparkles,
   Sun,
@@ -29,7 +31,7 @@ import { cx } from "./ui";
 
 type NavItem = PalettePage & { active: boolean; badge?: number };
 
-export function Sidebar({ userName, isAdmin, inboxBadge }: { userName: string; isAdmin: boolean; inboxBadge: number }) {
+export function Sidebar({ userName, isAdmin, inboxBadge, studioName }: { userName: string; isAdmin: boolean; inboxBadge: number; studioName?: string }) {
   const { t } = useI18n();
   const pathname = usePathname();
   const work: NavItem[] = [
@@ -49,19 +51,21 @@ export function Sidebar({ userName, isAdmin, inboxBadge }: { userName: string; i
         { href: "/team", label: t.nav.team, icon: Users, active: pathname.startsWith("/team") },
         { href: "/billing", label: t.nav.billing, icon: Wallet, active: pathname.startsWith("/billing") },
         { href: "/integrations", label: t.nav.integrations, icon: Plug, active: pathname.startsWith("/integrations") },
+        { href: "/settings", label: t.nav.settings, icon: SlidersHorizontal, active: pathname.startsWith("/settings") },
       ]
     : [];
+  const help: NavItem[] = [{ href: "/help", label: t.nav.help, icon: CircleHelp, active: pathname.startsWith("/help") }];
   const openSearch = () => window.dispatchEvent(new Event(OPEN_PALETTE));
 
   return (
     <aside className="z-30 flex shrink-0 items-center gap-2 border-b border-border bg-surface/90 px-3 py-2.5 backdrop-blur md:sticky md:top-0 md:h-dvh md:w-60 md:flex-col md:items-stretch md:gap-1 md:border-r md:border-b-0 md:bg-surface md:px-3 md:py-4">
-      <CommandPalette pages={[...work, ...settings, { href: "/profile", label: t.nav.profile, icon: UserRound }]} />
+      <CommandPalette pages={[...work, ...settings, ...help, { href: "/profile", label: t.nav.profile, icon: UserRound }]} />
 
       <Link href="/" className="flex shrink-0 items-center gap-2.5 md:mb-4 md:px-2">
         <span className="grid size-8 place-items-center rounded-lg bg-accent text-accent-text">
           <Sparkles className="size-4" />
         </span>
-        <span className="hidden font-semibold tracking-tight md:block">{t.app.name}</span>
+        <span className="hidden truncate font-semibold tracking-tight md:block">{studioName || t.app.name}</span>
       </Link>
 
       {/* Поиск: на телефоне — иконка, на компьютере — поле с подсказкой Ctrl K */}
@@ -79,6 +83,7 @@ export function Sidebar({ userName, isAdmin, inboxBadge }: { userName: string; i
       <nav className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none] md:flex-col md:items-stretch md:gap-2 md:overflow-visible md:[&>div+div]:border-t md:[&>div+div]:border-border md:[&>div+div]:pt-2">
         <NavGroup items={work} />
         {settings.length > 0 && <NavGroup items={settings} />}
+        <NavGroup items={help} />
       </nav>
 
       {/* Телефон: профиль (там же язык и выход) — аватаром в конце строки */}

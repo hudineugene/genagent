@@ -188,3 +188,49 @@ export function EmptyState({
     </div>
   );
 }
+
+/** Переключатель «вкл/выкл» со строкой подписи (только в клиентских компонентах — обработчик нажатия). */
+export function Switch({
+  label,
+  hint,
+  checked,
+  onChange,
+  disabled,
+  className,
+}: {
+  label: ReactNode;
+  hint?: ReactNode;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  disabled?: boolean;
+  className?: string;
+}) {
+  return (
+    <div className={cx("flex items-center gap-3 py-1.5", disabled && "opacity-60", className)}>
+      <span className="flex min-w-0 flex-1 items-center gap-1 text-sm">
+        {label}
+        {hint && <InfoHint>{hint}</InfoHint>}
+      </span>
+      <SwitchButton checked={checked} onChange={onChange} disabled={disabled} label={typeof label === "string" ? label : undefined} />
+    </div>
+  );
+}
+
+export function SwitchButton({ checked, onChange, disabled, label }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean; label?: string }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={(e) => {
+        e.stopPropagation();
+        onChange(!checked);
+      }}
+      className={cx("relative h-5 w-9 shrink-0 rounded-full transition", checked ? "bg-accent" : "bg-border")}
+    >
+      <span className={cx("absolute top-0.5 size-4 rounded-full bg-white shadow transition-all", checked ? "left-[18px]" : "left-0.5")} />
+    </button>
+  );
+}

@@ -9,6 +9,8 @@ import { generateJson } from "@/lib/llm/anthropic";
 import { getSetting, setSetting } from "@/lib/settings";
 import { logUsage } from "@/lib/usage";
 import type { AgentConfig } from "./types";
+import { studioTz } from "@/lib/general";
+import { getGeneral } from "@/lib/general";
 
 /**
  * Разбор недели агента (раз в неделю, дешёвая модель, один вызов на агента):
@@ -324,8 +326,9 @@ export function startWeeklyReview() {
   const g = globalThis as unknown as { __reviewTimer?: ReturnType<typeof setInterval> };
   if (g.__reviewTimer) return;
   const tick = async () => {
+    if (!(await getGeneral()).jobs.agentReview) return;
     const parts = Object.fromEntries(
-      new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Kyiv", weekday: "short", hour: "2-digit", hourCycle: "h23" })
+      new Intl.DateTimeFormat("en-GB", { timeZone: studioTz(), weekday: "short", hour: "2-digit", hourCycle: "h23" })
         .formatToParts(new Date())
         .map((p) => [p.type, p.value]),
     );

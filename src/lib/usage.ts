@@ -53,6 +53,37 @@ export function monthStart(now = new Date()) {
   return new Date(now.getFullYear(), now.getMonth(), 1);
 }
 
+/** Расходы всей студии с начала месяца, USD — без операций, оплаченных своими ключами клиентов. */
+export async function studioMonthSpend(now = new Date()) {
+  const [row] = await db
+    .select({ total: sql<number>`coalesce(sum(${usageLog.cost}), 0)` })
+    .from(usageLog)
+    .where(and(gte(usageLog.createdAt, monthStart(now)), eq(usageLog.ownKey, false)));
+  return Number(row?.total ?? 0);
+}
+
+/** Раз в час: расходы студии дошли до 80% или 100% месячного лимита — одно уведомление на каждый порог в месяц. */
+export function startStudioLimitWatch() {
+  const g = globalThis as unknown as { __studioLimitTimer?: ReturnType<typeof setInterval> };
+  if (g.__studioLimitTimer) return;
+  const tick = async () => {
+    const { getGeneral } = await import("@/lib/general");
+    const limit = (await getGeneral()).studioMonthlyLimitUsd;
+    if (!limit) return;
+    const spent = await studioMonthSpend();
+    const level = spent >= limit ? 100 : spent >= limit * 0.8 ? 80 : 0;
+    if (!level) return;
+    const { getSetting, setSetting } = await import("@/lib/settings");
+    const key = `studioLimit:${monthStart().toISOString().slice(0, 7)}`;
+    if (((await getSetting<number>(key)) ?? 0) >= level) return;
+    await setSetting(key, level);
+    const { notifyStudioLimit } = await import("@/lib/notify/telegram");
+    await notifyStudioLimit(spent, limit, level);
+  };
+  g.__studioLimitTimer = setInterval(() => void tick().catch((e) => console.error("studio limit check failed", e)), 60 * 60_000);
+  setTimeout(() => void tick().catch(() => {}), 60_000);
+}
+
 /** Расходы агента с начала текущего месяца (все источники), USD. */
 export async function agentMonthSpend(agentId: string) {
   const [row] = await db

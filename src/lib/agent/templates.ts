@@ -172,7 +172,8 @@ export const TEMPLATES: AgentTemplate[] = [
 
 export const TEMPLATE_MAP = new Map(TEMPLATES.map((t) => [t.key, t]));
 
-export function configFromTemplate(key: string | null | undefined): AgentConfig {
+/** base — значения новых агентов из общих настроек студии: поверх пустого агента, под настройками шаблона. */
+export function configFromTemplate(key: string | null | undefined, base: Partial<AgentConfig> = {}): AgentConfig {
   const t = key ? TEMPLATE_MAP.get(key) : undefined;
-  return { ...emptyConfig(), ...(t ? { icon: t.icon, ...t.config } : {}) };
+  return { ...emptyConfig(), ...base, ...(t ? { icon: t.icon, ...t.config } : {}) };
 }

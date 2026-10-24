@@ -27,6 +27,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
 async function Shell({ children }: { children: ReactNode }) {
   const [user, locale] = await Promise.all([requireUser(), getLocale()]);
+  // После проверки входа: страница уже динамическая, настройки читаются на каждый запрос
+  const general = await (await import("@/lib/general")).getGeneral();
   const { inScope, scopeOf } = await import("@/lib/access");
   const [{ attention }] = await db
     .select({ attention: count() })
@@ -35,7 +37,7 @@ async function Shell({ children }: { children: ReactNode }) {
   return (
     <I18nProvider locale={locale}>
       <div className="flex min-h-dvh flex-col md:flex-row">
-        <Sidebar userName={user.name} isAdmin={user.role === "admin"} inboxBadge={attention} />
+        <Sidebar userName={user.name} isAdmin={user.role === "admin"} inboxBadge={attention} studioName={general.studioName} />
         <main className="min-w-0 flex-1 px-4 py-6 md:px-8 md:py-8">{children}</main>
       </div>
     </I18nProvider>

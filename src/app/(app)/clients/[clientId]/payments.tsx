@@ -24,11 +24,11 @@ export type PaymentRow = { id: string; at: string; amount: number; currency: str
 
 const TONE: Record<string, "success" | "warning" | "accent" | "neutral"> = { paid: "success", created: "accent", failed: "warning", expired: "neutral", refunded: "neutral" };
 
-export function PaymentsManager({ clientId, initial, list, month }: { clientId: string; initial: PaymentsView | null; list: PaymentRow[]; month: { paid: number; sum: string; links: number } }) {
+export function PaymentsManager({ clientId, initial, list, month, currency = "UAH" }: { clientId: string; initial: PaymentsView | null; list: PaymentRow[]; month: { paid: number; sum: string; links: number }; currency?: PaymentsView["currency"] }) {
   const { t } = useI18n();
   const p = t.payments;
   const [v, setV] = useState<PaymentsView>(
-    initial ?? { provider: "liqpay", publicKey: "", merchant: "", domain: "", privateKeyMask: "", secretMask: "", tokenMask: "", currency: "UAH", maxAmount: null, paidText: "", enabled: true },
+    initial ?? { provider: "liqpay", publicKey: "", merchant: "", domain: "", privateKeyMask: "", secretMask: "", tokenMask: "", currency, maxAmount: null, paidText: "", enabled: true },
   );
   const [secrets, setSecrets] = useState({ privateKey: "", secret: "", token: "" });
   const [msg, setMsg] = useState<{ error?: boolean; text: string } | null>(null);

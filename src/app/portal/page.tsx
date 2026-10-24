@@ -11,6 +11,7 @@ import { logout } from "@/app/actions/auth";
 import { Card, cx } from "@/components/ui";
 import { GapAnswer, PortalReply } from "./forms";
 import { jsonText } from "@/db/dialect";
+import { studioTz } from "@/lib/general";
 
 const TABS = ["overview", "leads", "chats", "gaps"] as const;
 
@@ -51,7 +52,7 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
   ]);
   const [thread] = sp.c ? await db.select().from(conversations).where(and(eq(conversations.id, sp.c), own)) : [];
   const threadMsgs = thread ? await db.select().from(messages).where(and(eq(messages.conversationId, thread.id), eq(messages.status, "sent"))).orderBy(asc(messages.createdAt)) : [];
-  const fmt = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Kyiv" });
+  const fmt = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: studioTz() });
   const rate = res.all.rate === null ? "—" : `${Math.round(res.all.rate * 100)}%`;
 
   return (

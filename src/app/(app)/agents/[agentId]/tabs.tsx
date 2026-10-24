@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FlaskConical, MessageCircleQuestion, Radio, SlidersHorizontal, Sparkles } from "lucide-react";
+import { FlaskConical, MessageCircleQuestion, Network, Radio, SlidersHorizontal, Sparkles } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
 import { cx } from "@/components/ui";
 
@@ -13,6 +13,7 @@ export function AgentTabs({ agentId, channels, gaps, proposals }: { agentId: str
   const base = `/agents/${agentId}`;
   const tabs = [
     { href: base, label: t.channels.setupTab, icon: SlidersHorizontal, n: null, tone: "neutral" },
+    { href: `${base}/map`, label: t.help.mapTab, icon: Network, n: null, tone: "neutral" },
     { href: `${base}/channels`, label: t.channels.tab, icon: Radio, n: channels, tone: "neutral" },
     { href: `${base}/tests`, label: t.tests.tab, icon: FlaskConical, n: null, tone: "neutral" },
     { href: `${base}/gaps`, label: t.gaps.tab, icon: MessageCircleQuestion, n: gaps || null, tone: "warning" },

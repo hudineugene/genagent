@@ -2,6 +2,7 @@ import "server-only";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { channels, conversations, type EmailConfig } from "@/db/schema";
+import { studioTz } from "@/lib/general";
 
 /**
  * Написать человеку первым по контакту из таблицы или карточки: существующий чат в каналах клиента (по @нику,
@@ -79,11 +80,10 @@ export async function reach(
   return { status: "sent", via: "email", conversationId: conversation.id };
 }
 
-const TZ = "Europe/Kyiv";
 /** Сегодня по Киеву: дата ГГГГ-ММ-ДД и час. */
 export function kyivNow(at = new Date()) {
   const p = Object.fromEntries(
-    new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23" })
+    new Intl.DateTimeFormat("en-CA", { timeZone: studioTz(), year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23" })
       .formatToParts(at)
       .map((x) => [x.type, x.value]),
   );

@@ -21,6 +21,7 @@ import { hasCourses, learningNote, learningTools } from "@/lib/learning";
 import { hasActiveTrips, tripTools } from "@/lib/logistics/trips";
 import { webSearchFor } from "@/lib/services";
 import { examplesNote, getExamples } from "./examples";
+import { studioTz } from "@/lib/general";
 
 export const HANDOFF_MARKER = "[[HANDOFF]]";
 
@@ -138,7 +139,7 @@ export async function prepareChat(
 
 /** «[Сейчас у компании: четверг, 15 октября 2026, 21:40 (Europe/Kyiv)]» — служебная строка для агента. */
 export function nowLine(timezone: string | undefined, at = new Date()) {
-  const tz = timezone || "Europe/Kyiv";
+  const tz = timezone || studioTz();
   let when: string;
   try {
     when = new Intl.DateTimeFormat("ru-RU", { timeZone: tz, weekday: "long", day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(at);

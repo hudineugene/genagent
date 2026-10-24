@@ -8,6 +8,8 @@ import { generateJson } from "@/lib/llm/anthropic";
 import { loadKnowledge } from "@/lib/kb/store";
 import { getSetting, setSetting } from "@/lib/settings";
 import { logUsage } from "@/lib/usage";
+import { studioTz } from "@/lib/general";
+import { getGeneral } from "@/lib/general";
 
 /**
  * Утренняя проверка качества. Раз в сутки (в 8:00 по Киеву) более сильная модель читает вчерашние ответы каждого
@@ -17,7 +19,6 @@ import { logUsage } from "@/lib/usage";
  * У агента — переключатель config.qualityCheck.
  */
 const MODEL = "claude-sonnet-5-5";
-const TZ = "Europe/Kyiv";
 const RUN_HOUR = 8;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PER_AGENT = 15;
@@ -30,7 +31,7 @@ type Exchange = { messageId: string; conversationId: string; question: string; a
 
 function kyivNow() {
   const parts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23" })
+    new Intl.DateTimeFormat("en-CA", { timeZone: studioTz(), year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23" })
       .formatToParts(new Date())
       .map((p) => [p.type, p.value]),
   );
@@ -207,6 +208,7 @@ export function startQualityCheck() {
   const g = globalThis as unknown as { __qaTimer?: ReturnType<typeof setInterval> };
   if (g.__qaTimer) return;
   const tick = async () => {
+    if (!(await getGeneral()).jobs.qualityCheck) return;
     const now = kyivNow();
     if (now.hour !== RUN_HOUR || (await getSetting<string>("qaLastDay")) === now.day) return;
     await setSetting("qaLastDay", now.day);

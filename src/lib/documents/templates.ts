@@ -7,6 +7,7 @@ import { conversations, docTemplates, generatedDocs, type DocTemplate } from "@/
 import type { AgentTool } from "@/lib/llm";
 import { publicUrl } from "@/lib/settings";
 import type { ToolContext } from "@/lib/agent/tools";
+import { studioTz } from "@/lib/general";
 
 /**
  * Документы по шаблону: агент заполняет поля шаблона из разговора, документ сохраняется и получает ссылку
@@ -32,7 +33,7 @@ export async function issueDocument(t: DocTemplate, values: Record<string, strin
     .where(eq(docTemplates.id, t.id))
     .returning({ counter: docTemplates.counter });
   const [conv] = ctx.conversationId ? await db.select({ name: conversations.contactName }).from(conversations).where(eq(conversations.id, ctx.conversationId)) : [];
-  const date = new Intl.DateTimeFormat("ru-RU", { timeZone: "Europe/Kyiv", dateStyle: "long" }).format(new Date());
+  const date = new Intl.DateTimeFormat("ru-RU", { timeZone: studioTz(), dateStyle: "long" }).format(new Date());
   const all = { date, number: String(counter), client: conv?.name ?? "", ...values };
   const id = randomBytes(12).toString("base64url");
   await db.insert(generatedDocs).values({ id, templateId: t.id, clientId: t.clientId, conversationId: ctx.conversationId ?? null, title: `${t.name} № ${counter}`, body: fillTemplate(t.body, all) });

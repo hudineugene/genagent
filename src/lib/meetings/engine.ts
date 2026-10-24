@@ -8,6 +8,7 @@ import { db } from "@/db";
 import { channels, clients, meetings, type EmailConfig, type Meeting, type MeetingTask } from "@/db/schema";
 import { generateJson } from "@/lib/llm/anthropic";
 import { logUsage } from "@/lib/usage";
+import { studioTz } from "@/lib/general";
 
 /**
  * Встречи и звонки: запись → расшифровка (OpenAI, ключ из «Внешних сервисов»), готовая расшифровка (Zoom, Meet,
@@ -74,7 +75,7 @@ export async function analyzeMeeting(id: string) {
   const apiKey = keyOf("anthropic");
   if (!apiKey) throw new Error("no_key");
   const [client] = await db.select({ name: clients.name }).from(clients).where(eq(clients.id, m.clientId));
-  const today = new Intl.DateTimeFormat("ru-RU", { timeZone: "Europe/Kyiv", dateStyle: "long" }).format(m.createdAt);
+  const today = new Intl.DateTimeFormat("ru-RU", { timeZone: studioTz(), dateStyle: "long" }).format(m.createdAt);
   const started = Date.now();
   const { data, usage, model } = await generateJson<Analysis>(apiKey, MODEL, {
     system: [

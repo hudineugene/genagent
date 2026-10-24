@@ -9,6 +9,7 @@ import { getLocale } from "@/lib/i18n/server";
 import { agentConfigSchema, type AgentConfig } from "@/lib/agent/types";
 import { TEMPLATE_MAP, configFromTemplate, emptyConfig } from "@/lib/agent/templates";
 import { generateAgentConfig } from "@/lib/agent/generate";
+import { getGeneral, newAgentBase } from "@/lib/general";
 
 import { requireClient, requireOwned } from "@/lib/access";
 async function insertAgent(clientId: string, name: string, config: AgentConfig, templateKey: string | null, userId: string) {
@@ -25,7 +26,8 @@ export async function createAgent(clientId: string, templateKey: string | null) 
   const locale = await getLocale();
   const template = templateKey ? TEMPLATE_MAP.get(templateKey) : undefined;
   const name = template?.name[locale] ?? (locale === "uk" ? "Новий агент" : "Новый агент");
-  const id = await insertAgent(clientId, name, configFromTemplate(templateKey), template?.key ?? null, user.id);
+  const base = newAgentBase(await getGeneral());
+  const id = await insertAgent(clientId, name, configFromTemplate(templateKey, base), template?.key ?? null, user.id);
   redirect(`/agents/${id}`);
 }
 
@@ -44,7 +46,7 @@ export async function generateAgent(
   let id: string;
   try {
     const g = await generateAgentConfig(brief, client);
-    const config: AgentConfig = { ...emptyConfig(), ...g.config };
+    const config: AgentConfig = { ...emptyConfig(), ...newAgentBase(await getGeneral()), ...g.config };
     id = await insertAgent(clientId, g.name, config, null, user.id);
   } catch (e) {
     console.error("generateAgent failed", e);

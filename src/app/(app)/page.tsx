@@ -21,6 +21,7 @@ import { contactLabel } from "@/lib/contact";
 import { Card, EmptyState, cx } from "@/components/ui";
 import { SetupChecklist } from "@/components/setup-checklist";
 import { setupChecklist } from "@/lib/setup-checklist";
+import { studioTz } from "@/lib/general";
 
 /** Главная «Сегодня»: кто ждёт человека, что требует решения, сводка за сутки и клиенты. */
 export default async function TodayPage() {
@@ -30,7 +31,7 @@ export default async function TodayPage() {
   const { today, waiting, decisions } = data;
   const gaps = decisions.filter((d): d is Extract<Decision, { kind: "gaps" }> => d.kind === "gaps");
   const decisionRows = decisions.length - gaps.length + (gaps.length ? 1 : 0);
-  const date = new Intl.DateTimeFormat(locale === "uk" ? "uk-UA" : "ru-RU", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Kyiv" }).format(new Date());
+  const date = new Intl.DateTimeFormat(locale === "uk" ? "uk-UA" : "ru-RU", { weekday: "long", day: "numeric", month: "long", timeZone: studioTz() }).format(new Date());
 
   return (
     <div className="mx-auto max-w-6xl space-y-8">

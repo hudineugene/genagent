@@ -8,6 +8,7 @@ import type { AgentTool } from "@/lib/llm";
 import { apiKey, withKeys } from "@/lib/keys";
 import { parseContact, reach } from "@/lib/reach";
 import { callRoutes, getLogistics, seconds } from "./routes";
+import { studioTz } from "@/lib/general";
 
 /**
  * Рейсы: маршрут водителю в мессенджер, отметки точек в чате с агентом, сообщения получателям («едем к вам»,
@@ -19,7 +20,7 @@ const CHECK_EVERY_MS = 15 * 60_000;
 const GEO_URL = () => process.env.OPEN_METEO_GEO_URL || "https://geocoding-api.open-meteo.com/v1/search";
 const METEO_URL = () => process.env.OPEN_METEO_URL || "https://api.open-meteo.com/v1/forecast";
 
-const hm = (ms: number) => new Intl.DateTimeFormat("ru-RU", { timeZone: "Europe/Kyiv", hour: "2-digit", minute: "2-digit" }).format(ms);
+const hm = (ms: number) => new Intl.DateTimeFormat("ru-RU", { timeZone: studioTz(), hour: "2-digit", minute: "2-digit" }).format(ms);
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
 
 // ---------- погода ----------

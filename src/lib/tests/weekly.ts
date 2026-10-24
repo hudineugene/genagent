@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { agents, clients, testResults, testRuns, testScenarios } from "@/db/schema";
 import { getSetting, setSetting } from "@/lib/settings";
 import { startRunTracked } from "./engine";
+import { studioTz } from "@/lib/general";
 
 /**
  * Еженедельная проверка агентов: в выбранный день и час (по Киеву) прогоняются автотесты всех активных агентов,
@@ -20,7 +21,6 @@ export type WeeklyTestsSettings = {
 };
 
 const KEY = "weeklyTests";
-const TZ = "Europe/Kyiv";
 export const WEEKLY_DEFAULTS: WeeklyTestsSettings = { enabled: false, weekday: 1, hour: 9 };
 
 export async function getWeeklyTests(): Promise<WeeklyTestsSettings> {
@@ -33,7 +33,7 @@ export async function saveWeeklyTests(patch: Partial<WeeklyTestsSettings>) {
 
 function kyivNow() {
   const parts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-GB", { timeZone: TZ, weekday: "short", hour: "2-digit", hourCycle: "h23" })
+    new Intl.DateTimeFormat("en-GB", { timeZone: studioTz(), weekday: "short", hour: "2-digit", hourCycle: "h23" })
       .formatToParts(new Date())
       .map((p) => [p.type, p.value]),
   );

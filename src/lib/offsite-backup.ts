@@ -5,6 +5,7 @@ import path from "node:path";
 import { gzipSync } from "node:zlib";
 import { getSetting, setSetting } from "@/lib/settings";
 import { getNotifySettings } from "@/lib/notify/telegram";
+import { studioTz } from "@/lib/general";
 
 /**
  * Копия базы вне сервера: ежедневная копия сжимается, шифруется паролем (AES-256-GCM, ключ — scrypt)
@@ -63,7 +64,7 @@ export async function sendOffsiteBackup(dbFile: string, kind: "db" | "files" = "
     form.append("chat_id", s.chatId);
     form.append(
       "caption",
-      `🗄 ${kind === "files" ? "Копия файлов (картинки, документы)" : "Копия базы"} GenAgent · ${new Date().toLocaleString("ru-RU", { timeZone: "Europe/Kyiv" })}\nЗашифрована паролем копии. Расшифровка: node scripts/restore-backup.mjs ${name}`,
+      `🗄 ${kind === "files" ? "Копия файлов (картинки, документы)" : "Копия базы"} GenAgent · ${new Date().toLocaleString("ru-RU", { timeZone: studioTz() })}\nЗашифрована паролем копии. Расшифровка: node scripts/restore-backup.mjs ${name}`,
     );
     form.append("document", new Blob([new Uint8Array(file)]), name);
     const api = process.env.TELEGRAM_API_URL ?? "https://api.telegram.org";

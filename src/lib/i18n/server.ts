@@ -7,7 +7,10 @@ export async function getLocale(): Promise<Locale> {
   // Страницы читают БД (SQLite внутри процесса) — это не должно попадать в пререндер.
   await connection();
   const v = (await cookies()).get(LOCALE_COOKIE)?.value;
-  return isLocale(v) ? v : DEFAULT_LOCALE;
+  if (isLocale(v)) return v;
+  // Язык по умолчанию — из общих настроек студии
+  const { getGeneral } = await import("@/lib/general");
+  return (await getGeneral().catch(() => null))?.locale ?? DEFAULT_LOCALE;
 }
 
 export async function getT() {

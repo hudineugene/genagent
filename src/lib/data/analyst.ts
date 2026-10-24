@@ -8,6 +8,7 @@ import { clients, dataTables } from "@/db/schema";
 import { streamChat, type AgentTool, type ChatMessage } from "@/lib/llm";
 import { logUsage } from "@/lib/usage";
 import { tableTool } from "./tables";
+import { studioTz } from "@/lib/general";
 
 /**
  * «Аналитик»: владелец или сотрудник студии задаёт вопрос по таблицам клиента — модель строит точные запросы
@@ -60,7 +61,7 @@ async function askData__(clientId: string, question: string, history: ChatMessag
   const charts: ChartSpec[] = [];
   let queries = 0;
   const tools = [...tables.map((t) => tableTool(t, () => queries++)), chartTool(charts)];
-  const today = new Intl.DateTimeFormat("ru-RU", { timeZone: "Europe/Kyiv", dateStyle: "long" }).format(new Date());
+  const today = new Intl.DateTimeFormat("ru-RU", { timeZone: studioTz(), dateStyle: "long" }).format(new Date());
   let answer = "";
   const started = Date.now();
   for await (const ev of streamChat({
